@@ -1,7 +1,7 @@
 {
   "name": "codex-pet-sidecar",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,11 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "smoke:runtime": "node scripts/smoke-codex-runtime.mjs",
-    "check": "npm run build && npm test && cargo test --manifest-path src-tauri/Cargo.toml"
+    "lint": "oxlint",
+    "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "format": "oxfmt && cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "format:check": "oxfmt --check && cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+    "check": "npm run lint && npm run format:check && npm run build && npm test && npm run lint:rust && cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -30,6 +34,8 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^5.2.0",
     "jsdom": "^26.1.0",
+    "oxfmt": "^0.48.0",
+    "oxlint": "^1.63.0",
     "typescript": "^6.0.3",
     "vite": "^6.4.2",
     "vitest": "^3.2.4"
