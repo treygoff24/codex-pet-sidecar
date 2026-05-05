@@ -1,50 +1,121 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { defaultPersona, type InstalledPet, type PetConfig } from "./domain/petConfig";
+import type { ApprovalRequest } from "./domain/runtimeEvents";
+import { runtimeBridge, type ApprovalAction } from "./runtimeBridge";
+import { PetPicker } from "./ui/PetPicker";
+import { PetWindow } from "./ui/PetWindow";
+import "./styles.css";
+
+const fallbackWorkspace = "/Users/treygoff/Code/codex-pet-sidecar";
+
+function configFromPet(pet: InstalledPet): PetConfig {
+  return {
+    petId: pet.id,
+    displayName: pet.displayName,
+    spritesheetPath: pet.spritesheetPath,
+    persona: defaultPersona,
+    mute: {},
+    workspaceCwd: fallbackWorkspace,
+    observers: { activeApp: true, windowTitle: true, workspace: true, idle: true },
+    proactive: { enabled: true, minMinutesBetweenMessages: 10 },
+  };
+}
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [pets, setPets] = useState<InstalledPet[]>([]);
+  const [config, setConfig] = useState<PetConfig | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [transcript, setTranscript] = useState<string[]>([]);
+  const [approval, setApproval] = useState<ApprovalRequest>();
+  const [error, setError] = useState<string>();
+  const streamingRef = useRef("");
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([runtimeBridge.listInstalledPets(), runtimeBridge.loadPetConfig()])
+      .then(([installedPets, savedConfig]) => {
+        if (cancelled) return;
+        setPets(installedPets);
+        setConfig(savedConfig);
+      })
+      .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    runtimeBridge.onPetEvent((event) => {
+      if (event.type === "text_delta") {
+        setStreamingText((value) => {
+          const next = value + event.text;
+          streamingRef.current = next;
+          return next;
+        });
+      }
+      if (event.type === "turn_completed") {
+        const completedText = event.finalText ?? streamingRef.current;
+        setTranscript((lines) => (completedText ? lines.concat(completedText) : lines));
+        streamingRef.current = "";
+        setStreamingText("");
+      }
+      if (event.type === "approval_request") setApproval(event.request);
+      if (event.type === "observation" && event.digest.type === "workspace" && event.digest.dirtySummary) {
+        const digest = event.digest;
+        setTranscript((lines) => lines.concat(`Workspace: ${digest.repoName ?? "repo"} has ${digest.dirtySummary}.`));
+      }
+      if (event.type === "error") setError(event.message);
+    }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)));
+  }, []);
+
+  useEffect(() => {
+    if (!config?.petId) return;
+    runtimeBridge.startPetRuntime().catch((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)));
+  }, [config?.petId]);
+
+  const selectedPet = useMemo(() => pets.find((pet) => pet.id === config?.petId), [config?.petId, pets]);
+
+  async function pickPet(pet: InstalledPet) {
+    const nextConfig = configFromPet(pet);
+    setConfig(nextConfig);
+    await runtimeBridge.savePetConfig(nextConfig);
   }
 
+  async function updateConfig(nextConfig: PetConfig) {
+    setConfig(nextConfig);
+    await runtimeBridge.savePetConfig(nextConfig);
+  }
+
+  async function mute(until: string) {
+    await runtimeBridge.setMuteUntil(until);
+    if (config) setConfig({ ...config, mute: { until } });
+  }
+
+  async function respond(action: ApprovalAction) {
+    if (!approval) return;
+    await runtimeBridge.respondToApproval(approval.requestId, action);
+    setApproval(undefined);
+  }
+
+  if (!config?.petId) return <PetPicker pets={pets} onPick={pickPet} />;
+
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <PetWindow
+      config={config}
+      pet={selectedPet}
+      streamingText={streamingText}
+      transcript={transcript}
+      drawerOpen={drawerOpen}
+      approval={approval}
+      error={error}
+      onDrawerOpen={() => setDrawerOpen(true)}
+      onSend={runtimeBridge.sendUserMessage}
+      onMute={mute}
+      onConfigChange={updateConfig}
+      onApproval={respond}
+      onStartDrag={runtimeBridge.startWindowDrag}
+    />
   );
 }
 

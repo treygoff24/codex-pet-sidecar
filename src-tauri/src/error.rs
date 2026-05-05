@@ -1,0 +1,47 @@
+use std::path::PathBuf;
+
+#[derive(Debug, thiserror::Error)]
+pub enum AppError {
+    #[error("I/O error at {path:?}: {source}")]
+    IoWithPath {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("codex binary was not found on PATH")]
+    CodexNotFound,
+    #[error("codex app-server did not report a websocket URL within {0} seconds")]
+    AppServerTimeout(u64),
+    #[error("codex app-server exited before it was ready: {0}")]
+    AppServerExited(String),
+    #[error("websocket error: {0}")]
+    WebSocket(String),
+    #[error("JSON-RPC error from {method}: {message}")]
+    JsonRpc { method: String, message: String },
+    #[error("runtime has not been started")]
+    RuntimeNotStarted,
+    #[error("no active turn is available to interrupt")]
+    NoActiveTurn,
+    #[error("approval request {0} is no longer pending")]
+    ApprovalNotPending(String),
+    #[error("invalid pet asset {path:?}: {reason}")]
+    InvalidPetAsset { path: PathBuf, reason: String },
+    #[error("invalid pet metadata {path:?}: {reason}")]
+    InvalidPetMetadata { path: PathBuf, reason: String },
+    #[error("app support directory could not be resolved")]
+    MissingAppSupportDir,
+    #[error("command `{0}` failed: {1}")]
+    CommandFailed(String, String),
+}
+
+pub type AppResult<T> = Result<T, AppError>;
+
+pub fn read_to_string(path: &std::path::Path) -> AppResult<String> {
+    std::fs::read_to_string(path).map_err(|source| AppError::IoWithPath {
+        path: path.to_path_buf(),
+        source,
+    })
+}

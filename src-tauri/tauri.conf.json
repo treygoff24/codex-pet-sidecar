@@ -10,14 +10,25 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "Codex Pet Sidecar",
-        "width": 800,
-        "height": 600
+        "width": 320,
+        "height": 360,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "skipTaskbar": true
       }
     ],
     "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$HOME/.codex/pets/**", "$HOME/.ai-profiles/runtime/codex/personal/pets/**"]
+      },
       "csp": null
     }
   },

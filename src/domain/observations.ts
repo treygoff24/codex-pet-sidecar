@@ -1,0 +1,8 @@
+export type ObservationDigest =
+  | { type: "active_app"; appName: string; windowTitle?: string; observedAt: string; degraded?: string }
+  | { type: "workspace"; cwd: string; repoName?: string; branch?: string; dirtySummary?: string; observedAt: string; degraded?: string }
+  | { type: "idle_state"; idleSince?: string; returnedAt?: string; observedAt: string };
+
+export type ProactiveTrigger =
+  | { type: "returned_from_idle"; digest: ObservationDigest }
+  | { type: "repo_changed"; digest: ObservationDigest };
