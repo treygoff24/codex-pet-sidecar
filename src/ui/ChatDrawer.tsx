@@ -1,44 +1,42 @@
-import { FormEvent, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export function ChatDrawer({
   open,
   transcript,
-  onSend,
+  onClose,
 }: {
   open: boolean;
   transcript: string[];
-  onSend: (text: string) => Promise<void> | void;
+  onClose?: () => void;
 }) {
-  const [text, setText] = useState("");
+  const threadRef = useRef<HTMLDivElement>(null);
+
+  // Keep the latest line in view as new messages stream in.
+  useEffect(() => {
+    if (!open) return;
+    const node = threadRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [open, transcript]);
+
   if (!open) return null;
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setText("");
-    await onSend(trimmed);
-  }
-
   return (
-    <aside className="chat-drawer" aria-label="Pet chat drawer">
-      <div className="drawer-thread" data-testid="drawer-thread">
-        {transcript.map((line, index) => (
-          <p key={`${index}-${line.slice(0, 12)}`}>{line}</p>
-        ))}
+    <aside className="transcript-drawer" aria-label="Conversation transcript">
+      <div className="transcript-header">
+        <span>Recent</span>
+        {onClose ? (
+          <button type="button" onClick={onClose} aria-label="Close transcript">
+            ×
+          </button>
+        ) : null}
       </div>
-      <form onSubmit={submit} className="chat-form">
-        <label className="sr-only" htmlFor="chat-input">
-          Message your pet
-        </label>
-        <input
-          id="chat-input"
-          value={text}
-          onChange={(event) => setText(event.currentTarget.value)}
-          placeholder="Write a tiny note…"
-        />
-        <button type="submit">Send</button>
-      </form>
+      <div className="drawer-thread" data-testid="drawer-thread" ref={threadRef}>
+        {transcript.length === 0 ? (
+          <p className="drawer-empty">Nothing yet — say hi.</p>
+        ) : (
+          transcript.map((line, index) => <p key={`${index}-${line.slice(0, 12)}`}>{line}</p>)
+        )}
+      </div>
     </aside>
   );
 }

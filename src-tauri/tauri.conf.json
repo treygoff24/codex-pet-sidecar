@@ -15,13 +15,14 @@
       {
         "label": "main",
         "title": "Codex Pet Sidecar",
-        "width": 320,
-        "height": 360,
+        "width": 288,
+        "height": 368,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
         "resizable": false,
-        "skipTaskbar": true
+        "skipTaskbar": true,
+        "shadow": false
       }
     ],
     "security": {

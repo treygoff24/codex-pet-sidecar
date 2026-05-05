@@ -1,5 +1,18 @@
 :root {
-  color: #231910;
+  /* Surface tokens — warm cream, not productivity gray */
+  --ink: #2a1d12;
+  --ink-soft: #5a4633;
+  --paper: rgba(255, 248, 235, 0.92);
+  --paper-strong: rgba(255, 250, 240, 0.98);
+  --line: rgba(93, 67, 41, 0.14);
+  --accent: #a76b2e;
+  --accent-soft: rgba(167, 107, 46, 0.12);
+
+  /* Motion */
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snappy: cubic-bezier(0.4, 0, 0.2, 1);
+
+  color: var(--ink);
   background: transparent;
   font-family:
     Inter,
@@ -17,198 +30,742 @@
 * {
   box-sizing: border-box;
 }
+
 html,
 body,
 #root {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
   margin: 0;
   background: transparent;
+  /* Kill native scrollbars at the root — nothing should scroll the window itself. */
+  overflow: hidden;
 }
+
 button,
 input,
 textarea {
   font: inherit;
+  color: inherit;
 }
+
 button {
   cursor: pointer;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Pet window — the canvas Olive lives in
+   ───────────────────────────────────────────────────────────── */
+
 .pet-window {
-  width: 320px;
-  min-height: 360px;
-  padding: 10px;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* Tight horizontal padding so the speech bubble has real room to breathe;
+     vertical padding stays generous for top/bottom breathing room. */
+  padding: 16px 4px;
   display: grid;
-  grid-template-rows: 1fr auto auto;
+  grid-template-rows: 1fr auto;
   gap: 8px;
   background: transparent;
+  overflow: hidden;
+  /* Whole-app downscale — keeps every internal proportion intact while
+     shrinking the visible footprint. Window dimensions are also reduced
+     by the same factor in tauri.conf.json. */
+  zoom: 0.8;
 }
+
+/* Toolbar lives in the top-right and is hidden by default. Hovering its
+   own area reveals it; mousing away starts a 5s linger, then it fades —
+   same auto-dismiss spirit as the speech bubble. pointer-events stay
+   `auto` so the invisible zone is mouse-discoverable without a hot zone. */
+.pet-toolbar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-2px);
+  /* Un-hovered: wait 5s, then fade out over 600ms. */
+  transition:
+    opacity 600ms var(--ease-soft) 5s,
+    transform 600ms var(--ease-soft) 5s;
+  pointer-events: auto;
+  z-index: 5;
+}
+.pet-toolbar:hover,
+.pet-toolbar:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+  /* On reveal: fade in fast with no delay. */
+  transition:
+    opacity 180ms var(--ease-soft),
+    transform 180ms var(--ease-soft);
+}
+.pet-toolbar button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  box-shadow: 0 4px 14px rgba(42, 25, 10, 0.12);
+  backdrop-filter: blur(10px);
+  font-size: 14px;
+  transition:
+    transform 140ms var(--ease-snappy),
+    background 140ms var(--ease-snappy),
+    color 140ms var(--ease-snappy);
+}
+.pet-toolbar button:hover {
+  transform: scale(1.06);
+  background: var(--paper-strong);
+  color: var(--ink);
+}
+.pet-toolbar button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Stage — pet sprite + speech bubble + ground shadow
+   ───────────────────────────────────────────────────────────── */
 
 .pet-stage {
   position: relative;
-  min-height: 224px;
   display: grid;
-  place-items: end center;
+  grid-template-rows: 1fr auto;
+  align-items: end;
+  justify-items: center;
+  min-height: 0;
+  padding-top: 18px;
 }
+
 .pet-drag-handle {
+  position: relative;
+  /* Pin to row 2 explicitly so when no bubble is rendered, Olive still
+     sits in the bottom row instead of jumping to row 1. */
+  grid-row: 2;
   border: 0;
   padding: 0;
   background: transparent;
   cursor: grab;
+  display: grid;
+  justify-items: center;
+  /* Reserve space for the ground shadow so layout doesn't shift. */
 }
 .pet-drag-handle:active {
   cursor: grabbing;
 }
+
 .pet-sprite {
+  position: relative;
   width: 192px;
   height: 208px;
   background-repeat: no-repeat;
   background-size: 1536px 1872px;
-  image-rendering: auto;
+  /* Pixel art / hard-edged sprites read better without bilinear upscaling. */
+  image-rendering: -webkit-optimize-contrast;
   display: grid;
   place-items: center;
-  color: #5f482f;
+  color: var(--ink-soft);
   font-size: 56px;
   user-select: none;
-  filter: drop-shadow(0 10px 18px rgba(36, 21, 8, 0.2));
+  /* No drop-shadow filter — it haloes anti-aliased edges. We use a separate
+     ground shadow below the sprite instead. */
+  animation: pet-breath 4.2s ease-in-out infinite;
 }
 
-.speech-bubble,
-.setup-error,
-.approval-prompt,
-.chat-drawer,
-.settings-panel,
-.pet-picker {
-  border: 1px solid rgba(93, 67, 41, 0.16);
-  background: rgba(255, 248, 235, 0.9);
-  color: #2f2117;
-  box-shadow: 0 14px 36px rgba(42, 25, 10, 0.14);
-  backdrop-filter: blur(16px);
+@keyframes pet-breath {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-1.5px) scale(1.012);
+  }
 }
+
+.pet-shadow {
+  width: 110px;
+  height: 14px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(36, 21, 8, 0.28) 0%,
+    rgba(36, 21, 8, 0.18) 35%,
+    rgba(36, 21, 8, 0) 75%
+  );
+  filter: blur(1px);
+  animation: pet-shadow-breath 4.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes pet-shadow-breath {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scaleX(0.96);
+    opacity: 0.7;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Glass surfaces
+   ───────────────────────────────────────────────────────────── */
+
+.surface {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 12px 32px rgba(42, 25, 10, 0.14);
+  backdrop-filter: blur(14px);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Speech bubble — a real bubble, anchored above Olive
+   ───────────────────────────────────────────────────────────── */
 
 .speech-bubble {
-  max-width: 270px;
-  padding: 10px 12px;
-  border-radius: 20px 20px 20px 6px;
+  /* Real grid item in row 1 of .pet-stage, bottom-aligned so the bubble
+     floats just above Olive — feels like she's actually speaking it, and
+     keeps the top-right corner clear for the toolbar. position: relative
+     so the absolutely-positioned tail (::after) anchors to the bubble. */
+  position: relative;
+  grid-row: 1;
+  align-self: end;
+  margin-bottom: 16px;
+  max-width: 350px;
+  min-width: 80px;
+  padding: 10px 14px;
+  border-radius: 18px 18px 18px 6px;
   text-align: left;
-  justify-self: start;
+  font-size: 16px;
+  line-height: 1.4;
+  border: 1px solid var(--line);
+  background: var(--paper-strong);
+  color: var(--ink);
+  box-shadow: 0 10px 28px rgba(42, 25, 10, 0.12);
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+  animation: bubble-in 220ms var(--ease-soft);
+  /* Idle fade-out — opacity transition runs when .is-fading is added. */
+  transition: opacity 600ms var(--ease-soft);
+  z-index: 4;
+}
+.speech-bubble.is-fading {
+  opacity: 0;
+  pointer-events: none;
+}
+.speech-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  margin-left: -7px;
+  width: 14px;
+  height: 14px;
+  background: inherit;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  transform: rotate(45deg);
+  border-bottom-right-radius: 3px;
+}
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .bubble-overflow {
   display: block;
-  margin-top: 5px;
-  color: #8a5c25;
+  margin-top: 4px;
+  color: var(--accent);
   font-size: 12px;
+  font-weight: 500;
 }
 
-.mute-control {
+/* Thinking indicator — three pulsing dots in a bubble while awaiting reply. */
+.thinking-bubble {
+  position: relative;
+  grid-row: 1;
+  align-self: end;
+  justify-self: center;
+  margin-bottom: 16px;
+  width: max-content;
+  padding: 12px 16px;
+  border-radius: 18px 18px 18px 6px;
+  border: 1px solid var(--line);
+  background: var(--paper-strong);
+  box-shadow: 0 10px 28px rgba(42, 25, 10, 0.12);
+  backdrop-filter: blur(14px);
   display: flex;
   gap: 5px;
-  justify-content: center;
+  align-items: center;
+  animation: bubble-in 220ms var(--ease-soft);
+  z-index: 4;
 }
-.mute-control button,
-.chat-form button,
-.approval-prompt button,
-.pet-picker button {
+.thinking-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  margin-left: -7px;
+  width: 14px;
+  height: 14px;
+  background: inherit;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  transform: rotate(45deg);
+  border-bottom-right-radius: 3px;
+}
+.thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+}
+.thinking-dot:nth-child(2) {
+  animation-delay: 160ms;
+}
+.thinking-dot:nth-child(3) {
+  animation-delay: 320ms;
+}
+@keyframes thinking-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Chat input bar — always visible at bottom, low-vis until focus
+   ───────────────────────────────────────────────────────────── */
+
+.chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 248, 235, 0.55);
+  backdrop-filter: blur(10px);
+  transition:
+    background 200ms var(--ease-soft),
+    border-color 200ms var(--ease-soft),
+    box-shadow 200ms var(--ease-soft);
+}
+.chat-input-bar:focus-within {
+  background: var(--paper-strong);
+  border-color: rgba(167, 107, 46, 0.35);
+  box-shadow: 0 8px 24px rgba(42, 25, 10, 0.14);
+}
+.chat-input-bar input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 8px 0;
+  color: var(--ink);
+  outline: none;
+  min-width: 0;
+}
+.chat-input-bar input::placeholder {
+  color: rgba(90, 70, 51, 0.55);
+}
+.chat-input-bar button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 999px;
-  padding: 7px 10px;
-  background: #32231a;
+  background: var(--ink);
   color: #fff8ea;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition:
+    transform 140ms var(--ease-snappy),
+    opacity 140ms var(--ease-snappy);
 }
-.mute-control button {
-  font-size: 11px;
-  background: rgba(50, 35, 26, 0.82);
+.chat-input-bar button:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+.chat-input-bar button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Transcript drawer — slides up from bottom
+   ───────────────────────────────────────────────────────────── */
+
+.transcript-drawer {
+  position: absolute;
+  inset: auto 12px 60px 12px;
+  max-height: 60%;
+  border-radius: 20px;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: var(--paper-strong);
+  color: var(--ink);
+  box-shadow: 0 18px 40px rgba(42, 25, 10, 0.18);
+  backdrop-filter: blur(16px);
+  animation: drawer-in 220ms var(--ease-soft);
+  z-index: 6;
+}
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.transcript-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+.transcript-header button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px;
+}
+.drawer-thread {
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.45;
+  padding-right: 4px;
+  /* Small custom scrollbar — only visible when content actually overflows. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(90, 70, 51, 0.3) transparent;
+}
+.drawer-thread::-webkit-scrollbar {
+  width: 6px;
+}
+.drawer-thread::-webkit-scrollbar-thumb {
+  background: rgba(90, 70, 51, 0.3);
+  border-radius: 3px;
+}
+.drawer-thread p {
+  margin: 0 0 8px 0;
+}
+.drawer-thread p:last-child {
+  margin-bottom: 0;
+}
+.drawer-empty {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Settings sheet — slides up to cover canvas when ⚙ tapped
+   ───────────────────────────────────────────────────────────── */
+
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 12, 4, 0.18);
+  backdrop-filter: blur(2px);
+  animation: fade-in 160ms var(--ease-soft);
+  z-index: 8;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.settings-sheet {
+  position: absolute;
+  inset: 12px;
+  border-radius: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: var(--paper-strong);
+  color: var(--ink);
+  box-shadow: 0 18px 40px rgba(42, 25, 10, 0.18);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  animation: sheet-in 240ms var(--ease-soft);
+  z-index: 9;
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sheet-header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+.sheet-header button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 18px;
+  padding: 4px;
+  line-height: 1;
 }
 
 .settings-panel {
   display: grid;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 18px;
-  font-size: 12px;
+  gap: 12px;
+  font-size: 13px;
+  align-content: start;
 }
 .settings-panel label {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .settings-panel textarea,
-.settings-panel input,
-.chat-form input {
+.settings-panel input {
   width: 100%;
-  border: 1px solid rgba(78, 55, 35, 0.16);
+  border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #261a12;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink);
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: normal;
+  outline: none;
+  transition: border-color 140ms var(--ease-snappy);
+}
+.settings-panel textarea:focus,
+.settings-panel input:focus {
+  border-color: rgba(167, 107, 46, 0.5);
 }
 .settings-panel textarea {
-  min-height: 52px;
+  min-height: 90px;
   resize: vertical;
+  font-family: inherit;
 }
 
-.chat-drawer {
-  border-radius: 22px;
+/* ─────────────────────────────────────────────────────────────
+   Mute popover — anchored under the snooze icon
+   ───────────────────────────────────────────────────────────── */
+
+.mute-popover {
+  position: absolute;
+  top: 48px;
+  right: 10px;
+  border-radius: 16px;
   padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper-strong);
+  box-shadow: 0 14px 30px rgba(42, 25, 10, 0.16);
+  backdrop-filter: blur(14px);
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  width: 200px;
+  animation: popover-in 180ms var(--ease-soft);
+  z-index: 7;
 }
-.drawer-thread {
-  max-height: 130px;
-  overflow: auto;
-  font-size: 14px;
-  line-height: 1.35;
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
-.chat-form {
-  display: flex;
-  gap: 6px;
+.mute-popover-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
 }
-.chat-form input {
-  flex: 1;
+.mute-control {
+  display: grid;
+  gap: 4px;
 }
+.mute-control button {
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font-size: 13px;
+  transition: background 120ms var(--ease-snappy);
+}
+.mute-control button:hover {
+  background: var(--accent-soft);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Approval prompt — surfaces when Codex needs permission
+   ───────────────────────────────────────────────────────────── */
 
 .approval-prompt {
-  border-radius: 18px;
-  padding: 10px;
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 60px;
+  border-radius: 16px;
+  padding: 12px;
+  border: 1px solid rgba(167, 107, 46, 0.35);
+  background: var(--paper-strong);
+  color: var(--ink);
+  box-shadow: 0 14px 30px rgba(42, 25, 10, 0.16);
+  backdrop-filter: blur(14px);
   font-size: 13px;
+  z-index: 6;
+  animation: drawer-in 200ms var(--ease-soft);
+}
+.approval-prompt strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.approval-prompt p {
+  margin: 0 0 10px 0;
 }
 .approval-prompt div {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
+.approval-prompt button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: var(--ink);
+  color: #fff8ea;
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+}
 .approval-prompt button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Setup error pill
+   ───────────────────────────────────────────────────────────── */
+
+.setup-error {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 60px;
+  border-radius: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(180, 60, 40, 0.35);
+  background: rgba(255, 240, 232, 0.95);
+  color: #6d291f;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 6;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Pet picker — startup screen
+   ───────────────────────────────────────────────────────────── */
+
 .pet-picker {
-  width: 320px;
-  min-height: 360px;
+  width: 100%;
+  height: 100%;
   border-radius: 24px;
-  padding: 20px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 14px 36px rgba(42, 25, 10, 0.14);
+  backdrop-filter: blur(16px);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  overflow: hidden;
+  zoom: 0.8;
 }
 .pet-picker h1 {
-  font-size: 22px;
-  margin: 0 0 12px;
+  font-size: 20px;
+  margin: 0;
 }
 .pet-picker-grid {
   display: grid;
   gap: 8px;
+  align-content: start;
+  overflow-y: auto;
 }
 .pet-picker-grid button {
   display: grid;
   gap: 4px;
   text-align: left;
-  border-radius: 16px;
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--ink);
+  color: #fff8ea;
+  transition: transform 140ms var(--ease-snappy);
+}
+.pet-picker-grid button:hover {
+  transform: translateY(-1px);
 }
 .pet-picker-grid small {
   color: #efd7b7;
 }
-.setup-error {
-  border-radius: 14px;
-  padding: 9px;
-  color: #6d291f;
-}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -219,4 +776,15 @@ button {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Respect reduced motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

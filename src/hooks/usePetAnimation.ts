@@ -1,28 +1,100 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 
 export type PetAnimationState = "idle" | "blink" | "talk" | "sleep";
 
-const frames: Record<PetAnimationState, number[]> = {
-  idle: [0, 1, 2, 1],
-  blink: [8, 9, 8, 0],
-  talk: [16, 17, 18, 17],
-  sleep: [24, 25, 26, 25],
+const SHEET_COLS = 8;
+const SHEET_ROWS = 9;
+
+type Frame = { row: number; col: number; durationMs: number };
+
+// Idle: long open-eyed dwell punctuated by a soft blink, the way pets actually rest.
+const IDLE_FRAMES: Frame[] = [
+  { row: 0, col: 0, durationMs: 2200 },
+  { row: 0, col: 1, durationMs: 90 },
+  { row: 0, col: 2, durationMs: 110 },
+  { row: 0, col: 1, durationMs: 90 },
+  { row: 0, col: 0, durationMs: 3400 },
+  { row: 0, col: 1, durationMs: 90 },
+  { row: 0, col: 2, durationMs: 110 },
+  { row: 0, col: 1, durationMs: 90 },
+];
+
+const TALK_FRAMES: Frame[] = [
+  { row: 2, col: 0, durationMs: 130 },
+  { row: 2, col: 1, durationMs: 130 },
+  { row: 2, col: 2, durationMs: 130 },
+  { row: 2, col: 1, durationMs: 130 },
+];
+
+const SLEEP_FRAMES: Frame[] = [
+  { row: 3, col: 0, durationMs: 700 },
+  { row: 3, col: 1, durationMs: 700 },
+  { row: 3, col: 2, durationMs: 700 },
+  { row: 3, col: 1, durationMs: 700 },
+];
+
+const BLINK_FRAMES: Frame[] = [
+  { row: 1, col: 0, durationMs: 90 },
+  { row: 1, col: 1, durationMs: 110 },
+  { row: 1, col: 0, durationMs: 90 },
+  { row: 0, col: 0, durationMs: 800 },
+];
+
+const FRAME_TABLE: Record<PetAnimationState, Frame[]> = {
+  idle: IDLE_FRAMES,
+  blink: BLINK_FRAMES,
+  talk: TALK_FRAMES,
+  sleep: SLEEP_FRAMES,
 };
 
-export function frameToPosition(frame: number): { column: number; row: number } {
-  return { column: frame % 8, row: Math.floor(frame / 8) };
+function bgPosition(frame: Frame): string {
+  // Percentage positioning works because background-size matches the full
+  // spritesheet and the element matches a single cell.
+  return `${(frame.col / (SHEET_COLS - 1)) * 100}% ${(frame.row / (SHEET_ROWS - 1)) * 100}%`;
 }
 
-export function usePetAnimation(state: PetAnimationState): number {
-  const [index, setIndex] = useState(0);
-  const sequence = frames[state];
-  const intervalMs = state === "talk" ? 130 : state === "sleep" ? 700 : 420;
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
+/**
+ * Drives a sprite element's `background-position` directly via a ref, with
+ * per-frame durations. No React re-renders per tick — the element style is
+ * mutated imperatively, the way Codex's avatar does it.
+ */
+export function usePetAnimation(
+  ref: React.RefObject<HTMLElement | null>,
+  state: PetAnimationState,
+): void {
   useEffect(() => {
-    setIndex(0);
-    const interval = window.setInterval(() => setIndex((value) => value + 1), intervalMs);
-    return () => window.clearInterval(interval);
-  }, [intervalMs, state]);
+    const el = ref.current;
+    if (!el) return;
+    const frames = FRAME_TABLE[state];
 
-  return useMemo(() => sequence[index % sequence.length], [index, sequence]);
+    if (prefersReducedMotion()) {
+      el.style.backgroundPosition = bgPosition(frames[0]);
+      return;
+    }
+
+    let index = 0;
+    let timeout: number | null = null;
+
+    function schedule() {
+      const node = ref.current;
+      if (!node) return;
+      const frame = frames[index];
+      node.style.backgroundPosition = bgPosition(frame);
+      timeout = window.setTimeout(() => {
+        index = (index + 1) % frames.length;
+        schedule();
+      }, frame.durationMs);
+    }
+
+    schedule();
+
+    return () => {
+      if (timeout != null) window.clearTimeout(timeout);
+    };
+  }, [ref, state]);
 }

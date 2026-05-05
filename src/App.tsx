@@ -24,11 +24,12 @@ function configFromPet(pet: InstalledPet): PetConfig {
 function App() {
   const [pets, setPets] = useState<InstalledPet[]>([]);
   const [config, setConfig] = useState<PetConfig | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [lastReply, setLastReply] = useState("");
   const [transcript, setTranscript] = useState<string[]>([]);
   const [approval, setApproval] = useState<ApprovalRequest>();
   const [error, setError] = useState<string>();
+  const [awaitingReply, setAwaitingReply] = useState(false);
   const streamingRef = useRef("");
 
   useEffect(() => {
@@ -56,9 +57,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
     runtimeBridge
       .onPetEvent((event) => {
         if (event.type === "text_delta") {
+          setAwaitingReply(false);
           setStreamingText((value) => {
             const next = value + event.text;
             streamingRef.current = next;
@@ -67,9 +71,13 @@ function App() {
         }
         if (event.type === "turn_completed") {
           const completedText = event.finalText ?? streamingRef.current;
-          setTranscript((lines) => (completedText ? lines.concat(completedText) : lines));
+          if (completedText) {
+            setTranscript((lines) => lines.concat(completedText));
+            setLastReply(completedText);
+          }
           streamingRef.current = "";
           setStreamingText("");
+          setAwaitingReply(false);
         }
         if (event.type === "approval_request") setApproval(event.request);
         if (
@@ -82,11 +90,24 @@ function App() {
             lines.concat(`Workspace: ${digest.repoName ?? "repo"} has ${digest.dirtySummary}.`),
           );
         }
-        if (event.type === "error") setError(event.message);
+        if (event.type === "error") {
+          setError(event.message);
+          setAwaitingReply(false);
+        }
+      })
+      .then((un) => {
+        // StrictMode runs effects twice in dev; if we were already cleaned up
+        // before the listener resolved, drop it immediately.
+        if (cancelled) un();
+        else unlisten = un;
       })
       .catch((caught: unknown) =>
         setError(caught instanceof Error ? caught.message : String(caught)),
       );
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
   }, []);
 
   useEffect(() => {
@@ -132,12 +153,16 @@ function App() {
       config={config}
       pet={selectedPet}
       streamingText={streamingText}
+      lastReply={lastReply}
+      awaitingReply={awaitingReply}
       transcript={transcript}
-      drawerOpen={drawerOpen}
       approval={approval}
       error={error}
-      onDrawerOpen={() => setDrawerOpen(true)}
       onSend={runtimeBridge.sendUserMessage}
+      onSendStart={() => {
+        setLastReply("");
+        setAwaitingReply(true);
+      }}
       onMute={mute}
       onConfigChange={updateConfig}
       onApproval={respond}
