@@ -1,7 +1,6 @@
 pub mod installed_pet;
 
 use crate::error::{read_to_string, AppError, AppResult};
-use image::GenericImageView;
 pub use installed_pet::{InstalledPet, PetManifest};
 use std::path::{Path, PathBuf};
 
@@ -82,11 +81,10 @@ pub fn validate_spritesheet_dimensions(path: &Path) -> AppResult<()> {
             reason: "spritesheet.webp is missing".to_string(),
         });
     }
-    let image = image::open(path).map_err(|error| AppError::InvalidPetAsset {
+    let dimensions = image::image_dimensions(path).map_err(|error| AppError::InvalidPetAsset {
         path: path.to_path_buf(),
         reason: error.to_string(),
     })?;
-    let dimensions = image.dimensions();
     if dimensions != (SPRITESHEET_WIDTH, SPRITESHEET_HEIGHT) {
         return Err(AppError::InvalidPetAsset {
             path: path.to_path_buf(),

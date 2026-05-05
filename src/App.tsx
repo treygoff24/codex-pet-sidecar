@@ -33,11 +33,15 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([runtimeBridge.listInstalledPets(), runtimeBridge.loadPetConfig()])
-      .then(([installedPets, savedConfig]) => {
+    runtimeBridge.loadPetConfig()
+      .then((savedConfig) => {
         if (cancelled) return;
-        setPets(installedPets);
         setConfig(savedConfig);
+      })
+      .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)));
+    runtimeBridge.listInstalledPets()
+      .then((installedPets) => {
+        if (!cancelled) setPets(installedPets);
       })
       .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)));
     return () => {
