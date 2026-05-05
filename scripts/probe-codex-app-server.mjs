@@ -10,7 +10,10 @@ const child = spawn("codex", ["app-server", "--listen", "ws://127.0.0.1:0"], {
 
 let stderr = "";
 const url = await new Promise((resolve, reject) => {
-  const timeout = setTimeout(() => reject(new Error(`timed out waiting for app-server URL: ${stderr}`)), 10_000);
+  const timeout = setTimeout(
+    () => reject(new Error(`timed out waiting for app-server URL: ${stderr}`)),
+    10_000,
+  );
   child.stderr.on("data", (chunk) => {
     stderr += chunk.toString();
     const match = stderr.match(/listening on:\s+(ws:\/\/127\.0\.0\.1:\d+)/);
@@ -71,11 +74,21 @@ try {
   });
 
   const initialize = await call("initialize", {
-    clientInfo: { name: "codex-pet-sidecar-probe", title: "Codex Pet Sidecar Probe", version: "0.1.0" },
+    clientInfo: {
+      name: "codex-pet-sidecar-probe",
+      title: "Codex Pet Sidecar Probe",
+      version: "0.1.0",
+    },
     capabilities: { experimentalApi: true },
   });
   const models = await call("model/list", {});
-  console.log(JSON.stringify({ url, initialize, models, notificationMethods: notifications.map((n) => n.method) }, null, 2));
+  console.log(
+    JSON.stringify(
+      { url, initialize, models, notificationMethods: notifications.map((n) => n.method) },
+      null,
+      2,
+    ),
+  );
 } finally {
   ws.close();
   child.kill();

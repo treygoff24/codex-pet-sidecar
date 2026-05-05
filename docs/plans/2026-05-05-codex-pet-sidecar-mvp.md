@@ -35,54 +35,54 @@ Expected result: `.codex/skills/` contains project links for those skills, and `
 
 Skill assignments:
 
-| Skill | Used by | Purpose |
-| --- | --- | --- |
-| `clean-code` | all implementers and all reviewers | Keep modules small, names precise, tests useful, comments scarce. |
-| `rust-engineer` | runtime, observers, integration, test lanes | Idiomatic Rust, async process handling, errors, Cargo gates. |
-| `frontend-delight` | UI lane and UI review | Make the pet feel alive instead of like a generic widget. |
-| `webapp-testing` | UI QA and final smoke lane | Rendered verification, screenshots, interaction checks. |
-| `refactor` | refactor pilot and clean-code review lanes | Behavior-preserving simplification after features work. |
-| `receiving-code-review` | orchestrator after each review packet | Triage findings into fixes without thrash. |
-| `slop-cleaner` | final cleanup and clean-code reviewers | Remove AI residue, redundant comments, dead variables, placeholder cruft. |
-| `spec-quality-checklist` | protocol spike and plan/spec reviewers | Keep spec deltas precise when app-server facts force changes. |
-| `hatch-pet` | pet asset validation lane | Validate Codex pet package assumptions, `pet.json`, and 8x9 spritesheet semantics. This skill is available globally in the session but is not installable through `codex-skill add` on this machine, so load it directly by path if needed. |
+| Skill                    | Used by                                     | Purpose                                                                                                                                                                                                                                     |
+| ------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clean-code`             | all implementers and all reviewers          | Keep modules small, names precise, tests useful, comments scarce.                                                                                                                                                                           |
+| `rust-engineer`          | runtime, observers, integration, test lanes | Idiomatic Rust, async process handling, errors, Cargo gates.                                                                                                                                                                                |
+| `frontend-delight`       | UI lane and UI review                       | Make the pet feel alive instead of like a generic widget.                                                                                                                                                                                   |
+| `webapp-testing`         | UI QA and final smoke lane                  | Rendered verification, screenshots, interaction checks.                                                                                                                                                                                     |
+| `refactor`               | refactor pilot and clean-code review lanes  | Behavior-preserving simplification after features work.                                                                                                                                                                                     |
+| `receiving-code-review`  | orchestrator after each review packet       | Triage findings into fixes without thrash.                                                                                                                                                                                                  |
+| `slop-cleaner`           | final cleanup and clean-code reviewers      | Remove AI residue, redundant comments, dead variables, placeholder cruft.                                                                                                                                                                   |
+| `spec-quality-checklist` | protocol spike and plan/spec reviewers      | Keep spec deltas precise when app-server facts force changes.                                                                                                                                                                               |
+| `hatch-pet`              | pet asset validation lane                   | Validate Codex pet package assumptions, `pet.json`, and 8x9 spritesheet semantics. This skill is available globally in the session but is not installable through `codex-skill add` on this machine, so load it directly by path if needed. |
 
 ## Subagent roster
 
-| Lane | Subagent type | Required project skills | Output |
-| --- | --- | --- | --- |
-| Protocol spike | `docs_researcher` | `spec-quality-checklist`, `clean-code` | `docs/spikes/2026-05-05-codex-app-server-protocol.md` plus generated protocol artifacts. |
-| Scaffold | `worker` | `clean-code` | Tauri React TypeScript app skeleton and baseline gates. |
-| R1 fix lane | `worker` | `receiving-code-review`, `clean-code`, `slop-cleaner` | Subagent-applied fixes from scaffold/protocol review. |
-| Rust foundation | `worker` | `rust-engineer`, `clean-code` | Shared Rust dependencies, module shell, and error type ownership. |
-| Runtime broker | `heavy_worker` | `rust-engineer`, `clean-code` | Rust process supervisor, WebSocket JSON-RPC client, event mapper, prompt composition. |
-| Local state | `worker` | `rust-engineer`, `clean-code`, `hatch-pet` | Pet discovery, config, Codex pet asset validation, and `memory.md` lifecycle. |
-| Observers | `worker` | `rust-engineer`, `clean-code` | Active app/window, workspace/git, idle state, rate-limit inputs. |
-| UI shell | `ui_fix_worker` | `frontend-delight`, `clean-code` | Transparent pet UI, animation, bubble, drawer, settings. |
-| Integration | `heavy_worker` | `rust-engineer`, `clean-code` | Tauri commands/events connecting UI to broker/runtime/state. |
-| Tests | `test_hardener` | `webapp-testing`, `rust-engineer`, `clean-code` | Unit, integration, and smoke tests. |
-| Clean-code review 1 | `reviewer` | `clean-code`, `slop-cleaner` | Findings after scaffold/runtime/state land. |
-| Review fix lanes | `worker` or `refactor_pilot` | `receiving-code-review`, `clean-code`, `slop-cleaner` | Subagent-owned application of accepted review findings. |
-| Clean-code review 2 | `reviewer` | `clean-code`, `frontend-delight`, `slop-cleaner` | Findings after UI/integration land. |
-| Security review | `security_auditor` | `clean-code` | Approval, shell, filesystem, and privacy risk findings. |
-| Performance review | `performance_engineer` | `clean-code` | Idle CPU/RSS and event loop findings. |
-| Final refactor | `refactor_pilot` | `refactor`, `clean-code`, `slop-cleaner` | Behavior-preserving simplifications after review fixes. |
-| Final plan check | `plan_reviewer` | `spec-quality-checklist` | Read-only check that implementation matches the plan and spec. |
+| Lane                | Subagent type                | Required project skills                               | Output                                                                                   |
+| ------------------- | ---------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Protocol spike      | `docs_researcher`            | `spec-quality-checklist`, `clean-code`                | `docs/spikes/2026-05-05-codex-app-server-protocol.md` plus generated protocol artifacts. |
+| Scaffold            | `worker`                     | `clean-code`                                          | Tauri React TypeScript app skeleton and baseline gates.                                  |
+| R1 fix lane         | `worker`                     | `receiving-code-review`, `clean-code`, `slop-cleaner` | Subagent-applied fixes from scaffold/protocol review.                                    |
+| Rust foundation     | `worker`                     | `rust-engineer`, `clean-code`                         | Shared Rust dependencies, module shell, and error type ownership.                        |
+| Runtime broker      | `heavy_worker`               | `rust-engineer`, `clean-code`                         | Rust process supervisor, WebSocket JSON-RPC client, event mapper, prompt composition.    |
+| Local state         | `worker`                     | `rust-engineer`, `clean-code`, `hatch-pet`            | Pet discovery, config, Codex pet asset validation, and `memory.md` lifecycle.            |
+| Observers           | `worker`                     | `rust-engineer`, `clean-code`                         | Active app/window, workspace/git, idle state, rate-limit inputs.                         |
+| UI shell            | `ui_fix_worker`              | `frontend-delight`, `clean-code`                      | Transparent pet UI, animation, bubble, drawer, settings.                                 |
+| Integration         | `heavy_worker`               | `rust-engineer`, `clean-code`                         | Tauri commands/events connecting UI to broker/runtime/state.                             |
+| Tests               | `test_hardener`              | `webapp-testing`, `rust-engineer`, `clean-code`       | Unit, integration, and smoke tests.                                                      |
+| Clean-code review 1 | `reviewer`                   | `clean-code`, `slop-cleaner`                          | Findings after scaffold/runtime/state land.                                              |
+| Review fix lanes    | `worker` or `refactor_pilot` | `receiving-code-review`, `clean-code`, `slop-cleaner` | Subagent-owned application of accepted review findings.                                  |
+| Clean-code review 2 | `reviewer`                   | `clean-code`, `frontend-delight`, `slop-cleaner`      | Findings after UI/integration land.                                                      |
+| Security review     | `security_auditor`           | `clean-code`                                          | Approval, shell, filesystem, and privacy risk findings.                                  |
+| Performance review  | `performance_engineer`       | `clean-code`                                          | Idle CPU/RSS and event loop findings.                                                    |
+| Final refactor      | `refactor_pilot`             | `refactor`, `clean-code`, `slop-cleaner`              | Behavior-preserving simplifications after review fixes.                                  |
+| Final plan check    | `plan_reviewer`              | `spec-quality-checklist`                              | Read-only check that implementation matches the plan and spec.                           |
 
 ## Phase ownership table
 
 This table, not a grep parser, is the ownership gate. Overlap is allowed only when the earlier phase has completed and the orchestrator has accepted that subagent output.
 
-| Phase | Parallel lanes allowed | Write ownership rule |
-| --- | --- | --- |
-| A: skills and protocol | Task 0, then Task 1 serial | Only `.codex/skills/**`, `docs/spikes/**`, `protocol/app-server/**`, and `scripts/probe-codex-app-server.mjs`. No package files. |
-| B: scaffold | Task 2 serial | Scaffold owns broad `src/**` and `src-tauri/**` only long enough to create the app. Ownership transfers after R1 fixes. |
-| C: R1 fixes | Task 2b serial | Fix subagent owns only accepted R1 findings. |
-| D: foundation | Task 3 and Task 3a serial or parallel if no file overlap | Task 3 owns frontend domain files. Task 3a owns `src-tauri/Cargo.toml`, `src-tauri/src/error.rs`, and module shells. |
-| E: feature lanes | Tasks 4, 5, 6, 6a, 7 may run in parallel after D | Runtime, state, observers, animation reference, and UI own disjoint directories. No lane edits `Cargo.toml`, `src/App.tsx`, or `src-tauri/src/lib.rs` unless named. |
-| F: integration | Tasks 8, 9, 10 serial | Integration may wire across earlier directories. No other write lane runs concurrently. |
-| G: review fixes and tests | Reviews then explicit fix lanes, then Task 11 | Reviewers are read-only. Fixes are delegated to the owning lane or `refactor_pilot`; test hardener changes test files and scripts unless the orchestrator explicitly delegates production fixes. |
-| H: final proof | Task 13 and final plan review serial | Verification docs only unless a blocker sends work back to a fix lane. |
+| Phase                     | Parallel lanes allowed                                   | Write ownership rule                                                                                                                                                                             |
+| ------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A: skills and protocol    | Task 0, then Task 1 serial                               | Only `.codex/skills/**`, `docs/spikes/**`, `protocol/app-server/**`, and `scripts/probe-codex-app-server.mjs`. No package files.                                                                 |
+| B: scaffold               | Task 2 serial                                            | Scaffold owns broad `src/**` and `src-tauri/**` only long enough to create the app. Ownership transfers after R1 fixes.                                                                          |
+| C: R1 fixes               | Task 2b serial                                           | Fix subagent owns only accepted R1 findings.                                                                                                                                                     |
+| D: foundation             | Task 3 and Task 3a serial or parallel if no file overlap | Task 3 owns frontend domain files. Task 3a owns `src-tauri/Cargo.toml`, `src-tauri/src/error.rs`, and module shells.                                                                             |
+| E: feature lanes          | Tasks 4, 5, 6, 6a, 7 may run in parallel after D         | Runtime, state, observers, animation reference, and UI own disjoint directories. No lane edits `Cargo.toml`, `src/App.tsx`, or `src-tauri/src/lib.rs` unless named.                              |
+| F: integration            | Tasks 8, 9, 10 serial                                    | Integration may wire across earlier directories. No other write lane runs concurrently.                                                                                                          |
+| G: review fixes and tests | Reviews then explicit fix lanes, then Task 11            | Reviewers are read-only. Fixes are delegated to the owning lane or `refactor_pilot`; test hardener changes test files and scripts unless the orchestrator explicitly delegates production fixes. |
+| H: final proof            | Task 13 and final plan review serial                     | Verification docs only unless a blocker sends work back to a fix lane.                                                                                                                           |
 
 ---
 
@@ -97,6 +97,7 @@ This table, not a grep parser, is the ownership gate. Overlap is allowed only wh
 **Out of scope:** Tauri scaffold, package files, generated protocol artifacts.
 
 **Files:**
+
 - Create: `.codex/skills/*` project skill links
 
 **Step 1: Install project skills**
@@ -118,6 +119,7 @@ codex-skill installed clean-code && codex-skill installed rust-engineer && codex
 Expected: each skill reports `Project: active` or equivalent project-active status.
 
 **Verification plan:**
+
 - Primary command: `codex-skill validate`
 - Secondary command: `codex-skill active`
 
@@ -134,6 +136,7 @@ Expected: each skill reports `Project: active` or equivalent project-active stat
 **Out of scope:** UI code, Tauri scaffold, production broker code.
 
 **Files:**
+
 - Create: `docs/spikes/2026-05-05-codex-app-server-protocol.md`
 - Create: `protocol/app-server/ts/**`
 - Create: `protocol/app-server/schema/**`
@@ -166,7 +169,10 @@ const child = spawn("codex", ["app-server", "--listen", "ws://127.0.0.1:0"], {
 
 let stderr = "";
 const url = await new Promise((resolve, reject) => {
-  const timeout = setTimeout(() => reject(new Error("timed out waiting for app-server URL")), 10_000);
+  const timeout = setTimeout(
+    () => reject(new Error("timed out waiting for app-server URL")),
+    10_000,
+  );
   child.stderr.on("data", (chunk) => {
     stderr += chunk.toString();
     const match = stderr.match(/listening on:\s+(ws:\/\/127\.0\.0\.1:\d+)/);
@@ -261,6 +267,7 @@ Write `docs/spikes/2026-05-05-codex-app-server-protocol.md` with:
 - known unknowns and required spec changes
 
 **Verification plan:**
+
 - Primary command: `node scripts/probe-codex-app-server.mjs`
 - Secondary command: `codex app-server --help`
 
@@ -277,6 +284,7 @@ Write `docs/spikes/2026-05-05-codex-app-server-protocol.md` with:
 **Out of scope:** Runtime broker, observers, finished UI.
 
 **Files:**
+
 - Create: `package.json`
 - Create: `package-lock.json`
 - Create: `index.html`
@@ -388,6 +396,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 Expected: build passes, Vitest has either scaffold tests or exits cleanly after adding one trivial smoke test, Cargo tests pass.
 
 **Verification plan:**
+
 - Primary command: `npm run check`
 - Secondary command: `npm run tauri:build`
 
@@ -405,18 +414,21 @@ Expected: build passes, Vitest has either scaffold tests or exits cleanly after 
 **Out of scope:** Feature requests beyond the spec.
 
 **Review scope:**
+
 - `docs/spikes/2026-05-05-codex-app-server-protocol.md`
 - `protocol/app-server/**`
 - scaffold config files
 - `.codex/skills/**`
 
 **Required findings:**
+
 - Any mismatch between spec and discovered app-server facts.
 - Any scaffold config likely to break transparent always-on-top behavior.
 - Any generated artifact that should be ignored or regenerated instead of manually edited.
 - Any AI-slop comments or placeholder code.
 
 **Verification plan:**
+
 - Primary command: read-only review report
 - Secondary command: orchestrator delegates accepted findings to the next explicit fix lane using `receiving-code-review`
 
@@ -433,6 +445,7 @@ Expected: build passes, Vitest has either scaffold tests or exits cleanly after 
 **Out of scope:** Runtime broker, observers, finished UI.
 
 **Files:**
+
 - Modify: only files named in accepted R1 findings
 
 **Step 1: Triage R1 findings**
@@ -456,6 +469,7 @@ npm run check
 Expected: protocol probe and scaffold checks pass.
 
 **Verification plan:**
+
 - Primary command: `node scripts/probe-codex-app-server.mjs`
 - Secondary command: `npm run check`
 
@@ -472,6 +486,7 @@ Expected: protocol probe and scaffold checks pass.
 **Out of scope:** Rust code, UI components, actual observers.
 
 **Files:**
+
 - Create: `src/domain/petConfig.ts`
 - Create: `src/domain/runtimeEvents.ts`
 - Create: `src/domain/observations.ts`
@@ -487,7 +502,12 @@ Implement helpers:
 
 ```ts
 export function isMuted(now: Date, muteUntil?: string): boolean;
-export function canSendProactiveMessage(params: { now: Date; lastSentAt?: string; minMinutes: number; muteUntil?: string }): boolean;
+export function canSendProactiveMessage(params: {
+  now: Date;
+  lastSentAt?: string;
+  minMinutes: number;
+  muteUntil?: string;
+}): boolean;
 export function formatMemoryForBaseInstructions(memoryMarkdown: string): string;
 export function muteUntilForChoice(choice: "30m" | "2h" | "tomorrow", now: Date): string;
 ```
@@ -505,6 +525,7 @@ npm test -- src/domain/__tests__/rateLimit.test.ts
 Expected: all tests pass.
 
 **Verification plan:**
+
 - Primary command: `npm test -- src/domain/__tests__/rateLimit.test.ts`
 - Secondary command: `npm run build`
 
@@ -521,6 +542,7 @@ Expected: all tests pass.
 **Out of scope:** Runtime logic, state logic, observer logic, UI.
 
 **Files:**
+
 - Modify: `src-tauri/Cargo.toml`
 - Create: `src-tauri/src/error.rs`
 - Modify: `src-tauri/src/lib.rs`
@@ -562,6 +584,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 Expected: all pass.
 
 **Verification plan:**
+
 - Primary command: `cargo check --manifest-path src-tauri/Cargo.toml`
 - Secondary command: `cargo test --manifest-path src-tauri/Cargo.toml`
 
@@ -578,6 +601,7 @@ Expected: all pass.
 **Out of scope:** UI, observers, pet discovery, `Cargo.toml`, `src-tauri/src/lib.rs`.
 
 **Files:**
+
 - Modify: `src-tauri/src/runtime/mod.rs`
 - Create: `src-tauri/src/runtime/process.rs`
 - Create: `src-tauri/src/runtime/json_rpc.rs`
@@ -637,6 +661,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 Expected: all pass.
 
 **Verification plan:**
+
 - Primary command: `cargo test --manifest-path src-tauri/Cargo.toml runtime`
 - Secondary command: full Cargo fmt, clippy, test commands above
 
@@ -653,6 +678,7 @@ Expected: all pass.
 **Out of scope:** Runtime JSON-RPC, UI components, observers, `Cargo.toml`, `src-tauri/src/lib.rs`.
 
 **Files:**
+
 - Modify: `src-tauri/src/state/mod.rs`
 - Create: `src-tauri/src/state/paths.rs`
 - Create: `src-tauri/src/state/config.rs`
@@ -698,19 +724,23 @@ Create `memory.md` on first run with:
 # Memory for <pet name>
 
 ## About Trey
-- 
+
+-
 
 ## Project context
-- 
+
+-
 
 ## Things to remember
-- 
+
+-
 ```
 
 **Step 5: Unit test filesystem behavior**
 Use temp directories to test missing config, malformed pet metadata, missing spritesheet, invalid spritesheet dimensions, first memory creation, workspace cwd defaulting, and hand-edited memory preservation.
 
 **Verification plan:**
+
 - Primary command: `cargo test --manifest-path src-tauri/Cargo.toml state pets memory`
 - Secondary command: `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`
 
@@ -727,6 +757,7 @@ Use temp directories to test missing config, malformed pet metadata, missing spr
 **Out of scope:** UI, app-server runtime, memory.
 
 **Files:**
+
 - Create: `src-tauri/src/observers/mod.rs`
 - Create: `src-tauri/src/observers/active_app.rs`
 - Create: `src-tauri/src/observers/workspace.rs`
@@ -767,6 +798,7 @@ Use macOS idle time APIs or a command wrapper. Emit returned-from-idle only afte
 Mock command outputs. Test permission-denied active window, missing workspace cwd, non-git workspace, clean repo, dirty repo, and idle-return threshold.
 
 **Verification plan:**
+
 - Primary command: `cargo test --manifest-path src-tauri/Cargo.toml observers`
 - Secondary command: manual active app probe on macOS during final QA
 
@@ -783,6 +815,7 @@ Mock command outputs. Test permission-denied active window, missing workspace cw
 **Out of scope:** UI implementation.
 
 **Files:**
+
 - Create: `docs/spikes/2026-05-05-pet-animation-reference.md`
 
 **Step 1: Inspect available pet assets**
@@ -802,6 +835,7 @@ Document:
 - what must be visually checked in Task 13
 
 **Verification plan:**
+
 - Primary command: read-only spike document exists
 - Secondary command: UI lane cites the spike in its handoff
 
@@ -818,6 +852,7 @@ Document:
 **Out of scope:** Rust runtime implementation, observer implementation.
 
 **Files:**
+
 - Modify: `src/App.tsx`
 - Modify: `src/styles.css`
 - Create: `src/ui/PetWindow.tsx`
@@ -863,6 +898,7 @@ npm test -- src/ui/__tests__/useTypewriter.test.tsx
 Expected: text reveals in order, preserves characters during overflow, handles empty text, renders exact mute choices, and keeps workspace cwd editable through settings.
 
 **Verification plan:**
+
 - Primary command: `npm test -- src/ui/__tests__/useTypewriter.test.tsx`
 - Secondary command: `npm run build`
 - Rendered QA command later: `npm run tauri:dev`, then visual inspection or agent-browser if accessible
@@ -880,6 +916,7 @@ Expected: text reveals in order, preserves characters during overflow, handles e
 **Out of scope:** Major redesign, new observers, new memory backend.
 
 **Files:**
+
 - Create: `src-tauri/src/commands.rs`
 - Create: `src-tauri/src/app_state.rs`
 - Modify: `src-tauri/src/lib.rs`
@@ -922,6 +959,7 @@ In `App.tsx`, load pets, show picker if needed, start runtime after config, subs
 Use Vitest mocks for `@tauri-apps/api/core` and event listeners.
 
 **Verification plan:**
+
 - Primary command: `npm test -- src/runtimeBridge.test.ts`
 - Secondary command: `cargo test --manifest-path src-tauri/Cargo.toml commands`
 - Full command: `npm run check`
@@ -939,6 +977,7 @@ Use Vitest mocks for `@tauri-apps/api/core` and event listeners.
 **Out of scope:** Tool allowlist UI.
 
 **Files:**
+
 - Create: `src-tauri/src/runtime/approvals.rs`
 - Modify: `src-tauri/src/runtime/events.rs`
 - Modify: `src-tauri/src/commands.rs`
@@ -967,6 +1006,7 @@ Route the selected action back over JSON-RPC using the exact protocol method fro
 If approval prompts are tied to Codex's own UI and cannot be routed, update the spec and force the MVP to use a safer `approvalPolicy` plus visible limitation. Do not fake it.
 
 **Verification plan:**
+
 - Primary command: unit test approval event mapping
 - Secondary command: manual test with a write command that should prompt
 
@@ -983,6 +1023,7 @@ If approval prompts are tied to Codex's own UI and cannot be routed, update the 
 **Out of scope:** New triggers beyond idle-return and repo-changed.
 
 **Files:**
+
 - Create: `src-tauri/src/proactive/mod.rs`
 - Create: `src-tauri/src/proactive/rate_limit.rs`
 - Create: `src-tauri/src/proactive/triggers.rs`
@@ -1006,6 +1047,7 @@ Use runtime session to inject a concise context message only when a trigger pass
 Unit test idle threshold, repo-change detection, mute override, and 10-minute limit.
 
 **Verification plan:**
+
 - Primary command: `cargo test --manifest-path src-tauri/Cargo.toml proactive`
 - Secondary command: `npm test -- src/domain/__tests__/rateLimit.test.ts`
 
@@ -1023,6 +1065,7 @@ Unit test idle threshold, repo-change detection, mute override, and 10-minute li
 **Out of scope:** UI taste review.
 
 **Review scope:**
+
 - `src-tauri/src/runtime/**`
 - `src-tauri/src/state/**`
 - `src-tauri/src/pets/**`
@@ -1031,6 +1074,7 @@ Unit test idle threshold, repo-change detection, mute override, and 10-minute li
 - `src-tauri/src/proactive/**`
 
 **Required findings:**
+
 - Unclear ownership, lifecycle, or shutdown behavior.
 - Over-broad functions or modules doing more than one job.
 - `unwrap`, panic, hidden global state, ignored errors, or silent fallbacks.
@@ -1038,6 +1082,7 @@ Unit test idle threshold, repo-change detection, mute override, and 10-minute li
 - Any comments that explain bad code instead of making code clearer.
 
 **Verification plan:**
+
 - Primary command: read-only review report
 - Secondary command: orchestrator delegates accepted findings to the next explicit fix lane using `receiving-code-review`
 
@@ -1055,6 +1100,7 @@ Unit test idle threshold, repo-change detection, mute override, and 10-minute li
 **Out of scope:** Runtime protocol review.
 
 **Review scope:**
+
 - `src/ui/**`
 - `src/hooks/**`
 - `src/App.tsx`
@@ -1062,6 +1108,7 @@ Unit test idle threshold, repo-change detection, mute override, and 10-minute li
 - `src/runtimeBridge.ts`
 
 **Required findings:**
+
 - UI feels generic, noisy, too app-like, or not pet-like.
 - Component boundaries leak runtime concerns into leaf components.
 - Animation timing is jittery, too busy, or not state-driven.
@@ -1069,6 +1116,7 @@ Unit test idle threshold, repo-change detection, mute override, and 10-minute li
 - Accessibility basics missing for chat input, settings, and approval prompts.
 
 **Verification plan:**
+
 - Primary command: read-only review report
 - Secondary command: rendered QA after fixes
 
@@ -1085,6 +1133,7 @@ Unit test idle threshold, repo-change detection, mute override, and 10-minute li
 **Out of scope:** Security/performance findings from R4/R5, new features.
 
 **Files:**
+
 - Modify: only files named in accepted R2/R3 findings
 
 **Step 1: Triage R2 and R3 findings**
@@ -1104,6 +1153,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 Expected: all pass.
 
 **Verification plan:**
+
 - Primary command: `npm test && cargo test --manifest-path src-tauri/Cargo.toml`
 - Secondary command: `npm run build`
 
@@ -1120,6 +1170,7 @@ Expected: all pass.
 **Out of scope:** New product features.
 
 **Files:**
+
 - Create: `scripts/smoke-codex-runtime.mjs`
 - Create: `tests/rendered-pet-smoke.spec.ts` if Playwright is adopted
 - Modify: existing test files
@@ -1158,6 +1209,7 @@ node scripts/probe-codex-app-server.mjs
 Expected: all pass.
 
 **Verification plan:**
+
 - Primary command: `npm test && cargo test --manifest-path src-tauri/Cargo.toml`
 - Secondary command: `node scripts/probe-codex-app-server.mjs`
 
@@ -1175,6 +1227,7 @@ Expected: all pass.
 **Out of scope:** Enterprise hardening and distributable signing.
 
 **Review scope:**
+
 - Process launching
 - Shell command usage
 - App-server approval flow
@@ -1183,6 +1236,7 @@ Expected: all pass.
 - Memory file injection
 
 **Required findings:**
+
 - Command injection paths.
 - Accidental dependency on the Codex Mac app server.
 - Observer leakage beyond metadata digest.
@@ -1190,6 +1244,7 @@ Expected: all pass.
 - Memory path traversal or writing outside app support directory during setup.
 
 **Verification plan:**
+
 - Primary command: read-only security findings
 - Secondary command: orchestrator delegates accepted findings to the next explicit fix lane using `receiving-code-review`
 
@@ -1207,6 +1262,7 @@ Expected: all pass.
 **Out of scope:** Deep profiling beyond MVP needs.
 
 **Review scope:**
+
 - Animation loop
 - Observer polling cadence
 - WebSocket event handling
@@ -1214,6 +1270,7 @@ Expected: all pass.
 - Memory and config reads
 
 **Required findings:**
+
 - Polling too often.
 - Animation work not tied to frame state.
 - Unbounded event buffers.
@@ -1221,6 +1278,7 @@ Expected: all pass.
 - Idle RSS risk above the spec's ~80MB target for the Tauri app process.
 
 **Verification plan:**
+
 - Primary command: read-only performance findings
 - Secondary command: manual Activity Monitor or `ps` check during final proof
 
@@ -1237,6 +1295,7 @@ Expected: all pass.
 **Out of scope:** New product features, packaging, signing.
 
 **Files:**
+
 - Modify: only files named in accepted R4/R5 findings
 
 **Step 1: Triage security and performance findings**
@@ -1257,6 +1316,7 @@ node scripts/probe-codex-app-server.mjs
 Expected: all pass.
 
 **Verification plan:**
+
 - Primary command: `npm run check`
 - Secondary command: Cargo clippy plus app-server probe above
 
@@ -1273,6 +1333,7 @@ Expected: all pass.
 **Out of scope:** New features, visual redesign, speculative abstraction.
 
 **Files:**
+
 - Modify: review-directed files only
 
 **Step 1: Triage findings**
@@ -1304,6 +1365,7 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -
 Expected: all pass.
 
 **Verification plan:**
+
 - Primary command: `npm run check`
 - Secondary command: Cargo clippy command above
 
@@ -1320,6 +1382,7 @@ Expected: all pass.
 **Out of scope:** Packaging, code signing, distribution.
 
 **Files:**
+
 - Create: `docs/verification/2026-05-05-local-mvp-proof.md`
 
 **Step 1: Run static gates**
@@ -1374,6 +1437,7 @@ Rendered evidence is mandatory. Include at least one screenshot or short capture
 - approval or recoverable-error state if reachable during the run
 
 **Verification plan:**
+
 - Primary command: `npm run tauri:dev`
 - Secondary command: `ps -ax -o pid=,command= | rg '[c]odex app-server|Codex Pet Sidecar|tauri'` while app is running and after quit
 

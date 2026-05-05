@@ -14,8 +14,10 @@ export const runtimeBridge = {
   sendUserMessage: (text: string) => invoke<void>("send_user_message", { text }),
   interruptTurn: () => invoke<void>("interrupt_turn"),
   setMuteUntil: (until: string | null) => invoke<void>("set_mute_until", { until }),
-  respondToApproval: (requestId: string, action: ApprovalAction) => invoke<void>("respond_to_approval", { requestId, action }),
-  onPetEvent: (handler: (event: PetAgentEvent) => void): Promise<UnlistenFn> => listen<PetAgentEvent>("pet://event", (event) => handler(event.payload)),
+  respondToApproval: (requestId: string, action: ApprovalAction) =>
+    invoke<void>("respond_to_approval", { requestId, action }),
+  onPetEvent: (handler: (event: PetAgentEvent) => void): Promise<UnlistenFn> =>
+    listen<PetAgentEvent>("pet://event", (event) => handler(event.payload)),
   startWindowDrag: () => getCurrentWindow().startDragging(),
   petAssetUrl: (path: string) => {
     try {

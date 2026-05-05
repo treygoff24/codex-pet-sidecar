@@ -1,6 +1,12 @@
 import type { InstalledPet } from "../domain/petConfig";
 
-export function PetPicker({ pets, onPick }: { pets: InstalledPet[]; onPick: (pet: InstalledPet) => void }) {
+export function PetPicker({
+  pets,
+  onPick,
+}: {
+  pets: InstalledPet[];
+  onPick: (pet: InstalledPet) => void;
+}) {
   return (
     <section className="pet-picker" aria-label="Pick a Codex pet">
       <h1>Choose your tiny sidekick</h1>

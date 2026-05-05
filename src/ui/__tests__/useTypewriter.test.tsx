@@ -58,7 +58,15 @@ describe("pet UI helpers", () => {
     const onChange = vi.fn();
     function Harness() {
       const [current, setCurrent] = useState(config);
-      return <SettingsPanel config={current} onChange={(next) => { onChange(next); setCurrent(next); }} />;
+      return (
+        <SettingsPanel
+          config={current}
+          onChange={(next) => {
+            onChange(next);
+            setCurrent(next);
+          }}
+        />
+      );
     }
     render(<Harness />);
     await userEvent.clear(screen.getByLabelText("Workspace folder"));

@@ -19,14 +19,22 @@ describe("rate limiting and memory formatting", () => {
 
   it("enforces the 10-minute proactive floor", () => {
     expect(canSendProactiveMessage({ now, minMinutes: 10 })).toBe(true);
-    expect(canSendProactiveMessage({ now, minMinutes: 10, lastSentAt: "2026-05-05T14:51:00.000Z" })).toBe(false);
-    expect(canSendProactiveMessage({ now, minMinutes: 10, lastSentAt: "2026-05-05T14:50:00.000Z" })).toBe(true);
+    expect(
+      canSendProactiveMessage({ now, minMinutes: 10, lastSentAt: "2026-05-05T14:51:00.000Z" }),
+    ).toBe(false);
+    expect(
+      canSendProactiveMessage({ now, minMinutes: 10, lastSentAt: "2026-05-05T14:50:00.000Z" }),
+    ).toBe(true);
     expect(canSendProactiveMessage({ now, minMinutes: 10, lastSentAt: "bad" })).toBe(true);
-    expect(canSendProactiveMessage({ now, minMinutes: 10, muteUntil: "2026-05-05T16:00:00.000Z" })).toBe(false);
+    expect(
+      canSendProactiveMessage({ now, minMinutes: 10, muteUntil: "2026-05-05T16:00:00.000Z" }),
+    ).toBe(false);
   });
 
   it("formats memory for base instructions", () => {
-    expect(formatMemoryForBaseInstructions("\n# Memory\n- Trey likes tiny pets\n")).toContain("# Memory");
+    expect(formatMemoryForBaseInstructions("\n# Memory\n- Trey likes tiny pets\n")).toContain(
+      "# Memory",
+    );
     expect(formatMemoryForBaseInstructions("   ")).toBe("Pet memory is currently empty.");
   });
 });

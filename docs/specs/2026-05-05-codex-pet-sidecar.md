@@ -119,7 +119,14 @@ Three observers, all passive:
 ```ts
 type ObservationDigest =
   | { type: "active_app"; appName: string; windowTitle?: string; observedAt: string }
-  | { type: "workspace"; cwd: string; repoName?: string; branch?: string; dirtySummary?: string; observedAt: string }
+  | {
+      type: "workspace";
+      cwd: string;
+      repoName?: string;
+      branch?: string;
+      dirtySummary?: string;
+      observedAt: string;
+    }
   | { type: "idle_state"; idleSince?: string; returnedAt?: string; observedAt: string };
 ```
 
@@ -154,12 +161,15 @@ Suggested initial template (the pet rewrites it however it wants over time):
 # Memory for Olive
 
 ## About Trey
+
 - (notes about user)
 
 ## Project context
+
 - (notes about projects)
 
 ## Things to remember
+
 - (durable preferences and facts)
 ```
 
@@ -224,7 +234,7 @@ type PetConfig = {
   petId: string;
   displayName: string;
   spritesheetPath: string;
-  persona: string;                     // single paragraph
+  persona: string; // single paragraph
   mute: { until?: string };
   observers: {
     activeApp: boolean;

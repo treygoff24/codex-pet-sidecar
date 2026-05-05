@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn((path: string) => `asset://${path}`), invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc: vi.fn((path: string) => `asset://${path}`),
+  invoke: vi.fn(),
+}));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
-vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: vi.fn(() => ({ startDragging: vi.fn() })) }));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: vi.fn(() => ({ startDragging: vi.fn() })),
+}));
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -18,7 +23,15 @@ describe("runtimeBridge", () => {
   });
 
   it("is the only frontend adapter for Tauri commands", async () => {
-    invokeMock.mockResolvedValueOnce([{ id: "olive", displayName: "Olive", spritesheetPath: "/tmp/spritesheet.webp", metadataPath: "/tmp/pet.json", diagnostics: [] }]);
+    invokeMock.mockResolvedValueOnce([
+      {
+        id: "olive",
+        displayName: "Olive",
+        spritesheetPath: "/tmp/spritesheet.webp",
+        metadataPath: "/tmp/pet.json",
+        diagnostics: [],
+      },
+    ]);
     await expect(runtimeBridge.listInstalledPets()).resolves.toHaveLength(1);
     expect(invokeMock).toHaveBeenCalledWith("list_installed_pets");
   });
@@ -28,7 +41,10 @@ describe("runtimeBridge", () => {
     await runtimeBridge.sendUserMessage("hi");
     await runtimeBridge.respondToApproval("req-1", "deny");
     expect(invokeMock).toHaveBeenCalledWith("send_user_message", { text: "hi" });
-    expect(invokeMock).toHaveBeenCalledWith("respond_to_approval", { requestId: "req-1", action: "deny" });
+    expect(invokeMock).toHaveBeenCalledWith("respond_to_approval", {
+      requestId: "req-1",
+      action: "deny",
+    });
   });
 
   it("subscribes to pet events", async () => {

@@ -1,7 +1,15 @@
 import { frameToPosition } from "../hooks/usePetAnimation";
 import { runtimeBridge } from "../runtimeBridge";
 
-export function PetSprite({ spritesheetPath, frame, displayName }: { spritesheetPath?: string; frame: number; displayName: string }) {
+export function PetSprite({
+  spritesheetPath,
+  frame,
+  displayName,
+}: {
+  spritesheetPath?: string;
+  frame: number;
+  displayName: string;
+}) {
   const { column, row } = frameToPosition(frame);
   const style = spritesheetPath
     ? {
@@ -10,5 +18,14 @@ export function PetSprite({ spritesheetPath, frame, displayName }: { spritesheet
       }
     : undefined;
 
-  return <div aria-label={`${displayName} pet sprite`} className="pet-sprite" style={style} data-frame={frame}>{!spritesheetPath ? "◕‿◕" : null}</div>;
+  return (
+    <div
+      aria-label={`${displayName} pet sprite`}
+      className="pet-sprite"
+      style={style}
+      data-frame={frame}
+    >
+      {!spritesheetPath ? "◕‿◕" : null}
+    </div>
+  );
 }

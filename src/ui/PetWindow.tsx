@@ -54,14 +54,26 @@ export function PetWindow({
           aria-label="Drag pet window"
           onPointerDown={() => void onStartDrag()}
         >
-          <PetSprite spritesheetPath={pet?.spritesheetPath ?? config.spritesheetPath} displayName={config.displayName || pet?.displayName || "Codex pet"} frame={frame} />
+          <PetSprite
+            spritesheetPath={pet?.spritesheetPath ?? config.spritesheetPath}
+            displayName={config.displayName || pet?.displayName || "Codex pet"}
+            frame={frame}
+          />
         </button>
-        {error ? <button type="button" className="setup-error" onClick={onDrawerOpen}>{error} Retry from drawer</button> : null}
+        {error ? (
+          <button type="button" className="setup-error" onClick={onDrawerOpen}>
+            {error} Retry from drawer
+          </button>
+        ) : null}
       </div>
       {approval ? <ApprovalPrompt request={approval} onRespond={onApproval} /> : null}
       <MuteControl onMute={onMute} />
       <SettingsPanel config={config} onChange={onConfigChange} />
-      <ChatDrawer open={drawerOpen || bubbleOverflow} transcript={transcript.concat(typed ? [typed] : [])} onSend={onSend} />
+      <ChatDrawer
+        open={drawerOpen || bubbleOverflow}
+        transcript={transcript.concat(typed ? [typed] : [])}
+        onSend={onSend}
+      />
     </main>
   );
 }

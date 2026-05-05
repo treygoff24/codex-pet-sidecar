@@ -11,11 +11,17 @@ function waitForExit(child, ms = 2_000) {
   ]);
 }
 
-async function spawnAppServer(command = "codex", args = ["app-server", "--listen", "ws://127.0.0.1:0"]) {
+async function spawnAppServer(
+  command = "codex",
+  args = ["app-server", "--listen", "ws://127.0.0.1:0"],
+) {
   const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
   let stderr = "";
   const url = await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`timed out waiting for app-server URL: ${stderr}`)), 10_000);
+    const timeout = setTimeout(
+      () => reject(new Error(`timed out waiting for app-server URL: ${stderr}`)),
+      10_000,
+    );
     child.once("error", (error) => {
       clearTimeout(timeout);
       reject(error);
@@ -117,17 +123,23 @@ const disabledPetMcpServers = ["pencil", "porkbun", "resend", "serena"];
 function petThreadConfigOverrides() {
   return {
     model_reasoning_effort: "medium",
-    mcp_servers: Object.fromEntries(disabledPetMcpServers.map((server) => [server, { enabled: false }])),
+    mcp_servers: Object.fromEntries(
+      disabledPetMcpServers.map((server) => [server, { enabled: false }]),
+    ),
   };
 }
 
 function assertPetThreadDefaults(thread) {
   const failures = [];
-  if (thread.thread?.ephemeral !== false) failures.push(`expected persistent thread, got ephemeral=${thread.thread?.ephemeral}`);
+  if (thread.thread?.ephemeral !== false)
+    failures.push(`expected persistent thread, got ephemeral=${thread.thread?.ephemeral}`);
   if (!thread.thread?.path) failures.push("expected persistent thread path");
-  if (thread.reasoningEffort !== "medium") failures.push(`expected medium reasoning, got ${thread.reasoningEffort}`);
-  if (thread.approvalPolicy !== "never") failures.push(`expected YOLO approval policy never, got ${thread.approvalPolicy}`);
-  if (thread.sandbox?.type !== "dangerFullAccess") failures.push(`expected dangerFullAccess sandbox, got ${thread.sandbox?.type}`);
+  if (thread.reasoningEffort !== "medium")
+    failures.push(`expected medium reasoning, got ${thread.reasoningEffort}`);
+  if (thread.approvalPolicy !== "never")
+    failures.push(`expected YOLO approval policy never, got ${thread.approvalPolicy}`);
+  if (thread.sandbox?.type !== "dangerFullAccess")
+    failures.push(`expected dangerFullAccess sandbox, got ${thread.sandbox?.type}`);
   if (failures.length > 0) throw new Error(failures.join("; "));
 }
 
@@ -150,11 +162,18 @@ let threadId;
 try {
   await client.opened;
   const initialize = await client.call("initialize", {
-    clientInfo: { name: "codex-pet-sidecar-smoke", title: "Codex Pet Sidecar Smoke", version: "0.1.0" },
+    clientInfo: {
+      name: "codex-pet-sidecar-smoke",
+      title: "Codex Pet Sidecar Smoke",
+      version: "0.1.0",
+    },
     capabilities: { experimentalApi: true },
   });
   const account = await client.call("account/read", { refreshToken: true });
-  const authStatus = await client.call("getAuthStatus", { includeToken: false, refreshToken: true });
+  const authStatus = await client.call("getAuthStatus", {
+    includeToken: false,
+    refreshToken: true,
+  });
   const authSummary = assertCodexOauthSubscription(account, authStatus);
   const thread = await client.call("thread/start", {
     cwd: process.cwd(),
@@ -170,7 +189,21 @@ try {
   });
   assertPetThreadDefaults(thread);
   threadId = thread.thread.id;
-  console.log(JSON.stringify({ ok: true, badPathResult, authSummary, url, initialize, thread, notificationMethods: client.notifications.map((item) => item.method) }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        badPathResult,
+        authSummary,
+        url,
+        initialize,
+        thread,
+        notificationMethods: client.notifications.map((item) => item.method),
+      },
+      null,
+      2,
+    ),
+  );
 } finally {
   if (threadId) {
     try {

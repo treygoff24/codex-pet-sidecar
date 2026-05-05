@@ -10,7 +10,13 @@ export function MuteControl({ onMute }: { onMute: (until: string) => void }) {
   return (
     <div className="mute-control" aria-label="Mute controls">
       {choices.map((choice) => (
-        <button key={choice.value} type="button" onClick={() => onMute(muteUntilForChoice(choice.value, new Date()))}>{choice.label}</button>
+        <button
+          key={choice.value}
+          type="button"
+          onClick={() => onMute(muteUntilForChoice(choice.value, new Date()))}
+        >
+          {choice.label}
+        </button>
       ))}
     </div>
   );

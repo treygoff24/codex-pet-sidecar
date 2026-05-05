@@ -33,52 +33,75 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    runtimeBridge.loadPetConfig()
+    runtimeBridge
+      .loadPetConfig()
       .then((savedConfig) => {
         if (cancelled) return;
         setConfig(savedConfig);
       })
-      .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)));
-    runtimeBridge.listInstalledPets()
+      .catch((caught: unknown) =>
+        setError(caught instanceof Error ? caught.message : String(caught)),
+      );
+    runtimeBridge
+      .listInstalledPets()
       .then((installedPets) => {
         if (!cancelled) setPets(installedPets);
       })
-      .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)));
+      .catch((caught: unknown) =>
+        setError(caught instanceof Error ? caught.message : String(caught)),
+      );
     return () => {
       cancelled = true;
     };
   }, []);
 
   useEffect(() => {
-    runtimeBridge.onPetEvent((event) => {
-      if (event.type === "text_delta") {
-        setStreamingText((value) => {
-          const next = value + event.text;
-          streamingRef.current = next;
-          return next;
-        });
-      }
-      if (event.type === "turn_completed") {
-        const completedText = event.finalText ?? streamingRef.current;
-        setTranscript((lines) => (completedText ? lines.concat(completedText) : lines));
-        streamingRef.current = "";
-        setStreamingText("");
-      }
-      if (event.type === "approval_request") setApproval(event.request);
-      if (event.type === "observation" && event.digest.type === "workspace" && event.digest.dirtySummary) {
-        const digest = event.digest;
-        setTranscript((lines) => lines.concat(`Workspace: ${digest.repoName ?? "repo"} has ${digest.dirtySummary}.`));
-      }
-      if (event.type === "error") setError(event.message);
-    }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)));
+    runtimeBridge
+      .onPetEvent((event) => {
+        if (event.type === "text_delta") {
+          setStreamingText((value) => {
+            const next = value + event.text;
+            streamingRef.current = next;
+            return next;
+          });
+        }
+        if (event.type === "turn_completed") {
+          const completedText = event.finalText ?? streamingRef.current;
+          setTranscript((lines) => (completedText ? lines.concat(completedText) : lines));
+          streamingRef.current = "";
+          setStreamingText("");
+        }
+        if (event.type === "approval_request") setApproval(event.request);
+        if (
+          event.type === "observation" &&
+          event.digest.type === "workspace" &&
+          event.digest.dirtySummary
+        ) {
+          const digest = event.digest;
+          setTranscript((lines) =>
+            lines.concat(`Workspace: ${digest.repoName ?? "repo"} has ${digest.dirtySummary}.`),
+          );
+        }
+        if (event.type === "error") setError(event.message);
+      })
+      .catch((caught: unknown) =>
+        setError(caught instanceof Error ? caught.message : String(caught)),
+      );
   }, []);
 
   useEffect(() => {
     if (!config?.petId) return;
-    runtimeBridge.startPetRuntime().catch((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)));
+    runtimeBridge
+      .startPetRuntime()
+      .catch((caught: unknown) =>
+        setError(caught instanceof Error ? caught.message : String(caught)),
+      );
   }, [config?.petId]);
 
-  const selectedPet = useMemo(() => pets.find((pet) => pet.id === config?.petId), [config?.petId, pets]);
+  const selectedPet = useMemo(
+    () => pets.find((pet) => pet.id === config?.petId),
+    [config?.petId, pets],
+  );
 
   async function pickPet(pet: InstalledPet) {
     const nextConfig = configFromPet(pet);

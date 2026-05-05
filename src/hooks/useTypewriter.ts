@@ -15,7 +15,10 @@ export function useTypewriter(text: string, charsPerSecond = 50): string {
   useEffect(() => {
     if (visibleLength >= text.length) return;
     const nextChar = text[visibleLength] ?? "";
-    const timeout = window.setTimeout(() => setVisibleLength((value) => Math.min(value + 1, text.length)), nextTypewriterDelay(nextChar, charsPerSecond));
+    const timeout = window.setTimeout(
+      () => setVisibleLength((value) => Math.min(value + 1, text.length)),
+      nextTypewriterDelay(nextChar, charsPerSecond),
+    );
     return () => window.clearTimeout(timeout);
   }, [charsPerSecond, text, visibleLength]);
 
