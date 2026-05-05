@@ -156,9 +156,37 @@ impl RuntimeSessionManager {
     pub async fn send_user_turn(&self, input: PetUserInput) -> AppResult<()> {
         let mut guard = self.inner.lock().await;
         let connection = guard.as_mut().ok_or(AppError::RuntimeNotStarted)?;
-        if connection.tracker.lock().await.has_active_turn() {
-            return Err(AppError::TurnAlreadyActive);
+
+        // A real user turn is the only thing that should block another user
+        // turn — the model is busy generating a reply. Ambient turns are
+        // best-effort and must yield to the human.
+        let preempt_ambient_ids: Vec<String> = {
+            let mut tracker = connection.tracker.lock().await;
+            if tracker.active_user_turn_id.is_some() {
+                return Err(AppError::TurnAlreadyActive);
+            }
+            tracker
+                .take_active_ambient_turns()
+                .into_iter()
+                .map(|(turn_id, state)| {
+                    cleanup_ambient_screenshot(&state);
+                    turn_id
+                })
+                .collect()
+        };
+
+        for turn_id in preempt_ambient_ids {
+            // Best-effort. If the server says the turn is already gone, fine —
+            // we still want the user's message to go through.
+            let _ = connection
+                .client
+                .call(
+                    "turn/interrupt",
+                    json!({"threadId": connection.session.thread_id, "turnId": turn_id}),
+                )
+                .await;
         }
+
         let result = connection
             .client
             .call(
@@ -278,6 +306,26 @@ impl TurnTracker {
             .map(CompletedTurn::Ambient)
             .unwrap_or(CompletedTurn::Unknown)
     }
+
+    fn take_active_ambient_turns(&mut self) -> Vec<(String, AmbientTurnState)> {
+        self.ambient_turns.drain().collect()
+    }
+
+    /// Drop all turn state. Called on wire-level errors where the tracker
+    /// would otherwise stay stuck — we'd rather lose an in-flight ambient
+    /// buffer than refuse every future user send.
+    fn clear(&mut self) -> Vec<AmbientTurnState> {
+        self.active_user_turn_id = None;
+        self.ambient_turns.drain().map(|(_, v)| v).collect()
+    }
+}
+
+fn cleanup_ambient_screenshot(state: &AmbientTurnState) {
+    if state.cleanup_screenshot_after_turn {
+        if let Some(path) = &state.screenshot_path {
+            let _ = std::fs::remove_file(path);
+        }
+    }
 }
 
 enum CompletedTurn {
@@ -357,6 +405,7 @@ async fn map_wire_event(
             }
         }
         WireEvent::Notification { method, params } if method == "error" => {
+            clear_tracker_on_error(tracker).await;
             Some(RuntimeEvent::Error {
                 message: params.to_string(),
             })
@@ -368,8 +417,21 @@ async fn map_wire_event(
             }
             Some(RuntimeEvent::ApprovalRequest { request })
         }
-        WireEvent::Error(message) => Some(RuntimeEvent::Error { message }),
+        WireEvent::Error(message) => {
+            clear_tracker_on_error(tracker).await;
+            Some(RuntimeEvent::Error { message })
+        }
         _ => None,
+    }
+}
+
+async fn clear_tracker_on_error(tracker: &Arc<Mutex<TurnTracker>>) {
+    let drained = {
+        let mut guard = tracker.lock().await;
+        guard.clear()
+    };
+    for state in drained {
+        cleanup_ambient_screenshot(&state);
     }
 }
 
@@ -503,6 +565,76 @@ mod tests {
             })
         );
         assert!(!screenshot.exists());
+    }
+
+    #[test]
+    fn tracker_take_active_ambient_turns_drains_and_returns_state() {
+        let mut tracker = TurnTracker::default();
+        tracker.ambient_turns.insert(
+            "turn-a".into(),
+            AmbientTurnState {
+                buffer: "partial".into(),
+                screenshot_path: Some(PathBuf::from("/tmp/a.jpg")),
+                cleanup_screenshot_after_turn: true,
+            },
+        );
+        tracker.ambient_turns.insert(
+            "turn-b".into(),
+            AmbientTurnState {
+                buffer: String::new(),
+                screenshot_path: None,
+                cleanup_screenshot_after_turn: false,
+            },
+        );
+
+        let drained = tracker.take_active_ambient_turns();
+        assert_eq!(drained.len(), 2);
+        assert!(tracker.ambient_turns.is_empty());
+    }
+
+    #[test]
+    fn tracker_clear_drops_user_turn_and_returns_ambient_states() {
+        let mut tracker = TurnTracker {
+            active_user_turn_id: Some("turn-user".into()),
+            ..TurnTracker::default()
+        };
+        tracker.ambient_turns.insert(
+            "turn-amb".into(),
+            AmbientTurnState {
+                buffer: String::new(),
+                screenshot_path: Some(PathBuf::from("/tmp/x.jpg")),
+                cleanup_screenshot_after_turn: true,
+            },
+        );
+
+        let drained = tracker.clear();
+        assert_eq!(drained.len(), 1);
+        assert!(tracker.active_user_turn_id.is_none());
+        assert!(tracker.ambient_turns.is_empty());
+        assert!(!tracker.has_active_turn());
+    }
+
+    #[test]
+    fn cleanup_ambient_screenshot_removes_file_only_when_flagged() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let keep = dir.path().join("keep.jpg");
+        let drop = dir.path().join("drop.jpg");
+        std::fs::write(&keep, b"x").expect("write keep");
+        std::fs::write(&drop, b"x").expect("write drop");
+
+        cleanup_ambient_screenshot(&AmbientTurnState {
+            buffer: String::new(),
+            screenshot_path: Some(keep.clone()),
+            cleanup_screenshot_after_turn: false,
+        });
+        cleanup_ambient_screenshot(&AmbientTurnState {
+            buffer: String::new(),
+            screenshot_path: Some(drop.clone()),
+            cleanup_screenshot_after_turn: true,
+        });
+
+        assert!(keep.exists());
+        assert!(!drop.exists());
     }
 
     #[test]

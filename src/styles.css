@@ -75,10 +75,11 @@ button {
   zoom: 0.8;
 }
 
-/* Toolbar lives in the top-right and is hidden by default. Hovering its
-   own area reveals it; mousing away starts a 5s linger, then it fades —
-   same auto-dismiss spirit as the speech bubble. pointer-events stay
-   `auto` so the invisible zone is mouse-discoverable without a hot zone. */
+/* Toolbar lives in the top-right and is hidden by default. Hovering anywhere
+   on the pet window reveals it; mousing away starts a 5s linger, then it
+   fades — same auto-dismiss spirit as the speech bubble. The reveal trigger
+   is the whole .pet-window so the user doesn't have to hunt for the tiny
+   icon hot-zone. */
 .pet-toolbar {
   position: absolute;
   top: 10px;
@@ -94,7 +95,7 @@ button {
   pointer-events: auto;
   z-index: 5;
 }
-.pet-toolbar:hover,
+.pet-window:hover .pet-toolbar,
 .pet-toolbar:focus-within {
   opacity: 1;
   transform: translateY(0);

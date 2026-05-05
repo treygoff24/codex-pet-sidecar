@@ -96,7 +96,7 @@ impl AmbientEngine {
     fn compose_prompt(&self, trigger: &str) -> String {
         let mut lines = vec![
             "Ambient awareness snapshot. Decide whether the desktop pet should speak.".to_string(),
-            "Return only JSON with this shape: {\"shouldSpeak\": boolean, \"message\": string}."
+            "For THIS turn only, return only JSON with this shape: {\"shouldSpeak\": boolean, \"message\": string}. Do not use this JSON format on any subsequent direct turns from the human — those return to plain prose."
                 .to_string(),
             "Speak only if the comment is timely, useful, and not annoying. Keep message under 140 characters.".to_string(),
             format!("Trigger: {trigger}."),
@@ -192,7 +192,10 @@ mod tests {
         let request = engine
             .next_request(&ambient_config(), None)
             .expect("first ambient snapshot should send");
-        assert!(request.prompt.contains("Return only JSON"));
+        assert!(request.prompt.contains("return only JSON"));
+        assert!(request
+            .prompt
+            .contains("subsequent direct turns from the human"));
         assert!(request.prompt.contains("Cursor"));
         assert!(request.include_screenshot);
         assert!(!request.retain_screenshot);

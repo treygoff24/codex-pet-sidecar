@@ -8,6 +8,27 @@ import "./styles.css";
 
 const fallbackWorkspace = "/Users/treygoff/Code/codex-pet-sidecar";
 
+// Tauri commands reject with a structured CommandError ({ message, recoverable }),
+// not an Error instance. JS-level rejections may be Error instances or strings.
+// Coerce all of them to a readable message instead of "[object Object]".
+function formatError(caught: unknown): string {
+  if (caught instanceof Error) return caught.message;
+  if (typeof caught === "string") return caught;
+  if (
+    caught &&
+    typeof caught === "object" &&
+    "message" in caught &&
+    typeof (caught as { message: unknown }).message === "string"
+  ) {
+    return (caught as { message: string }).message;
+  }
+  try {
+    return JSON.stringify(caught);
+  } catch {
+    return "Unknown error";
+  }
+}
+
 function configFromPet(pet: InstalledPet): PetConfig {
   return {
     petId: pet.id,
@@ -46,17 +67,13 @@ function App() {
         if (cancelled) return;
         setConfig(savedConfig);
       })
-      .catch((caught: unknown) =>
-        setError(caught instanceof Error ? caught.message : String(caught)),
-      );
+      .catch((caught: unknown) => setError(formatError(caught)));
     runtimeBridge
       .listInstalledPets()
       .then((installedPets) => {
         if (!cancelled) setPets(installedPets);
       })
-      .catch((caught: unknown) =>
-        setError(caught instanceof Error ? caught.message : String(caught)),
-      );
+      .catch((caught: unknown) => setError(formatError(caught)));
     return () => {
       cancelled = true;
     };
@@ -114,9 +131,7 @@ function App() {
         if (cancelled) un();
         else unlisten = un;
       })
-      .catch((caught: unknown) =>
-        setError(caught instanceof Error ? caught.message : String(caught)),
-      );
+      .catch((caught: unknown) => setError(formatError(caught)));
     return () => {
       cancelled = true;
       if (unlisten) unlisten();
@@ -125,11 +140,7 @@ function App() {
 
   useEffect(() => {
     if (!config?.petId) return;
-    runtimeBridge
-      .startPetRuntime()
-      .catch((caught: unknown) =>
-        setError(caught instanceof Error ? caught.message : String(caught)),
-      );
+    runtimeBridge.startPetRuntime().catch((caught: unknown) => setError(formatError(caught)));
   }, [config?.petId]);
 
   const selectedPet = useMemo(
@@ -164,7 +175,7 @@ function App() {
       await runtimeBridge.sendUserMessage(text);
     } catch (caught) {
       setAwaitingReply(false);
-      setError(caught instanceof Error ? caught.message : String(caught));
+      setError(formatError(caught));
       throw caught;
     }
   }
