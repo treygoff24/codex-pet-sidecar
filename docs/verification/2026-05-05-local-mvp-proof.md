@@ -5,7 +5,7 @@
 - `npm run check`: passed. Frontend build passed, Vitest passed 11 tests, and Rust tests passed 17 tests.
 - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`: passed with `-D warnings`.
 - `node scripts/probe-codex-app-server.mjs`: passed. Verified sidecar-owned app-server startup, `initialize`, and `model/list`.
-- `node scripts/smoke-codex-runtime.mjs`: passed. Verified bad Codex path failure, sidecar-owned app-server startup, `initialize`, and ephemeral `thread/start` with `on-request` approvals and `workspace-write` sandbox.
+- `node scripts/smoke-codex-runtime.mjs`: passed. Verified bad Codex path failure, Codex OAuth ChatGPT subscription auth, sidecar-owned app-server startup, `initialize`, and ephemeral `thread/start` with `on-request` approvals and `workspace-write` sandbox.
 
 ## Implemented MVP evidence
 

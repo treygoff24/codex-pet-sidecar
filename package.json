@@ -12,6 +12,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "smoke:runtime": "node scripts/smoke-codex-runtime.mjs",
     "check": "npm run build && npm test && cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {

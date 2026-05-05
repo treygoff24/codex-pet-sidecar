@@ -78,6 +78,40 @@ function connect(url) {
   };
 }
 
+function assertCodexOauthSubscription(account, authStatus) {
+  const actualAccount = account.account;
+  if (!actualAccount || actualAccount.type !== "chatgpt") {
+    throw new Error(`expected Codex OAuth ChatGPT account, got ${JSON.stringify(actualAccount)}`);
+  }
+
+  const paidPlans = new Set([
+    "go",
+    "plus",
+    "pro",
+    "prolite",
+    "team",
+    "self_serve_business_usage_based",
+    "business",
+    "enterprise_cbp_usage_based",
+    "enterprise",
+    "edu",
+  ]);
+  if (!paidPlans.has(actualAccount.planType)) {
+    throw new Error(`expected paid Codex OAuth subscription, got plan ${actualAccount.planType}`);
+  }
+
+  if (!["chatgpt", "chatgptAuthTokens"].includes(authStatus.authMethod)) {
+    throw new Error(`expected ChatGPT OAuth auth method, got ${authStatus.authMethod}`);
+  }
+
+  return {
+    accountType: actualAccount.type,
+    email: actualAccount.email,
+    planType: actualAccount.planType,
+    authMethod: authStatus.authMethod,
+  };
+}
+
 async function assertBadPathIsRecoverable() {
   try {
     await spawnAppServer("/definitely/missing/codex-for-pet-sidecar");
@@ -99,6 +133,9 @@ try {
     clientInfo: { name: "codex-pet-sidecar-smoke", title: "Codex Pet Sidecar Smoke", version: "0.1.0" },
     capabilities: { experimentalApi: true },
   });
+  const account = await client.call("account/read", { refreshToken: true });
+  const authStatus = await client.call("getAuthStatus", { includeToken: false, refreshToken: true });
+  const authSummary = assertCodexOauthSubscription(account, authStatus);
   const thread = await client.call("thread/start", {
     cwd: process.cwd(),
     approvalPolicy: "on-request",
@@ -110,7 +147,7 @@ try {
     experimentalRawEvents: false,
     persistExtendedHistory: false,
   });
-  console.log(JSON.stringify({ ok: true, badPathResult, url, initialize, thread, notificationMethods: client.notifications.map((item) => item.method) }, null, 2));
+  console.log(JSON.stringify({ ok: true, badPathResult, authSummary, url, initialize, thread, notificationMethods: client.notifications.map((item) => item.method) }, null, 2));
 } finally {
   client.ws.close();
   child.kill();
