@@ -593,6 +593,35 @@ button {
   resize: vertical;
   font-family: inherit;
 }
+.settings-panel fieldset {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+.settings-panel legend {
+  padding: 0 4px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.settings-panel input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+.settings-panel fieldset label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-panel p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
 
 /* ─────────────────────────────────────────────────────────────
    Mute popover — anchored under the snooze icon

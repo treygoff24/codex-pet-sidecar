@@ -55,6 +55,10 @@ impl AppPaths {
     pub fn pet_memory_path(&self, pet_id: &str) -> PathBuf {
         self.pet_support_dir(pet_id).join("memory.md")
     }
+
+    pub fn ambient_screenshot_dir(&self, pet_id: &str) -> PathBuf {
+        self.pet_support_dir(pet_id).join("ambient-screenshots")
+    }
 }
 
 #[cfg(test)]

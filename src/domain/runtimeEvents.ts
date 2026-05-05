@@ -19,6 +19,8 @@ export type ApprovalRequest = {
 
 export type PetAgentEvent =
   | { type: "text_delta"; text: string }
+  | { type: "ambient_message"; text: string }
+  | { type: "ambient_status"; message: string }
   | { type: "turn_completed"; finalText?: string }
   | { type: "approval_request"; request: ApprovalRequest }
   | { type: "observation"; digest: import("./observations").ObservationDigest }

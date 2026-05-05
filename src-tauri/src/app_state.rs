@@ -1,4 +1,4 @@
-use crate::proactive::ProactiveEngine;
+use crate::proactive::AmbientEngine;
 use crate::runtime::{RuntimeEvent, RuntimeSessionManager};
 use crate::state::AppPaths;
 use std::sync::atomic::AtomicBool;
@@ -8,7 +8,7 @@ pub struct AppState {
     pub paths: AppPaths,
     pub runtime: RuntimeSessionManager,
     pub event_tx: mpsc::UnboundedSender<RuntimeEvent>,
-    pub proactive: Mutex<ProactiveEngine>,
+    pub ambient: Mutex<AmbientEngine>,
     pub observer_started: AtomicBool,
 }
 
@@ -18,7 +18,7 @@ impl AppState {
             paths,
             runtime: RuntimeSessionManager::default(),
             event_tx,
-            proactive: Mutex::new(ProactiveEngine::default()),
+            ambient: Mutex::new(AmbientEngine::default()),
             observer_started: AtomicBool::new(false),
         }
     }

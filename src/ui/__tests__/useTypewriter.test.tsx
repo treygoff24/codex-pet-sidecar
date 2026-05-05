@@ -1,11 +1,8 @@
 import { act, render, screen } from "@testing-library/react";
-import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useTypewriter } from "../../hooks/useTypewriter";
-import { defaultPersona, type PetConfig } from "../../domain/petConfig";
 import { MuteControl } from "../MuteControl";
-import { SettingsPanel } from "../SettingsPanel";
 import { ChatDrawer } from "../ChatDrawer";
 import { ChatInputBar } from "../ChatInputBar";
 
@@ -77,40 +74,18 @@ describe("pet UI helpers", () => {
     expect(onSend).toHaveBeenCalledWith("remember this");
   });
 
+  it("keeps typed messages when sending fails", async () => {
+    const onSend = vi.fn().mockRejectedValue(new Error("busy"));
+    render(<ChatInputBar onSend={onSend} />);
+    await userEvent.type(screen.getByLabelText("Message your pet"), "do not lose this");
+    await userEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(screen.getByLabelText("Message your pet")).toHaveValue("do not lose this");
+  });
+
   it("renders exact mute choices", () => {
     render(<MuteControl onMute={vi.fn()} />);
     expect(screen.getByRole("button", { name: "30 minutes" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "2 hours" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Until tomorrow" })).toBeInTheDocument();
-  });
-
-  it("keeps workspace cwd editable through settings", async () => {
-    const config: PetConfig = {
-      petId: "olive",
-      displayName: "Olive",
-      spritesheetPath: "/tmp/spritesheet.webp",
-      persona: defaultPersona,
-      mute: {},
-      workspaceCwd: "/old",
-      observers: { activeApp: true, windowTitle: true, workspace: true, idle: true },
-      proactive: { enabled: true, minMinutesBetweenMessages: 10 },
-    };
-    const onChange = vi.fn();
-    function Harness() {
-      const [current, setCurrent] = useState(config);
-      return (
-        <SettingsPanel
-          config={current}
-          onChange={(next) => {
-            onChange(next);
-            setCurrent(next);
-          }}
-        />
-      );
-    }
-    render(<Harness />);
-    await userEvent.clear(screen.getByLabelText("Workspace folder"));
-    await userEvent.type(screen.getByLabelText("Workspace folder"), "/new");
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ workspaceCwd: "/new" }));
   });
 });

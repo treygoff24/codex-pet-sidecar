@@ -25,6 +25,8 @@ pub enum AppError {
     RuntimeNotStarted,
     #[error("no active turn is available to interrupt")]
     NoActiveTurn,
+    #[error("another turn is already running")]
+    TurnAlreadyActive,
     #[error("approval request {0} is no longer pending")]
     ApprovalNotPending(String),
     #[error("invalid pet asset {path:?}: {reason}")]

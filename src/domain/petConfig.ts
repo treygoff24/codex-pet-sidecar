@@ -17,6 +17,12 @@ export type PetConfig = {
   mute: MuteState;
   workspaceCwd?: string;
   observers: ObserverSettings;
+  ambient: {
+    enabled: boolean;
+    intervalMinutes: number;
+    includeScreenshot: boolean;
+    retainScreenshots: boolean;
+  };
   proactive: {
     enabled: boolean;
     minMinutesBetweenMessages: number;

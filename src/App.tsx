@@ -17,6 +17,12 @@ function configFromPet(pet: InstalledPet): PetConfig {
     mute: {},
     workspaceCwd: fallbackWorkspace,
     observers: { activeApp: true, windowTitle: true, workspace: true, idle: true },
+    ambient: {
+      enabled: true,
+      intervalMinutes: 15,
+      includeScreenshot: false,
+      retainScreenshots: false,
+    },
     proactive: { enabled: true, minMinutesBetweenMessages: 10 },
   };
 }
@@ -80,6 +86,13 @@ function App() {
           setAwaitingReply(false);
         }
         if (event.type === "approval_request") setApproval(event.request);
+        if (event.type === "ambient_message") {
+          setTranscript((lines) => lines.concat(event.text));
+          setLastReply(event.text);
+        }
+        if (event.type === "ambient_status") {
+          setTranscript((lines) => lines.concat(event.message));
+        }
         if (
           event.type === "observation" &&
           event.digest.type === "workspace" &&
@@ -146,6 +159,16 @@ function App() {
     setApproval(undefined);
   }
 
+  async function sendMessage(text: string) {
+    try {
+      await runtimeBridge.sendUserMessage(text);
+    } catch (caught) {
+      setAwaitingReply(false);
+      setError(caught instanceof Error ? caught.message : String(caught));
+      throw caught;
+    }
+  }
+
   if (!config?.petId) return <PetPicker pets={pets} onPick={pickPet} />;
 
   return (
@@ -158,7 +181,7 @@ function App() {
       transcript={transcript}
       approval={approval}
       error={error}
-      onSend={runtimeBridge.sendUserMessage}
+      onSend={sendMessage}
       onSendStart={() => {
         setLastReply("");
         setAwaitingReply(true);

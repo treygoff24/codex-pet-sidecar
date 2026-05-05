@@ -6,4 +6,4 @@ pub mod prompt;
 pub mod session;
 
 pub use events::{ApprovalAction, RuntimeEvent, RuntimeSession};
-pub use session::{PetUserInput, RuntimeSessionManager, StartPetSessionRequest};
+pub use session::{AmbientTurnInput, PetUserInput, RuntimeSessionManager, StartPetSessionRequest};

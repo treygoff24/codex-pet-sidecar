@@ -13,6 +13,8 @@ pub struct PetConfig {
     pub mute: MuteConfig,
     pub workspace_cwd: Option<PathBuf>,
     pub observers: ObserverConfig,
+    #[serde(default = "default_ambient_config")]
+    pub ambient: AmbientConfig,
     pub proactive: ProactiveConfig,
 }
 
@@ -38,6 +40,30 @@ pub struct ProactiveConfig {
     pub min_minutes_between_messages: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AmbientConfig {
+    pub enabled: bool,
+    pub interval_minutes: u64,
+    pub include_screenshot: bool,
+    pub retain_screenshots: bool,
+}
+
+impl AmbientConfig {
+    pub fn effective_interval_minutes(&self) -> u64 {
+        self.interval_minutes.max(10)
+    }
+}
+
+fn default_ambient_config() -> AmbientConfig {
+    AmbientConfig {
+        enabled: true,
+        interval_minutes: 15,
+        include_screenshot: false,
+        retain_screenshots: false,
+    }
+}
+
 impl PetConfig {
     #[cfg(test)]
     pub fn first_launch(
@@ -59,6 +85,7 @@ impl PetConfig {
                 workspace: true,
                 idle: true,
             },
+            ambient: default_ambient_config(),
             proactive: ProactiveConfig {
                 enabled: true,
                 min_minutes_between_messages: 10,
@@ -113,5 +140,65 @@ mod tests {
         save_config(&paths, &config).expect("save");
         let loaded = load_config(&paths).expect("load").expect("config");
         assert_eq!(loaded.workspace_cwd, Some(root.path().join("repo")));
+        assert_eq!(loaded.ambient.interval_minutes, 15);
+        assert!(!loaded.ambient.include_screenshot);
+    }
+
+    #[test]
+    fn old_config_loads_with_default_ambient_settings() {
+        let payload = serde_json::json!({
+            "petId": "olive",
+            "displayName": "Olive",
+            "spritesheetPath": "/tmp/sprite.webp",
+            "persona": "warm",
+            "mute": {},
+            "workspaceCwd": "/tmp/repo",
+            "observers": {
+                "activeApp": true,
+                "windowTitle": true,
+                "workspace": true,
+                "idle": true
+            },
+            "proactive": {
+                "enabled": true,
+                "minMinutesBetweenMessages": 10
+            }
+        });
+        let loaded: PetConfig = serde_json::from_value(payload).expect("old config loads");
+        assert!(loaded.ambient.enabled);
+        assert_eq!(loaded.ambient.effective_interval_minutes(), 15);
+    }
+
+    #[test]
+    fn ambient_config_preserves_explicit_values_and_clamps_effective_interval() {
+        let payload = serde_json::json!({
+            "petId": "olive",
+            "displayName": "Olive",
+            "spritesheetPath": "/tmp/sprite.webp",
+            "persona": "warm",
+            "mute": {},
+            "observers": {
+                "activeApp": true,
+                "windowTitle": true,
+                "workspace": true,
+                "idle": true
+            },
+            "ambient": {
+                "enabled": false,
+                "intervalMinutes": 4,
+                "includeScreenshot": true,
+                "retainScreenshots": true
+            },
+            "proactive": {
+                "enabled": true,
+                "minMinutesBetweenMessages": 10
+            }
+        });
+        let loaded: PetConfig = serde_json::from_value(payload).expect("config loads");
+        assert!(!loaded.ambient.enabled);
+        assert_eq!(loaded.ambient.interval_minutes, 4);
+        assert_eq!(loaded.ambient.effective_interval_minutes(), 10);
+        assert!(loaded.ambient.include_screenshot);
+        assert!(loaded.ambient.retain_screenshots);
     }
 }

@@ -13,6 +13,8 @@ pub struct RuntimeSession {
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum RuntimeEvent {
     TextDelta { text: String },
+    AmbientMessage { text: String },
+    AmbientStatus { message: String },
     TurnCompleted { final_text: Option<String> },
     ApprovalRequest { request: ApprovalRequest },
     Observation { digest: ObservationDigest },

@@ -15,8 +15,12 @@ export function ChatInputBar({
     event.preventDefault();
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
-    setText("");
-    await onSend(trimmed);
+    try {
+      await onSend(trimmed);
+      setText("");
+    } catch {
+      setText(trimmed);
+    }
   }
 
   const canSend = text.trim().length > 0 && !disabled;

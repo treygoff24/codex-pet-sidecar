@@ -2,11 +2,13 @@ use crate::app_state::AppState;
 use crate::error::AppError;
 use crate::memory::ensure_memory_file;
 use crate::observers::{
-    observe_active_app, observe_idle_state_with_current, observe_workspace, ObservationDigest,
+    capture_ambient_screenshot, observe_active_app, observe_idle_state_with_current,
+    observe_workspace, ObservationDigest, ScreenshotCapture,
 };
 use crate::pets::{discover_installed_pets, InstalledPet};
 use crate::runtime::{
-    ApprovalAction, PetUserInput, RuntimeEvent, RuntimeSession, StartPetSessionRequest,
+    AmbientTurnInput, ApprovalAction, PetUserInput, RuntimeEvent, RuntimeSession,
+    StartPetSessionRequest,
 };
 use crate::state::{load_config, save_config, PetConfig};
 use serde::Serialize;
@@ -89,7 +91,10 @@ pub async fn start_pet_runtime(
 pub async fn send_user_message(state: State<'_, AppState>, text: String) -> CommandResult<()> {
     state
         .runtime
-        .send_user_turn(PetUserInput { text })
+        .send_user_turn(PetUserInput {
+            text,
+            local_images: Vec::new(),
+        })
         .await
         .map_err(Into::into)
 }
@@ -148,46 +153,113 @@ fn spawn_observer_loop(app: AppHandle) {
                     return;
                 }
             };
+            let mut digests = Vec::new();
             if config.observers.active_app {
-                let digest = observe_active_app(config.observers.window_title);
-                emit_observation(&state, &config, digest).await;
+                digests.push(observe_active_app(config.observers.window_title));
             }
             if config.observers.workspace {
                 let cwd = config
                     .workspace_cwd
                     .clone()
                     .unwrap_or_else(|| paths.launch_cwd.clone());
-                let digest = observe_workspace(&cwd);
-                emit_observation(&state, &config, digest).await;
+                digests.push(observe_workspace(&cwd));
             }
             if config.observers.idle {
                 let (digest, current_idle) = observe_idle_state_with_current(previous_idle);
                 previous_idle = current_idle;
-                emit_observation(&state, &config, digest).await;
+                digests.push(digest);
             }
+            handle_observations(&state, &config, digests).await;
             sleep(Duration::from_secs(60)).await;
         }
     });
 }
 
-async fn emit_observation(
+async fn handle_observations(
     state: &tauri::State<'_, AppState>,
     config: &PetConfig,
-    digest: ObservationDigest,
+    digests: Vec<ObservationDigest>,
 ) {
-    let _ = state.event_tx.send(RuntimeEvent::Observation {
-        digest: digest.clone(),
-    });
-    if !config.proactive.enabled {
-        return;
+    for digest in &digests {
+        let _ = state.event_tx.send(RuntimeEvent::Observation {
+            digest: digest.clone(),
+        });
     }
-    let prompt = state.proactive.lock().await.evaluate(
-        &digest,
-        config.proactive.min_minutes_between_messages,
-        config.mute.until.as_deref(),
-    );
-    if let Some(prompt) = prompt {
-        let _ = state.runtime.inject_observation_turn(prompt).await;
+
+    let mut engine = state.ambient.lock().await;
+    engine.record_observations(&digests);
+    let Some(request) = engine.next_request(&config.ambient, config.mute.until.as_deref()) else {
+        return;
+    };
+    drop(engine);
+
+    if start_ambient_turn(state, config, request).await {
+        state.ambient.lock().await.mark_request_started();
+    }
+}
+
+fn cleanup_unused_screenshot(cleanup_after_turn: bool, path: Option<&std::path::Path>) {
+    if cleanup_after_turn {
+        if let Some(path) = path {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+async fn start_ambient_turn(
+    state: &tauri::State<'_, AppState>,
+    config: &PetConfig,
+    request: crate::proactive::AmbientTurnRequest,
+) -> bool {
+    let screenshot = capture_screenshot_for_ambient_turn(state, config, &request);
+    emit_screenshot_status(state, &screenshot);
+    let prompt =
+        ambient_prompt_with_screenshot_status(request.prompt, screenshot.degraded.as_deref());
+    let cleanup_screenshot_after_turn = screenshot.cleanup_after_turn;
+    let screenshot_path = screenshot.path;
+    let turn_started = state
+        .runtime
+        .send_ambient_turn(AmbientTurnInput {
+            prompt,
+            screenshot_path: screenshot_path.clone(),
+            cleanup_screenshot_after_turn,
+        })
+        .await;
+    if !matches!(turn_started, Ok(true)) {
+        cleanup_unused_screenshot(cleanup_screenshot_after_turn, screenshot_path.as_deref());
+        return false;
+    }
+    true
+}
+
+fn capture_screenshot_for_ambient_turn(
+    state: &tauri::State<'_, AppState>,
+    config: &PetConfig,
+    request: &crate::proactive::AmbientTurnRequest,
+) -> ScreenshotCapture {
+    if request.include_screenshot {
+        capture_ambient_screenshot(&state.paths, &config.pet_id, request.retain_screenshot)
+    } else {
+        ScreenshotCapture {
+            path: None,
+            cleanup_after_turn: false,
+            degraded: None,
+        }
+    }
+}
+
+fn emit_screenshot_status(state: &tauri::State<'_, AppState>, screenshot: &ScreenshotCapture) {
+    if let Some(message) = &screenshot.degraded {
+        let _ = state.event_tx.send(RuntimeEvent::AmbientStatus {
+            message: format!("Screenshot awareness is text-only right now: {message}"),
+        });
+    }
+}
+
+fn ambient_prompt_with_screenshot_status(prompt: String, degraded: Option<&str>) -> String {
+    match degraded {
+        Some(degraded) => format!("{prompt}\nScreenshot unavailable: {degraded}"),
+        None => prompt,
     }
 }
 
