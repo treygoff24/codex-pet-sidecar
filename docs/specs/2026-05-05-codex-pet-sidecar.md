@@ -18,12 +18,12 @@ Wrap, don't rebuild. Codex app-server already handles model orchestration, tool 
 - Tauri app: transparent always-on-top window, sprite, speech bubble, chat drawer, mute control.
 - Pet-owned Codex app-server runtime, started by the sidecar on a loopback WebSocket.
 - Codex CLI installed locally and available on `PATH`.
-- One ephemeral pet thread per session.
+- One saved pet thread per session, so the user can inspect or resume pet conversations from normal Codex thread history.
 - Persona configured by the user as a single paragraph.
 - `memory.md` file the pet agent maintains directly via Codex's filesystem tools.
 - Two proactive triggers: returned-from-idle and repo-changed. Rate-limited to 1 message per 10 minutes. Mute durations: 30min / 2hr / until tomorrow.
 - Three observers: active app + window title (when permitted), workspace + git status, idle state.
-- Full Codex tool surface, approval-gated for destructive actions through the pet UI.
+- Full Codex tool surface in YOLO mode, except Pencil, Porkbun, Resend, and Serena MCP servers are disabled for the pet.
 - Animation cadence cribbed from the Codex Mac app pet implementation.
 
 **Out for v1**
@@ -89,18 +89,21 @@ Runtime ownership rule: the sidecar owns this process. It should never proxy int
 
 Pet thread starts with:
 
-- `ephemeral: true`
+- `ephemeral: false`
 - `baseInstructions`: persona text + full contents of `memory.md` (loaded once on `thread/start`, not re-injected on subsequent turns).
 - `developerInstructions`: behavioral rules and the absolute path to `memory.md`.
-- Tool / MCP / sandbox: inherits the user's Codex configuration so the pet has the same powers as Codex itself.
-- `approvalPolicy`: gates destructive actions through the pet UI (`on_request` or whichever Codex policy means "ask before mutating things").
-- `sandbox`: `workspace-write` to start. Adjustable per the protocol spike's findings.
+- Tool / MCP / sandbox: inherits the user's Codex configuration with pet-specific overrides.
+- `approvalPolicy`: `never`, by design. This is a personal toy with YOLO permissions.
+- `sandbox`: `danger-full-access`, by design.
+- `config.model_reasoning_effort`: `medium`.
+- `config.mcp_servers`: disables `pencil`, `porkbun`, `resend`, and `serena` for pet threads.
+- `persistExtendedHistory`: `true`, so saved pet threads retain richer transcript/history data.
 
 ### Tools and approvals
 
-Full Codex tool surface. The pet can read files, run shell, edit code, use MCP servers — same as Codex itself.
+Broad Codex tool surface. The pet can read files, run shell, edit code, and use most configured MCP servers, but Pencil, Porkbun, Resend, and Serena are disabled for the pet. The pet runs in YOLO mode by default: `approvalPolicy: never` plus `danger-full-access`.
 
-Risky operations are gated by Codex's approval mechanism, which the broker surfaces in the pet UI. Approval prompts pop in or near the chat drawer with three actions: allow once, allow for this session, deny.
+The approval prompt UI remains in the app because the app-server protocol can still emit approval-style server requests in some future/config-specific cases, but the default pet thread is not intended to prompt for normal commands or writes.
 
 The protocol discovery spike must answer:
 
@@ -260,7 +263,7 @@ A mix of correctness and delight. v1 ships when:
 **Correctness**
 
 1. Sidecar lists installed pets from `${CODEX_HOME:-$HOME/.codex}/pets/`, presents a one-time picker on first launch, and persists the choice.
-2. Sidecar starts its own `codex app-server` child process, opens a pet-owned ephemeral thread with persona-specific `baseInstructions`, and chat round-trips with streamed deltas.
+2. Sidecar starts its own `codex app-server` child process, opens a pet-owned saved thread with persona-specific `baseInstructions`, and chat round-trips with streamed deltas.
 3. `memory.md` is created on first run with the suggested template and is loaded into `baseInstructions` on every new thread.
 4. The pet can read and update `memory.md` directly using Codex's filesystem tools.
 5. Approval-gated tool calls surface a prompt in the pet UI, and the user's response routes back to Codex correctly.
@@ -287,7 +290,7 @@ A mix of correctness and delight. v1 ships when:
 ## Future
 
 - `agent-memory` replaces `memory.md` injection when ready.
-- Persistent threads if ephemeral feels lobotomized.
+- Thread pruning or archive UX if saved pet threads become clutter.
 - More observers (Codex thread digests, calendar, music) once v1 vibes are right.
 - Cozy / Gremlin mode variants once base feel is solid.
 - Multiple pets at once for chaos.

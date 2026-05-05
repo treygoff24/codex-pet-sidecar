@@ -112,6 +112,25 @@ function assertCodexOauthSubscription(account, authStatus) {
   };
 }
 
+const disabledPetMcpServers = ["pencil", "porkbun", "resend", "serena"];
+
+function petThreadConfigOverrides() {
+  return {
+    model_reasoning_effort: "medium",
+    mcp_servers: Object.fromEntries(disabledPetMcpServers.map((server) => [server, { enabled: false }])),
+  };
+}
+
+function assertPetThreadDefaults(thread) {
+  const failures = [];
+  if (thread.thread?.ephemeral !== false) failures.push(`expected persistent thread, got ephemeral=${thread.thread?.ephemeral}`);
+  if (!thread.thread?.path) failures.push("expected persistent thread path");
+  if (thread.reasoningEffort !== "medium") failures.push(`expected medium reasoning, got ${thread.reasoningEffort}`);
+  if (thread.approvalPolicy !== "never") failures.push(`expected YOLO approval policy never, got ${thread.approvalPolicy}`);
+  if (thread.sandbox?.type !== "dangerFullAccess") failures.push(`expected dangerFullAccess sandbox, got ${thread.sandbox?.type}`);
+  if (failures.length > 0) throw new Error(failures.join("; "));
+}
+
 async function assertBadPathIsRecoverable() {
   try {
     await spawnAppServer("/definitely/missing/codex-for-pet-sidecar");
@@ -127,6 +146,7 @@ async function assertBadPathIsRecoverable() {
 const badPathResult = await assertBadPathIsRecoverable();
 const { child, url } = await spawnAppServer();
 const client = connect(url);
+let threadId;
 try {
   await client.opened;
   const initialize = await client.call("initialize", {
@@ -138,17 +158,25 @@ try {
   const authSummary = assertCodexOauthSubscription(account, authStatus);
   const thread = await client.call("thread/start", {
     cwd: process.cwd(),
-    approvalPolicy: "on-request",
+    approvalPolicy: "never",
     approvalsReviewer: "user",
-    sandbox: "workspace-write",
+    sandbox: "danger-full-access",
+    config: petThreadConfigOverrides(),
     baseInstructions: "You are Smoke, a tiny test pet.\n\nCurrent memory.md contents:\n# Memory",
     developerInstructions: `Your memory file is at ${process.cwd()}/.tmp-smoke-memory.md. Keep messages short.`,
-    ephemeral: true,
+    ephemeral: false,
     experimentalRawEvents: false,
-    persistExtendedHistory: false,
+    persistExtendedHistory: true,
   });
+  assertPetThreadDefaults(thread);
+  threadId = thread.thread.id;
   console.log(JSON.stringify({ ok: true, badPathResult, authSummary, url, initialize, thread, notificationMethods: client.notifications.map((item) => item.method) }, null, 2));
 } finally {
+  if (threadId) {
+    try {
+      await client.call("thread/archive", { threadId });
+    } catch {}
+  }
   client.ws.close();
   child.kill();
   await waitForExit(child);

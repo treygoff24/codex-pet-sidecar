@@ -20,11 +20,12 @@
 `node scripts/smoke-codex-runtime.mjs` passed and additionally verified:
 
 - a missing Codex path produces an `ENOENT` setup failure instead of a crash
-- `thread/start` succeeds with `ephemeral: true`
-- `approvalPolicy: "on-request"` is echoed back
-- `approvalsReviewer: "user"` is echoed back
-- `sandbox: "workspace-write"` is accepted and returned as a `workspaceWrite` sandbox policy
-- response thread has `path: null`, confirming the thread is ephemeral and not materialized on disk
+- `thread/start` succeeds with `ephemeral: false`
+- `approvalPolicy: "never"` is echoed back for YOLO mode
+- `approvalsReviewer: "user"` is accepted, though it is not normally used when approval policy is `never`
+- `sandbox: "danger-full-access"` is accepted and returned as a `dangerFullAccess` sandbox policy
+- `config.model_reasoning_effort: "medium"` is accepted and returned as `reasoningEffort: "medium"`
+- response thread has a non-null `path`, confirming the thread is saved on disk
 
 Skipped: I did not close `/Applications/Codex.app` from this implementation run because that could disrupt the live user session. The CLI-owned child was still distinct from the Mac app app-server; process checks showed both the Mac app server and the probe/smoke child while the probes were running.
 
@@ -42,6 +43,7 @@ Important generated references:
 - `protocol/app-server/ts/v2/UserInput.ts` proves text input shape: `{ type: "text", text, text_elements: [] }`.
 - `protocol/app-server/ts/v2/AskForApproval.ts` lists approval policy values: `untrusted`, `on-failure`, `on-request`, `never`, and granular policy objects.
 - `protocol/app-server/ts/v2/SandboxMode.ts` lists sandbox request values: `read-only`, `workspace-write`, `danger-full-access`.
+- `protocol/app-server/ts/v2/ThreadStartParams.ts` exposes a thread-scoped `config` object used for `model_reasoning_effort` and `mcp_servers.<name>.enabled` overrides.
 - `protocol/app-server/ts/v2/SandboxPolicy.ts` lists returned sandbox policies: `dangerFullAccess`, `readOnly`, `externalSandbox`, `workspaceWrite`.
 
 ## Thread start payload used by the MVP
@@ -49,18 +51,27 @@ Important generated references:
 ```json
 {
   "cwd": "/absolute/workspace/path",
-  "approvalPolicy": "on-request",
+  "approvalPolicy": "never",
   "approvalsReviewer": "user",
-  "sandbox": "workspace-write",
+  "sandbox": "danger-full-access",
+  "config": {
+    "model_reasoning_effort": "medium",
+    "mcp_servers": {
+      "pencil": { "enabled": false },
+      "porkbun": { "enabled": false },
+      "resend": { "enabled": false },
+      "serena": { "enabled": false }
+    }
+  },
   "baseInstructions": "pet name + persona + full memory.md contents",
   "developerInstructions": "behavior rules + absolute memory.md path",
-  "ephemeral": true,
+  "ephemeral": false,
   "experimentalRawEvents": false,
-  "persistExtendedHistory": false
+  "persistExtendedHistory": true
 }
 ```
 
-The smoke response confirmed `ephemeral: true`, `approvalPolicy: "on-request"`, `approvalsReviewer: "user"`, and a returned `workspaceWrite` sandbox.
+The smoke response confirmed `ephemeral: false`, a non-null thread path, `approvalPolicy: "never"`, `approvalsReviewer: "user"`, `reasoningEffort: "medium"`, and a returned `dangerFullAccess` sandbox.
 
 ## Approval routing
 
@@ -72,7 +83,7 @@ The generated server request union proves these approval request methods are pos
 - legacy `execCommandApproval`
 - legacy `applyPatchApproval`
 
-The MVP maps these to a pet UI approval request with `allow once`, `allow for session`, and `deny`. This mapping is implemented in `src-tauri/src/runtime/approvals.rs`. A live destructive approval was not triggered during this run, so the approval UI path remains the highest-risk unproven area.
+The MVP maps these to a pet UI approval request with `allow once`, `allow for session`, and `deny`. This mapping is implemented in `src-tauri/src/runtime/approvals.rs`. Default pet threads run with `approvalPolicy: "never"`, so this UI is currently a fallback path rather than the expected default path.
 
 ## Hard blocklists
 
@@ -80,7 +91,7 @@ No separate hard command/tool blocklist was found in generated request types or 
 
 ## Known unknowns / spec notes
 
-- The current smoke only starts an ephemeral thread; it does not run a paid model turn.
-- `workspace-write` may require an approval prompt before the agent can edit `memory.md` under the app support directory, because that path is outside the active workspace. The generated protocol exposes approval requests and additional writable-root grants, but a live memory-write approval still needs dogfood verification.
+- The current smoke starts and archives a saved thread, but it still does not run a paid model turn.
+- Saved pet threads persist under Codex's normal thread history until the user archives/deletes them; this is intentional, but may create clutter if the pet starts many sessions.
 - The Mac-app-closed check remains to be run manually before calling the dogfood proof complete.
-- Approval prompt response shapes are derived from generated types and local mapping tests, but still need one live approval prompt test.
+- The smoke verifies thread-scoped config overrides are accepted for reasoning effort. MCP disablement is sent via the same thread-scoped config object, but the app-server response does not echo an MCP inventory for that thread.

@@ -13,6 +13,9 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use which::which;
 
+const PET_REASONING_EFFORT: &str = "medium";
+const DISABLED_PET_MCP_SERVERS: [&str; 4] = ["pencil", "porkbun", "resend", "serena"];
+
 #[derive(Debug, Clone)]
 pub struct StartPetSessionRequest {
     pub pet_name: String,
@@ -63,19 +66,21 @@ impl RuntimeSessionManager {
             &request.memory_markdown,
         );
         let developer_instructions = compose_developer_instructions(&request.memory_path);
+        let config_overrides = pet_thread_config_overrides();
         let thread = client
             .call(
                 "thread/start",
                 json!({
                     "cwd": request.workspace_cwd,
-                    "approvalPolicy": "on-request",
+                    "approvalPolicy": "never",
                     "approvalsReviewer": "user",
-                    "sandbox": "workspace-write",
+                    "sandbox": "danger-full-access",
+                    "config": config_overrides,
                     "baseInstructions": base_instructions,
                     "developerInstructions": developer_instructions,
-                    "ephemeral": true,
+                    "ephemeral": false,
                     "experimentalRawEvents": false,
-                    "persistExtendedHistory": false
+                    "persistExtendedHistory": true
                 }),
             )
             .await?;
@@ -194,6 +199,18 @@ impl RuntimeSessionManager {
     }
 }
 
+fn pet_thread_config_overrides() -> Value {
+    let mut disabled_servers = serde_json::Map::new();
+    for server in DISABLED_PET_MCP_SERVERS {
+        disabled_servers.insert(server.to_string(), json!({ "enabled": false }));
+    }
+
+    json!({
+        "model_reasoning_effort": PET_REASONING_EFFORT,
+        "mcp_servers": disabled_servers
+    })
+}
+
 async fn map_wire_event(event: WireEvent, client: &JsonRpcClient) -> Option<RuntimeEvent> {
     match event {
         WireEvent::Notification { method, params } if method == "item/agentMessage/delta" => {
@@ -246,5 +263,14 @@ mod tests {
             &request.memory_markdown
         )
         .contains("# Memory"));
+    }
+
+    #[test]
+    fn pet_thread_config_uses_medium_reasoning_and_disables_selected_mcps() {
+        let config = pet_thread_config_overrides();
+        assert_eq!(config["model_reasoning_effort"], "medium");
+        for server in DISABLED_PET_MCP_SERVERS {
+            assert_eq!(config["mcp_servers"][server]["enabled"], false);
+        }
     }
 }
