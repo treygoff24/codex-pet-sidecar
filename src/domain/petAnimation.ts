@@ -101,12 +101,14 @@ export function petFrameBackgroundPosition(frame: PetAnimationFrame): string {
   return `${(frame.columnIndex / 7) * 100}% ${(frame.rowIndex / 8) * 100}%`;
 }
 
+// The order of checks below must agree with PET_WINDOW_BASE_ANIMATION_PRIORITY.
+// `petAnimation.test.ts` asserts that agreement so the constant (consumed by
+// the parity verifier and tests) cannot drift from the runtime resolution.
 export function resolvePetWindowAnimation(input: PetWindowAnimationInput): PetAnimationState {
   if (input.hasApproval || input.tucked) return "waiting";
   if (input.hasError) return "failed";
   if (input.hasVisibleReply || input.hasUnreadReply) return "review";
-  if (input.awaitingReply) return "running";
-  if (input.isStreaming) return "running";
+  if (input.awaitingReply || input.isStreaming) return "running";
   return "idle";
 }
 

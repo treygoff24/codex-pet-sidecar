@@ -1,13 +1,10 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
-import {
-  resolveDragAnimation,
-  resolvePetWindowAnimation,
-  shouldUpdateDragAnimationSample,
-  type PetDragAnimationState,
-} from "../domain/petAnimation";
+import { useEffect, useRef, useState } from "react";
+import { resolvePetWindowAnimation } from "../domain/petAnimation";
 import type { InstalledPet, PetConfig, TuckUntilInput } from "../domain/petConfig";
 import type { PetLibrary } from "../domain/petLibrary";
 import type { ApprovalAction, ApprovalRequest } from "../domain/runtimeEvents";
+import { useBubbleFade } from "../hooks/useBubbleFade";
+import { useDragAnimation } from "../hooks/useDragAnimation";
 import { usePetAnimation } from "../hooks/usePetAnimation";
 import { useTypewriter } from "../hooks/useTypewriter";
 import { ApprovalPrompt } from "./ApprovalPrompt";
@@ -25,14 +22,6 @@ import { ThinkingBubble } from "./ThinkingBubble";
 // Visual thesis: Olive lives at the edge of the desktop. Her sprite + a chat
 // input are the only permanent surfaces. Everything else (settings, snooze,
 // transcript) lives behind hover-revealed icons or sheets.
-type PointerScreenPoint = { x: number; y: number };
-
-function pointerScreenPoint(event: PointerEvent<HTMLButtonElement>): PointerScreenPoint {
-  return {
-    x: Number.isFinite(event.screenX) ? event.screenX : event.clientX,
-    y: Number.isFinite(event.screenY) ? event.screenY : event.clientY,
-  };
-}
 
 export function PetWindow({
   config,
@@ -93,25 +82,7 @@ export function PetWindow({
   const bubbleOverflow = typed.length > 110;
   const showThinking = awaitingReply && !isStreaming && !typed;
 
-  // Auto-fade the lingering reply after a quiet stretch so Olive doesn't sit
-  // there with a stale bubble forever. Resets the moment new content arrives.
-  type BubbleState = "visible" | "fading" | "hidden";
-  const [bubbleState, setBubbleState] = useState<BubbleState>("visible");
-  useEffect(() => {
-    setBubbleState("visible");
-  }, [bubbleSource, isStreaming, awaitingReply]);
-  useEffect(() => {
-    if (!bubbleSource || isStreaming || awaitingReply) return;
-    if (bubbleState !== "visible") return;
-    const startFade = setTimeout(() => setBubbleState("fading"), 12_000);
-    return () => clearTimeout(startFade);
-  }, [bubbleSource, isStreaming, awaitingReply, bubbleState]);
-  useEffect(() => {
-    if (bubbleState !== "fading") return;
-    const finishFade = setTimeout(() => setBubbleState("hidden"), 600);
-    return () => clearTimeout(finishFade);
-  }, [bubbleState]);
-
+  const bubbleState = useBubbleFade({ source: bubbleSource, isStreaming, awaitingReply });
   const hasVisibleCompletedReply = Boolean(lastReply) && !isStreaming && bubbleState !== "hidden";
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -122,8 +93,8 @@ export function PetWindow({
   const hasUnreadReply = completedOutputCount > seenCompletedOutputCount;
   const spriteRef = useRef<HTMLDivElement>(null);
   const [isSpriteHovered, setIsSpriteHovered] = useState(false);
-  const [dragAnimation, setDragAnimation] = useState<PetDragAnimationState>();
-  const dragScreenPointRef = useRef<PointerScreenPoint | null>(null);
+  const { dragAnimation, handlers: dragHandlers } =
+    useDragAnimation<HTMLButtonElement>(onStartDrag);
   const baseAnimation = resolvePetWindowAnimation({
     tucked,
     isStreaming,
@@ -153,18 +124,6 @@ export function PetWindow({
     return () => window.removeEventListener("keydown", onKey);
   }, [settingsOpen, muteOpen, transcriptOpen]);
 
-  useEffect(() => {
-    function onGlobalPointerEnd() {
-      clearDragAnimation();
-    }
-    window.addEventListener("pointerup", onGlobalPointerEnd);
-    window.addEventListener("pointercancel", onGlobalPointerEnd);
-    return () => {
-      window.removeEventListener("pointerup", onGlobalPointerEnd);
-      window.removeEventListener("pointercancel", onGlobalPointerEnd);
-    };
-  }, []);
-
   function handleMute(until: string) {
     onMute(until);
     setMuteOpen(false);
@@ -177,35 +136,6 @@ export function PetWindow({
   async function handleSend(text: string) {
     onSendStart?.();
     await onSend(text);
-  }
-
-  function handleSpritePointerDown(event: PointerEvent<HTMLButtonElement>) {
-    if (event.button !== 0) return;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    dragScreenPointRef.current = pointerScreenPoint(event);
-    setDragAnimation(undefined);
-    void onStartDrag();
-  }
-
-  function handleSpritePointerMove(event: PointerEvent<HTMLButtonElement>) {
-    const previousPoint = dragScreenPointRef.current;
-    if (previousPoint == null) return;
-    const nextPoint = pointerScreenPoint(event);
-    const deltaX = nextPoint.x - previousPoint.x;
-    const deltaY = nextPoint.y - previousPoint.y;
-    if (!shouldUpdateDragAnimationSample(deltaX, deltaY)) return;
-    dragScreenPointRef.current = nextPoint;
-    setDragAnimation((currentState) => resolveDragAnimation(currentState, deltaX));
-  }
-
-  function clearDragAnimation() {
-    dragScreenPointRef.current = null;
-    setDragAnimation(undefined);
-  }
-
-  function handleSpritePointerEnd(event: PointerEvent<HTMLButtonElement>) {
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    clearDragAnimation();
   }
 
   return (
@@ -260,10 +190,7 @@ export function PetWindow({
           aria-label="Drag pet window"
           onPointerEnter={() => setIsSpriteHovered(true)}
           onPointerLeave={() => setIsSpriteHovered(false)}
-          onPointerDown={handleSpritePointerDown}
-          onPointerMove={handleSpritePointerMove}
-          onPointerUp={handleSpritePointerEnd}
-          onPointerCancel={handleSpritePointerEnd}
+          {...dragHandlers}
         >
           <PetSprite
             ref={spriteRef}

@@ -155,4 +155,38 @@ describe("pet window animation activation", () => {
       "waiting",
     );
   });
+
+  // Guards against drift between PET_WINDOW_BASE_ANIMATION_PRIORITY (consumed by
+  // tests/parity verifier) and the if-stair inside resolvePetWindowAnimation
+  // (the runtime path). For every higher/lower priority pair we set both
+  // states' input flags and assert the higher-priority state wins.
+  it("resolves in the order declared by PET_WINDOW_BASE_ANIMATION_PRIORITY", () => {
+    const inputForState: Record<
+      (typeof PET_WINDOW_BASE_ANIMATION_PRIORITY)[number],
+      Partial<typeof idleInput>
+    > = {
+      waiting: { hasApproval: true },
+      failed: { hasError: true },
+      review: { hasUnreadReply: true },
+      running: { awaitingReply: true },
+      idle: {},
+    };
+
+    for (const [highIndex, highState] of PET_WINDOW_BASE_ANIMATION_PRIORITY.entries()) {
+      // Each state in isolation resolves to itself.
+      expect(resolvePetWindowAnimation({ ...idleInput, ...inputForState[highState] })).toBe(
+        highState,
+      );
+
+      for (const lowState of PET_WINDOW_BASE_ANIMATION_PRIORITY.slice(highIndex + 1)) {
+        expect(
+          resolvePetWindowAnimation({
+            ...idleInput,
+            ...inputForState[highState],
+            ...inputForState[lowState],
+          }),
+        ).toBe(highState);
+      }
+    }
+  });
 });
