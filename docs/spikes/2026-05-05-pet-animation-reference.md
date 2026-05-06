@@ -2,7 +2,7 @@
 
 ## Asset contract
 
-Codex pet packages are discovered from `${CODEX_HOME:-$HOME/.codex}/pets/`, with a pragmatic fallback to `~/.codex/pets` when the session-level `CODEX_HOME` has no pet folder. Each pet must have:
+Public sidecar pet packages are discovered from bundled resources and the app-owned sidecar pet library. Each pet must have:
 
 - `pet.json`
 - `spritesheet.webp`

@@ -1,79 +1,110 @@
+#!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 if (typeof WebSocket === "undefined") {
   throw new Error("This probe requires a Node.js version with a global WebSocket implementation.");
 }
 
-const child = spawn("codex", ["app-server", "--listen", "ws://127.0.0.1:0"], {
-  stdio: ["ignore", "pipe", "pipe"],
-});
+const schema = JSON.parse(
+  readFileSync("protocol/app-server/schema/v2/ThreadStartParams.json", "utf8"),
+);
+const approvalEnums = schema.definitions.AskForApproval.oneOf.flatMap((entry) => entry.enum ?? []);
+const sandboxEnums = schema.definitions.SandboxMode.enum;
+const safeApprovalPolicy = approvalEnums.includes("on-request")
+  ? "on-request"
+  : approvalEnums.includes("untrusted")
+    ? "untrusted"
+    : null;
+const supportsWorkspaceWrite = sandboxEnums.includes("workspace-write");
 
-let stderr = "";
-const url = await new Promise((resolve, reject) => {
-  const timeout = setTimeout(
-    () => reject(new Error(`timed out waiting for app-server URL: ${stderr}`)),
-    10_000,
-  );
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk.toString();
-    const match = stderr.match(/listening on:\s+(ws:\/\/127\.0\.0\.1:\d+)/);
-    if (match) {
-      clearTimeout(timeout);
-      resolve(match[1]);
-    }
+function spawnAppServer() {
+  const child = spawn("codex", ["app-server", "--listen", "ws://127.0.0.1:0"], {
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  child.on("exit", (code) => reject(new Error(`app-server exited early with ${code}: ${stderr}`)));
-});
-
-const ws = new WebSocket(url);
-let nextId = 1;
-const pending = new Map();
-const notifications = [];
-
-ws.addEventListener("message", (event) => {
-  const msg = JSON.parse(event.data.toString());
-  if (msg.id !== undefined && pending.has(msg.id)) {
-    pending.get(msg.id).resolve(msg);
-    pending.delete(msg.id);
-    return;
-  }
-  notifications.push(msg);
-});
-
-ws.addEventListener("error", (event) => {
-  for (const { reject, timeout } of pending.values()) {
-    clearTimeout(timeout);
-    reject(new Error(`websocket error: ${event.message ?? "unknown"}`));
-  }
-  pending.clear();
-});
-
-function call(method, params = {}) {
-  const id = nextId++;
-  ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`timed out waiting for ${method}`));
-    }, 10_000);
-    pending.set(id, {
-      resolve: (msg) => {
+  let stderr = "";
+  const url = new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`timed out waiting for app-server URL: ${stderr}`)),
+      10_000,
+    );
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      const match = stderr.match(/listening on:\s+(ws:\/\/127\.0\.0\.1:\d+)/);
+      if (match) {
         clearTimeout(timeout);
-        resolve(msg);
-      },
-      reject,
-      timeout,
+        resolve(match[1]);
+      }
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timeout);
+      reject(new Error(`app-server exited early with ${code}: ${stderr}`));
     });
   });
+  return { child, url };
 }
 
-try {
-  await new Promise((resolve, reject) => {
-    ws.addEventListener("open", resolve, { once: true });
-    ws.addEventListener("error", reject, { once: true });
+function connect(url) {
+  const ws = new WebSocket(url);
+  let nextId = 1;
+  const pending = new Map();
+  const notifications = [];
+  ws.addEventListener("message", (event) => {
+    const msg = JSON.parse(event.data.toString());
+    if (msg.id !== undefined && pending.has(msg.id)) {
+      const { resolve, reject, timeout } = pending.get(msg.id);
+      clearTimeout(timeout);
+      pending.delete(msg.id);
+      if (msg.error) reject(new Error(JSON.stringify(msg.error)));
+      else resolve(msg.result);
+      return;
+    }
+    notifications.push(msg);
   });
+  function call(method, params = {}) {
+    const id = nextId++;
+    ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`timed out waiting for ${method}`));
+      }, 15_000);
+      pending.set(id, { resolve, reject, timeout });
+    });
+  }
+  return {
+    ws,
+    notifications,
+    opened: new Promise((resolve, reject) => {
+      ws.addEventListener("open", resolve, { once: true });
+      ws.addEventListener("error", reject, { once: true });
+    }),
+    call,
+  };
+}
 
-  const initialize = await call("initialize", {
+if (!safeApprovalPolicy || !supportsWorkspaceWrite) {
+  console.log(
+    JSON.stringify(
+      { ok: false, safeModeAvailable: false, safeApprovalPolicy, supportsWorkspaceWrite },
+      null,
+      2,
+    ),
+  );
+  process.exit(1);
+}
+
+const { child, url: urlPromise } = spawnAppServer();
+const url = await urlPromise;
+const client = connect(url);
+let threadId;
+try {
+  await client.opened;
+  const initialize = await client.call("initialize", {
     clientInfo: {
       name: "codex-pet-sidecar-probe",
       title: "Codex Pet Sidecar Probe",
@@ -81,16 +112,43 @@ try {
     },
     capabilities: { experimentalApi: true },
   });
-  const models = await call("model/list", {});
+  const safeThread = await client.call("thread/start", {
+    cwd: process.cwd(),
+    approvalPolicy: safeApprovalPolicy,
+    approvalsReviewer: "user",
+    sandbox: "workspace-write",
+    baseInstructions: "You are a protocol probe pet.",
+    developerInstructions: "Keep this probe short.",
+    ephemeral: true,
+    experimentalRawEvents: false,
+    persistExtendedHistory: false,
+  });
+  threadId = safeThread.thread?.id;
+  const powerThread = await client.call("thread/start", {
+    cwd: process.cwd(),
+    approvalPolicy: "never",
+    approvalsReviewer: "user",
+    sandbox: "danger-full-access",
+    baseInstructions: "You are a protocol probe pet.",
+    developerInstructions: "Keep this probe short.",
+    ephemeral: true,
+    experimentalRawEvents: false,
+    persistExtendedHistory: false,
+  });
   console.log(
     JSON.stringify(
-      { url, initialize, models, notificationMethods: notifications.map((n) => n.method) },
+      { ok: true, safeApprovalPolicy, supportsWorkspaceWrite, initialize, safeThread, powerThread },
       null,
       2,
     ),
   );
 } finally {
-  ws.close();
+  if (threadId) {
+    try {
+      await client.call("thread/archive", { threadId });
+    } catch {}
+  }
+  client.ws.close();
   child.kill();
   await Promise.race([
     new Promise((resolve) => child.once("exit", resolve)),

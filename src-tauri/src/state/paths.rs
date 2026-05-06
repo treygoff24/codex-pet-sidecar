@@ -3,49 +3,28 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct AppPaths {
-    pub codex_home: PathBuf,
     pub app_support: PathBuf,
-    pub launch_cwd: PathBuf,
 }
 
 impl AppPaths {
     pub fn discover() -> AppResult<Self> {
-        let configured_codex_home = std::env::var_os("CODEX_HOME")
-            .map(PathBuf::from)
-            .or_else(|| dirs::home_dir().map(|home| home.join(".codex")))
-            .ok_or(AppError::MissingAppSupportDir)?;
-        let default_codex_home = dirs::home_dir().map(|home| home.join(".codex"));
-        let codex_home = match default_codex_home {
-            Some(default_home)
-                if !configured_codex_home.join("pets").exists()
-                    && default_home.join("pets").exists() =>
-            {
-                default_home
-            }
-            _ => configured_codex_home,
-        };
         let app_support = dirs::data_dir()
             .map(|dir| dir.join("Codex Pet Sidecar"))
             .ok_or(AppError::MissingAppSupportDir)?;
-        let launch_cwd = std::env::current_dir()?;
-        Ok(Self {
-            codex_home,
-            app_support,
-            launch_cwd,
-        })
+        Ok(Self { app_support })
     }
 
     #[cfg(test)]
-    pub fn with_roots(codex_home: PathBuf, app_support: PathBuf, launch_cwd: PathBuf) -> Self {
-        Self {
-            codex_home,
-            app_support,
-            launch_cwd,
-        }
+    pub fn with_roots(_codex_home: PathBuf, app_support: PathBuf, _launch_cwd: PathBuf) -> Self {
+        Self { app_support }
+    }
+
+    pub fn pets_dir(&self) -> PathBuf {
+        self.app_support.join("pets")
     }
 
     pub fn pet_support_dir(&self, pet_id: &str) -> PathBuf {
-        self.app_support.join("pets").join(pet_id)
+        self.pets_dir().join(pet_id)
     }
 
     pub fn pet_config_path(&self, pet_id: &str) -> PathBuf {
@@ -56,8 +35,16 @@ impl AppPaths {
         self.pet_support_dir(pet_id).join("memory.md")
     }
 
+    pub fn pet_personality_path(&self, pet_id: &str) -> PathBuf {
+        self.pet_support_dir(pet_id).join("personality.md")
+    }
+
     pub fn ambient_screenshot_dir(&self, pet_id: &str) -> PathBuf {
         self.pet_support_dir(pet_id).join("ambient-screenshots")
+    }
+
+    pub fn runtime_workspace_dir(&self) -> PathBuf {
+        self.app_support.join("runtime-workspace")
     }
 }
 

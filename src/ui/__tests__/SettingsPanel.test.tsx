@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { defaultPersona, type PetConfig } from "../../domain/petConfig";
+import { genericDefaultPersona, type PetConfig } from "../../domain/petConfig";
 import { SettingsPanel } from "../SettingsPanel";
 
 function petConfig(overrides: Partial<PetConfig> = {}): PetConfig {
@@ -10,8 +10,9 @@ function petConfig(overrides: Partial<PetConfig> = {}): PetConfig {
     petId: "olive",
     displayName: "Olive",
     spritesheetPath: "/tmp/spritesheet.webp",
-    persona: defaultPersona,
+    persona: genericDefaultPersona,
     mute: {},
+    tuck: { tucked: false },
     workspaceCwd: "/repo",
     observers: { activeApp: true, windowTitle: true, workspace: true, idle: true },
     ambient: {
@@ -21,6 +22,7 @@ function petConfig(overrides: Partial<PetConfig> = {}): PetConfig {
       retainScreenshots: false,
     },
     proactive: { enabled: true, minMinutesBetweenMessages: 10 },
+    runtime: { sessionPersistence: "ephemeral", safetyMode: "safe" },
     ...overrides,
   };
 }
@@ -102,5 +104,40 @@ describe("SettingsPanel", () => {
         },
       }),
     );
+  });
+
+  it("updates explicit safe runtime controls", async () => {
+    const onChange = vi.fn();
+    render(<SettingsPanel config={petConfig()} onChange={onChange} />);
+
+    await userEvent.click(screen.getByLabelText("Save pet sessions in Codex history"));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtime: expect.objectContaining({ sessionPersistence: "savedHistory" }),
+      }),
+    );
+
+    await userEvent.click(
+      screen.getByLabelText("Power mode: high-risk broad local access for trusted workspaces only"),
+    );
+    expect(onChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ runtime: expect.objectContaining({ safetyMode: "power" }) }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Enable Power mode" }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ runtime: expect.objectContaining({ safetyMode: "power" }) }),
+    );
+  });
+
+  it("does not render Olive reset without a reset handler", () => {
+    render(<SettingsPanel config={petConfig()} onChange={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Reset to bundled Olive" })).toBeNull();
+  });
+
+  it("calls the Olive reset handler when provided", async () => {
+    const onReset = vi.fn();
+    render(<SettingsPanel config={petConfig()} onChange={vi.fn()} onResetPersonality={onReset} />);
+    await userEvent.click(screen.getByRole("button", { name: "Reset to bundled Olive" }));
+    expect(onReset).toHaveBeenCalled();
   });
 });

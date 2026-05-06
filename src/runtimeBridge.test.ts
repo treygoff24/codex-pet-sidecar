@@ -47,6 +47,25 @@ describe("runtimeBridge", () => {
     });
   });
 
+  it("exposes pet library and skill workflow commands", async () => {
+    invokeMock.mockResolvedValue(undefined);
+    await runtimeBridge.setActivePet("olive");
+    await runtimeBridge.importPet("/tmp/staged-pet");
+    await runtimeBridge.startHatchingFlow();
+    await runtimeBridge.startPersonalityFlow();
+    await runtimeBridge.tuckPet(null);
+    await runtimeBridge.wakePet();
+    await runtimeBridge.getPetVisibilityState();
+
+    expect(invokeMock).toHaveBeenCalledWith("set_active_pet", { petId: "olive" });
+    expect(invokeMock).toHaveBeenCalledWith("import_pet", { sourceDir: "/tmp/staged-pet" });
+    expect(invokeMock).toHaveBeenCalledWith("start_hatching_flow");
+    expect(invokeMock).toHaveBeenCalledWith("start_personality_flow");
+    expect(invokeMock).toHaveBeenCalledWith("tuck_pet", { until: null });
+    expect(invokeMock).toHaveBeenCalledWith("wake_pet");
+    expect(invokeMock).toHaveBeenCalledWith("get_pet_visibility_state");
+  });
+
   it("subscribes to pet events", async () => {
     const unlisten = vi.fn();
     listenMock.mockResolvedValueOnce(unlisten);

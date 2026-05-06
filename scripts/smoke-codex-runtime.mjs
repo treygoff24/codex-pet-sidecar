@@ -131,15 +131,18 @@ function petThreadConfigOverrides() {
 
 function assertPetThreadDefaults(thread) {
   const failures = [];
-  if (thread.thread?.ephemeral !== false)
-    failures.push(`expected persistent thread, got ephemeral=${thread.thread?.ephemeral}`);
-  if (!thread.thread?.path) failures.push("expected persistent thread path");
+  if (thread.thread?.ephemeral !== true)
+    failures.push(
+      `expected ephemeral public-default thread, got ephemeral=${thread.thread?.ephemeral}`,
+    );
+  if (thread.thread?.path) failures.push("expected no persistent thread path for public default");
   if (thread.reasoningEffort !== "medium")
     failures.push(`expected medium reasoning, got ${thread.reasoningEffort}`);
-  if (thread.approvalPolicy !== "never")
-    failures.push(`expected YOLO approval policy never, got ${thread.approvalPolicy}`);
-  if (thread.sandbox?.type !== "dangerFullAccess")
-    failures.push(`expected dangerFullAccess sandbox, got ${thread.sandbox?.type}`);
+  if (thread.approvalPolicy !== "on-request")
+    failures.push(`expected safe approval policy on-request, got ${thread.approvalPolicy}`);
+  const sandboxType = thread.sandbox?.type ?? thread.sandbox;
+  if (!["workspaceWrite", "workspace-write"].includes(sandboxType))
+    failures.push(`expected workspace-write sandbox, got ${JSON.stringify(thread.sandbox)}`);
   if (failures.length > 0) throw new Error(failures.join("; "));
 }
 
@@ -177,15 +180,15 @@ try {
   const authSummary = assertCodexOauthSubscription(account, authStatus);
   const thread = await client.call("thread/start", {
     cwd: process.cwd(),
-    approvalPolicy: "never",
+    approvalPolicy: "on-request",
     approvalsReviewer: "user",
-    sandbox: "danger-full-access",
+    sandbox: "workspace-write",
     config: petThreadConfigOverrides(),
     baseInstructions: "You are Smoke, a tiny test pet.\n\nCurrent memory.md contents:\n# Memory",
     developerInstructions: `Your memory file is at ${process.cwd()}/.tmp-smoke-memory.md. Keep messages short.`,
-    ephemeral: false,
+    ephemeral: true,
     experimentalRawEvents: false,
-    persistExtendedHistory: true,
+    persistExtendedHistory: false,
   });
   assertPetThreadDefaults(thread);
   threadId = thread.thread.id;

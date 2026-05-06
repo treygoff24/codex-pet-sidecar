@@ -8,7 +8,7 @@ pub fn ensure_memory_file(path: &Path, pet_name: &str) -> AppResult<String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let content = format!("# Memory for {pet_name}\n\n## About Trey\n- \n\n## Project context\n- \n\n## Things to remember\n- \n");
+    let content = format!("# Memory for {pet_name}\n\n## About the user\n- \n\n## Project context\n- \n\n## Things to remember\n- \n");
     std::fs::write(path, &content)?;
     Ok(content)
 }

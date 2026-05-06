@@ -6,6 +6,7 @@ use crate::runtime::events::{ApprovalAction, RuntimeEvent, RuntimeSession};
 use crate::runtime::json_rpc::{JsonRpcClient, WireEvent};
 use crate::runtime::process::AppServerProcess;
 use crate::runtime::prompt::{compose_base_instructions, compose_developer_instructions};
+use crate::state::{RuntimeConfig, RuntimeSafetyMode, SessionPersistence};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -15,6 +16,8 @@ use which::which;
 
 const PET_REASONING_EFFORT: &str = "medium";
 const DISABLED_PET_MCP_SERVERS: [&str; 4] = ["pencil", "porkbun", "resend", "serena"];
+const SAFE_APPROVAL_POLICY: &str = "on-request";
+const SAFE_SANDBOX: &str = "workspace-write";
 
 #[derive(Debug, Clone)]
 pub struct StartPetSessionRequest {
@@ -23,6 +26,7 @@ pub struct StartPetSessionRequest {
     pub memory_markdown: String,
     pub memory_path: PathBuf,
     pub workspace_cwd: PathBuf,
+    pub runtime: RuntimeConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -81,29 +85,8 @@ impl RuntimeSessionManager {
             "clientInfo": {"name":"codex-pet-sidecar","title":"Codex Pet Sidecar","version": env!("CARGO_PKG_VERSION")},
             "capabilities": {"experimentalApi": true}
         })).await?;
-        let base_instructions = compose_base_instructions(
-            &request.pet_name,
-            &request.persona,
-            &request.memory_markdown,
-        );
-        let developer_instructions = compose_developer_instructions(&request.memory_path);
-        let config_overrides = pet_thread_config_overrides();
         let thread = client
-            .call(
-                "thread/start",
-                json!({
-                    "cwd": request.workspace_cwd,
-                    "approvalPolicy": "never",
-                    "approvalsReviewer": "user",
-                    "sandbox": "danger-full-access",
-                    "config": config_overrides,
-                    "baseInstructions": base_instructions,
-                    "developerInstructions": developer_instructions,
-                    "ephemeral": false,
-                    "experimentalRawEvents": false,
-                    "persistExtendedHistory": true
-                }),
-            )
+            .call("thread/start", thread_start_params(&request)?)
             .await?;
         let thread_id = thread
             .pointer("/thread/id")
@@ -357,6 +340,44 @@ fn turn_id_from_response(response: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn thread_start_params(request: &StartPetSessionRequest) -> AppResult<Value> {
+    let base_instructions = compose_base_instructions(
+        &request.pet_name,
+        &request.persona,
+        &request.memory_markdown,
+    );
+    let developer_instructions = compose_developer_instructions(&request.memory_path);
+    let (approval_policy, sandbox) = runtime_permissions(&request.runtime)?;
+    let ephemeral = matches!(
+        request.runtime.session_persistence,
+        SessionPersistence::Ephemeral
+    );
+    Ok(json!({
+        "cwd": request.workspace_cwd,
+        "approvalPolicy": approval_policy,
+        "approvalsReviewer": "user",
+        "sandbox": sandbox,
+        "config": pet_thread_config_overrides(),
+        "baseInstructions": base_instructions,
+        "developerInstructions": developer_instructions,
+        "ephemeral": ephemeral,
+        "experimentalRawEvents": false,
+        "persistExtendedHistory": !ephemeral
+    }))
+}
+
+fn runtime_permissions(config: &RuntimeConfig) -> AppResult<(&'static str, &'static str)> {
+    match config.safety_mode {
+        RuntimeSafetyMode::Safe => {
+            if SAFE_APPROVAL_POLICY.is_empty() || SAFE_SANDBOX != "workspace-write" {
+                return Err(AppError::SafeRuntimeUnavailable);
+            }
+            Ok((SAFE_APPROVAL_POLICY, SAFE_SANDBOX))
+        }
+        RuntimeSafetyMode::Power => Ok(("never", "danger-full-access")),
+    }
+}
+
 fn pet_thread_config_overrides() -> Value {
     let mut disabled_servers = serde_json::Map::new();
     for server in DISABLED_PET_MCP_SERVERS {
@@ -483,6 +504,7 @@ mod tests {
             memory_markdown: "# Memory".into(),
             memory_path: PathBuf::from("/tmp/memory.md"),
             workspace_cwd: PathBuf::from("/tmp"),
+            runtime: RuntimeConfig::default(),
         };
         assert!(request.memory_path.is_absolute());
         assert!(compose_base_instructions(
@@ -491,6 +513,43 @@ mod tests {
             &request.memory_markdown
         )
         .contains("# Memory"));
+    }
+
+    #[test]
+    fn thread_start_params_uses_public_safe_defaults() {
+        let request = StartPetSessionRequest {
+            pet_name: "Olive".into(),
+            persona: "warm".into(),
+            memory_markdown: "# Memory".into(),
+            memory_path: PathBuf::from("/tmp/memory.md"),
+            workspace_cwd: PathBuf::from("/tmp"),
+            runtime: RuntimeConfig::default(),
+        };
+        let params = thread_start_params(&request).expect("params");
+        assert_eq!(params["ephemeral"], true);
+        assert_eq!(params["persistExtendedHistory"], false);
+        assert_eq!(params["approvalPolicy"], "on-request");
+        assert_eq!(params["sandbox"], "workspace-write");
+    }
+
+    #[test]
+    fn thread_start_params_allows_explicit_power_saved_mode() {
+        let request = StartPetSessionRequest {
+            pet_name: "Olive".into(),
+            persona: "warm".into(),
+            memory_markdown: "# Memory".into(),
+            memory_path: PathBuf::from("/tmp/memory.md"),
+            workspace_cwd: PathBuf::from("/tmp"),
+            runtime: RuntimeConfig {
+                session_persistence: SessionPersistence::SavedHistory,
+                safety_mode: RuntimeSafetyMode::Power,
+            },
+        };
+        let params = thread_start_params(&request).expect("params");
+        assert_eq!(params["ephemeral"], false);
+        assert_eq!(params["persistExtendedHistory"], true);
+        assert_eq!(params["approvalPolicy"], "never");
+        assert_eq!(params["sandbox"], "danger-full-access");
     }
 
     #[test]

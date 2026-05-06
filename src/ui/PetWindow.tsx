@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ApprovalRequest } from "../domain/runtimeEvents";
 import type { InstalledPet, PetConfig } from "../domain/petConfig";
+import type { PetLibrary } from "../domain/petLibrary";
 import { usePetAnimation } from "../hooks/usePetAnimation";
 import { useTypewriter } from "../hooks/useTypewriter";
 import type { ApprovalAction } from "../runtimeBridge";
@@ -10,6 +11,8 @@ import { ChatInputBar } from "./ChatInputBar";
 import { MuteControl } from "./MuteControl";
 import { PetSprite } from "./PetSprite";
 import { PetToolbar } from "./PetToolbar";
+import { PetLibraryPanel } from "./PetLibraryPanel";
+import { TuckWakeControl } from "./TuckWakeControl";
 import { SettingsPanel } from "./SettingsPanel";
 import { SpeechBubble } from "./SpeechBubble";
 import { ThinkingBubble } from "./ThinkingBubble";
@@ -19,6 +22,7 @@ import { ThinkingBubble } from "./ThinkingBubble";
 // transcript) lives behind hover-revealed icons or sheets.
 export function PetWindow({
   config,
+  tucked,
   pet,
   streamingText,
   lastReply,
@@ -32,9 +36,20 @@ export function PetWindow({
   onApproval,
   onStartDrag,
   onSendStart,
+  library,
+  pets,
+  onSwitchPet,
+  onHatchPet,
+  onImportPet,
+  onTuck,
+  onWake,
+  onImprovePersonality,
 }: {
   config: PetConfig;
+  tucked: boolean;
   pet?: InstalledPet;
+  library?: PetLibrary;
+  pets: InstalledPet[];
   streamingText: string;
   lastReply: string;
   awaitingReply: boolean;
@@ -47,6 +62,12 @@ export function PetWindow({
   onApproval: (action: ApprovalAction) => void;
   onStartDrag: () => Promise<void> | void;
   onSendStart?: () => void;
+  onSwitchPet: (petId: string) => void;
+  onHatchPet: () => void;
+  onImportPet: () => void;
+  onTuck: (until: string | null) => void;
+  onWake: () => void;
+  onImprovePersonality: () => void;
 }) {
   // While streaming, the bubble shows live typed-out text. After streaming
   // ends, it lingers on the last completed reply so the user can actually read it.
@@ -81,6 +102,7 @@ export function PetWindow({
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [muteOpen, setMuteOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [seenTranscriptCount, setSeenTranscriptCount] = useState(transcript.length);
 
   useEffect(() => {
@@ -129,6 +151,23 @@ export function PetWindow({
         }}
         onToggleTranscript={() => setTranscriptOpen((v) => !v)}
       />
+
+      <div className="pet-quick-controls">
+        <button type="button" onClick={() => setLibraryOpen((value) => !value)}>
+          Pets
+        </button>
+        <TuckWakeControl tucked={tucked} onTuck={onTuck} onWake={onWake} />
+      </div>
+
+      {libraryOpen && library ? (
+        <PetLibraryPanel
+          library={library}
+          pets={pets}
+          onSwitch={onSwitchPet}
+          onHatch={onHatchPet}
+          onImport={onImportPet}
+        />
+      ) : null}
 
       <div className="pet-stage">
         {showThinking ? (
@@ -197,7 +236,11 @@ export function PetWindow({
                 ×
               </button>
             </header>
-            <SettingsPanel config={config} onChange={onConfigChange} />
+            <SettingsPanel
+              config={config}
+              onChange={onConfigChange}
+              onImprovePersonality={onImprovePersonality}
+            />
           </section>
         </>
       ) : null}

@@ -1,0 +1,5 @@
+Codex Pet Sidecar includes repo-local pet hatching scripts adapted from the local `hatch-pet` Codex skill. Those deterministic scripts are included under `tools/pet-hatching/` with their original license notice at `tools/pet-hatching/LICENSE.txt`.
+
+Bundled Olive sample pet:
+- Sprite asset: publisher-owned generated sample asset, dimensions 1536x1872.
+- Persona: fictionalized public sample copy using Riley and Morgan as sample names.

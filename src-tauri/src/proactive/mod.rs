@@ -156,10 +156,10 @@ impl ProactiveTrigger {
     fn describe(&self) -> String {
         match self {
             ProactiveTrigger::ReturnedFromIdle => {
-                "Trey returned after being idle for more than five minutes".to_string()
+                "The user returned after being idle for more than five minutes".to_string()
             }
             ProactiveTrigger::RepoChanged { current, .. } => {
-                format!("Trey switched to the {current} repo")
+                format!("The user switched to the {current} repo")
             }
         }
     }

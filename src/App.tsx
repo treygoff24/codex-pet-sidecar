@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { defaultPersona, type InstalledPet, type PetConfig } from "./domain/petConfig";
+import type { PetLibrary } from "./domain/petLibrary";
+import { isTuckActive, type InstalledPet, type PetConfig } from "./domain/petConfig";
 import type { ApprovalRequest } from "./domain/runtimeEvents";
-import { runtimeBridge, type ApprovalAction } from "./runtimeBridge";
+import { runtimeBridge, type ApprovalAction, type SkillPrompt } from "./runtimeBridge";
+import { OnboardingFlow } from "./ui/OnboardingFlow";
 import { PetPicker } from "./ui/PetPicker";
 import { PetWindow } from "./ui/PetWindow";
 import "./styles.css";
 
-const fallbackWorkspace = "/Users/treygoff/Code/codex-pet-sidecar";
-
-// Tauri commands reject with a structured CommandError ({ message, recoverable }),
-// not an Error instance. JS-level rejections may be Error instances or strings.
-// Coerce all of them to a readable message instead of "[object Object]".
 function formatError(caught: unknown): string {
   if (caught instanceof Error) return caught.message;
   if (typeof caught === "string") return caught;
@@ -29,26 +26,8 @@ function formatError(caught: unknown): string {
   }
 }
 
-function configFromPet(pet: InstalledPet): PetConfig {
-  return {
-    petId: pet.id,
-    displayName: pet.displayName,
-    spritesheetPath: pet.spritesheetPath,
-    persona: defaultPersona,
-    mute: {},
-    workspaceCwd: fallbackWorkspace,
-    observers: { activeApp: true, windowTitle: true, workspace: true, idle: true },
-    ambient: {
-      enabled: true,
-      intervalMinutes: 15,
-      includeScreenshot: false,
-      retainScreenshots: false,
-    },
-    proactive: { enabled: true, minMinutesBetweenMessages: 10 },
-  };
-}
-
 function App() {
+  const [library, setLibrary] = useState<PetLibrary>();
   const [pets, setPets] = useState<InstalledPet[]>([]);
   const [config, setConfig] = useState<PetConfig | null>(null);
   const [streamingText, setStreamingText] = useState("");
@@ -59,21 +38,22 @@ function App() {
   const [awaitingReply, setAwaitingReply] = useState(false);
   const streamingRef = useRef("");
 
+  async function refreshState() {
+    const [nextLibrary, nextConfig, installedPets] = await Promise.all([
+      runtimeBridge.loadPetLibrary(),
+      runtimeBridge.loadPetConfig(),
+      runtimeBridge.listInstalledPets(),
+    ]);
+    setLibrary(nextLibrary);
+    setConfig(nextConfig);
+    setPets(installedPets);
+  }
+
   useEffect(() => {
     let cancelled = false;
-    runtimeBridge
-      .loadPetConfig()
-      .then((savedConfig) => {
-        if (cancelled) return;
-        setConfig(savedConfig);
-      })
-      .catch((caught: unknown) => setError(formatError(caught)));
-    runtimeBridge
-      .listInstalledPets()
-      .then((installedPets) => {
-        if (!cancelled) setPets(installedPets);
-      })
-      .catch((caught: unknown) => setError(formatError(caught)));
+    refreshState().catch((caught: unknown) => {
+      if (!cancelled) setError(formatError(caught));
+    });
     return () => {
       cancelled = true;
     };
@@ -126,8 +106,6 @@ function App() {
         }
       })
       .then((un) => {
-        // StrictMode runs effects twice in dev; if we were already cleaned up
-        // before the listener resolved, drop it immediately.
         if (cancelled) un();
         else unlisten = un;
       })
@@ -139,19 +117,21 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!config?.petId) return;
+    if (!config?.petId || isTuckActive(config.tuck)) return;
     runtimeBridge.startPetRuntime().catch((caught: unknown) => setError(formatError(caught)));
-  }, [config?.petId]);
+  }, [config]);
 
   const selectedPet = useMemo(
     () => pets.find((pet) => pet.id === config?.petId),
     [config?.petId, pets],
   );
 
-  async function pickPet(pet: InstalledPet) {
-    const nextConfig = configFromPet(pet);
-    setConfig(nextConfig);
-    await runtimeBridge.savePetConfig(nextConfig);
+  async function switchPet(petId: string) {
+    await runtimeBridge.setActivePet(petId);
+    setTranscript([]);
+    setLastReply("");
+    setStreamingText("");
+    await refreshState();
   }
 
   async function updateConfig(nextConfig: PetConfig) {
@@ -162,6 +142,22 @@ function App() {
   async function mute(until: string) {
     await runtimeBridge.setMuteUntil(until);
     if (config) setConfig({ ...config, mute: { until } });
+  }
+
+  async function tuck(until: string | null) {
+    await runtimeBridge.tuckPet(until);
+    if (config) setConfig({ ...config, tuck: { tucked: true, tuckedUntil: until ?? undefined } });
+  }
+
+  async function wake() {
+    await runtimeBridge.wakePet();
+    if (config) setConfig({ ...config, tuck: { tucked: false } });
+  }
+
+  async function showSkillPrompt(loader: () => Promise<SkillPrompt>) {
+    const prompt = await loader();
+    setTranscript((lines) => lines.concat(`${prompt.skill}: ${prompt.prompt}`));
+    setLastReply(prompt.prompt);
   }
 
   async function respond(action: ApprovalAction) {
@@ -180,12 +176,24 @@ function App() {
     }
   }
 
-  if (!config?.petId) return <PetPicker pets={pets} onPick={pickPet} />;
+  if (!library || !config) {
+    if (pets.length > 0) return <PetPicker pets={pets} onPick={(pet) => void switchPet(pet.id)} />;
+    return (
+      <OnboardingFlow
+        onUseOlive={() => void refreshState()}
+        onHatch={() => void showSkillPrompt(runtimeBridge.startHatchingFlow)}
+        onImport={() => setError("Use Import pet from the pet library after staging a package.")}
+      />
+    );
+  }
 
   return (
     <PetWindow
       config={config}
+      tucked={isTuckActive(config.tuck)}
       pet={selectedPet}
+      library={library}
+      pets={pets}
       streamingText={streamingText}
       lastReply={lastReply}
       awaitingReply={awaitingReply}
@@ -198,7 +206,17 @@ function App() {
         setAwaitingReply(true);
       }}
       onMute={mute}
+      onTuck={tuck}
+      onWake={wake}
       onConfigChange={updateConfig}
+      onSwitchPet={switchPet}
+      onHatchPet={() => void showSkillPrompt(runtimeBridge.startHatchingFlow)}
+      onImportPet={() =>
+        setError(
+          "Choose a staged pet folder from a future file picker or call import_pet with a path.",
+        )
+      }
+      onImprovePersonality={() => void showSkillPrompt(runtimeBridge.startPersonalityFlow)}
       onApproval={respond}
       onStartDrag={runtimeBridge.startWindowDrag}
     />

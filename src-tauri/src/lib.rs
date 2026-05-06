@@ -6,12 +6,16 @@ mod observers;
 mod pets;
 mod proactive;
 mod runtime;
+mod skills;
 mod state;
+mod tray;
 
 use app_state::AppState;
 use commands::{
-    interrupt_turn, list_installed_pets, load_pet_config, respond_to_approval, save_pet_config,
-    send_user_message, set_mute_until, start_pet_runtime,
+    get_pet_visibility_state, import_pet, interrupt_turn, list_installed_pets, load_pet_config,
+    load_pet_library, respond_to_approval, save_pet_config, send_user_message, set_active_pet,
+    set_mute_until, start_hatching_flow, start_personality_flow, start_pet_runtime, tuck_pet,
+    wake_pet,
 };
 use runtime::RuntimeEvent;
 use tauri::{Emitter, Manager};
@@ -22,9 +26,9 @@ pub fn run() {
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<RuntimeEvent>();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .manage(AppState::new(paths, event_tx))
         .setup(|app| {
+            tray::setup_tray(app)?;
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = event_rx.recv().await {
@@ -35,12 +39,20 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_installed_pets,
+            load_pet_library,
             load_pet_config,
             save_pet_config,
+            set_active_pet,
+            import_pet,
+            start_hatching_flow,
+            start_personality_flow,
             start_pet_runtime,
             send_user_message,
             interrupt_turn,
             set_mute_until,
+            tuck_pet,
+            wake_pet,
+            get_pet_visibility_state,
             respond_to_approval
         ])
         .on_window_event(|window, event| {

@@ -37,6 +37,16 @@ pub enum AppError {
     MissingAppSupportDir,
     #[error("command `{0}` failed: {1}")]
     CommandFailed(String, String),
+    #[error("pet {0} was not found in the library")]
+    PetNotFound(String),
+    #[error("pet {0} already exists in the library")]
+    PetAlreadyExists(String),
+    #[error("pet library is full; maximum installed pets is {0}")]
+    PetLimitReached(usize),
+    #[error("safe runtime mode is unavailable with this Codex app-server protocol")]
+    SafeRuntimeUnavailable,
+    #[error("invalid workspace {path:?}: {reason}")]
+    InvalidWorkspace { path: PathBuf, reason: String },
 }
 
 pub type AppResult<T> = Result<T, AppError>;

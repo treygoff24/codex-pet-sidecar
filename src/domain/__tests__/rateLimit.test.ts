@@ -32,7 +32,7 @@ describe("rate limiting and memory formatting", () => {
   });
 
   it("formats memory for base instructions", () => {
-    expect(formatMemoryForBaseInstructions("\n# Memory\n- Trey likes tiny pets\n")).toContain(
+    expect(formatMemoryForBaseInstructions("\n# Memory\n- Riley likes tiny pets\n")).toContain(
       "# Memory",
     );
     expect(formatMemoryForBaseInstructions("   ")).toBe("Pet memory is currently empty.");
