@@ -6,13 +6,41 @@ Tools for turning a generated set of pet images into an installable pet package.
 
 A pet for this app is a directory containing four things: a `pet.json` manifest, a `spritesheet.webp` atlas at exactly 1536x1872 with 192x208 cells in an 8x9 grid, an optional `personality.md`, and some QA artifacts the validator inspects. Hatching is the process of going from "I have a pet idea" to a directory shaped like that, ready to import.
 
-The atlas geometry is non-negotiable. The runtime expects a specific frame layout for idle, talk, walk, sleep, and a few other states; `tools/pet-hatching/references/animation-rows.md` documents the row contract. If your atlas doesn't match, the validator rejects it before the app ever sees it.
+The atlas geometry is non-negotiable. The runtime expects the Codex Mac app's 9-row frame layout: idle, directional drag motion, waving, jumping, failed, waiting, active-running/work, and review. `tools/pet-hatching/references/animation-rows.md` documents the row contract. If your atlas doesn't match, the validator rejects it before the app ever sees it.
 
 ## Prerequisites
 
 Image generation. The scripts here do all the deterministic stitching, frame extraction, atlas composition, and validation, but they don't create the source images. You need either Codex with image-generation access (the path the SKILL.md walks you through) or your own pre-generated frames laid out in the directory the scripts expect. Without one of those, you can't get past step 3 below.
 
 Python with Pillow. The scripts run on system Python and require Pillow for image manipulation. `pip install pillow` if you don't have it.
+
+## Focused Olive row 7 repair
+
+The bundled Olive sample can be repaired without regenerating the whole pet. To
+stage a scoped row 7 `running` repair run with Olive identity references, a Codex
+semantic reference when the extracted Codex app atlas is available, and a single
+ready `$imagegen` job:
+
+```bash
+python tools/pet-hatching/scripts/prepare_olive_row7_repair.py
+python tools/pet-hatching/scripts/pet_job_status.py --run-dir <printed-run-dir>
+```
+
+After recording a selected `$imagegen` result for the `running` job, apply the
+strip to a candidate atlas:
+
+```bash
+python tools/pet-hatching/scripts/apply_repaired_row.py \
+  --source-atlas assets/pets/olive/spritesheet.webp \
+  --row-strip <printed-run-dir>/decoded/running.png \
+  --state running \
+  --run-dir <printed-run-dir> \
+  --output <printed-run-dir>/final/spritesheet.png
+```
+
+Use PNG for candidate review when you need to prove every non-repaired row stayed
+pixel-identical. Convert/save the accepted atlas to WebP only after visual
+acceptance.
 
 ## The flow
 

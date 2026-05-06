@@ -32,6 +32,7 @@ Do not accept an atlas until all checks pass.
 - The first and last frames can loop without an obvious pop.
 - Directional rows read as the intended direction.
 - State-specific actions are recognizable at pet size.
+- Row 7 `running` reads as active work/thinking while Codex is running, not literal locomotion. A small integrated work prop is acceptable; detached UI, readable code/text, or sprinting should be repaired.
 - Poses are generated animation variants, not repeated copies of the same source image.
 
 ## App Fitness

@@ -8,6 +8,7 @@ src-tauri/target/
 
 # Local pet generation and QA artifacts
 hatch-runs/
+output/hatch-pet/
 generated_images/
 ambient-screenshots/
 **/ambient-screenshots/

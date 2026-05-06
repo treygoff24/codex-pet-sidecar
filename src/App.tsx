@@ -46,6 +46,7 @@ function App() {
   const [streamingText, setStreamingText] = useState("");
   const [lastReply, setLastReply] = useState("");
   const [transcript, setTranscript] = useState<string[]>([]);
+  const [completedOutputCount, setCompletedOutputCount] = useState(0);
   const [approval, setApproval] = useState<ApprovalRequest>();
   const [error, setError] = useState<string>();
   const [awaitingReply, setAwaitingReply] = useState(false);
@@ -79,26 +80,37 @@ function App() {
     runtimeBridge
       .onPetEvent((event) => {
         if (event.type === "text_delta") {
+          setError(undefined);
           setAwaitingReply(false);
-          setStreamingText((value) => {
-            const next = value + event.text;
-            streamingRef.current = next;
-            return next;
-          });
+          const nextStreamingText = streamingRef.current + event.text;
+          streamingRef.current = nextStreamingText;
+          setStreamingText(nextStreamingText);
         }
         if (event.type === "turn_completed") {
+          setError(undefined);
+          setApproval(undefined);
           const completedText = event.finalText ?? streamingRef.current;
           if (completedText) {
             setTranscript((lines) => lines.concat(completedText));
+            setCompletedOutputCount((count) => count + 1);
             setLastReply(completedText);
           }
           streamingRef.current = "";
           setStreamingText("");
           setAwaitingReply(false);
         }
-        if (event.type === "approval_request") setApproval(event.request);
+        if (event.type === "approval_request") {
+          setError(undefined);
+          setApproval(event.request);
+        }
         if (event.type === "ambient_message") {
+          setError(undefined);
+          setApproval(undefined);
+          setAwaitingReply(false);
+          setStreamingText("");
+          streamingRef.current = "";
           setTranscript((lines) => lines.concat(event.text));
+          setCompletedOutputCount((count) => count + 1);
           setLastReply(event.text);
         }
         if (event.type === "ambient_status") {
@@ -116,7 +128,10 @@ function App() {
         }
         if (event.type === "error") {
           setError(event.message);
+          setApproval(undefined);
           setAwaitingReply(false);
+          setStreamingText("");
+          streamingRef.current = "";
         }
       })
       .then((un) => {
@@ -140,9 +155,14 @@ function App() {
 
   async function switchPet(petId: string) {
     await runtimeBridge.setActivePet(petId);
+    setApproval(undefined);
+    setError(undefined);
+    setAwaitingReply(false);
     setTranscript([]);
+    setCompletedOutputCount(0);
     setLastReply("");
     setStreamingText("");
+    streamingRef.current = "";
     await refreshState();
   }
 
@@ -176,7 +196,9 @@ function App() {
   async function respond(action: ApprovalAction) {
     if (!approval) return;
     await runtimeBridge.respondToApproval(approval.requestId, action);
+    setError(undefined);
     setApproval(undefined);
+    setAwaitingReply(true);
   }
 
   async function sendMessage(text: string) {
@@ -227,11 +249,15 @@ function App() {
       lastReply={lastReply}
       awaitingReply={awaitingReply}
       transcript={transcript}
+      completedOutputCount={completedOutputCount}
       approval={approval}
       error={error}
       onSend={sendMessage}
       onSendStart={() => {
+        setError(undefined);
         setLastReply("");
+        setStreamingText("");
+        streamingRef.current = "";
         setAwaitingReply(true);
       }}
       onMute={mute}

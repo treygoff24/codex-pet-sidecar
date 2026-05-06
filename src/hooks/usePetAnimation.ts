@@ -1,60 +1,28 @@
-import { useEffect } from "react";
-
-const SHEET_COLS = 8;
-const SHEET_ROWS = 9;
-
-type Frame = { row: number; col: number; durationMs: number };
-type PetAnimationState = "idle" | "blink" | "talk" | "sleep";
-
-// Idle: long open-eyed dwell punctuated by a soft blink, the way pets actually rest.
-const IDLE_FRAMES: Frame[] = [
-  { row: 0, col: 0, durationMs: 2200 },
-  { row: 0, col: 1, durationMs: 90 },
-  { row: 0, col: 2, durationMs: 110 },
-  { row: 0, col: 1, durationMs: 90 },
-  { row: 0, col: 0, durationMs: 3400 },
-  { row: 0, col: 1, durationMs: 90 },
-  { row: 0, col: 2, durationMs: 110 },
-  { row: 0, col: 1, durationMs: 90 },
-];
-
-const TALK_FRAMES: Frame[] = [
-  { row: 2, col: 0, durationMs: 130 },
-  { row: 2, col: 1, durationMs: 130 },
-  { row: 2, col: 2, durationMs: 130 },
-  { row: 2, col: 1, durationMs: 130 },
-];
-
-const SLEEP_FRAMES: Frame[] = [
-  { row: 3, col: 0, durationMs: 700 },
-  { row: 3, col: 1, durationMs: 700 },
-  { row: 3, col: 2, durationMs: 700 },
-  { row: 3, col: 1, durationMs: 700 },
-];
-
-const BLINK_FRAMES: Frame[] = [
-  { row: 1, col: 0, durationMs: 90 },
-  { row: 1, col: 1, durationMs: 110 },
-  { row: 1, col: 0, durationMs: 90 },
-  { row: 0, col: 0, durationMs: 800 },
-];
-
-const FRAME_TABLE = {
-  idle: IDLE_FRAMES,
-  blink: BLINK_FRAMES,
-  talk: TALK_FRAMES,
-  sleep: SLEEP_FRAMES,
-} satisfies Record<PetAnimationState, Frame[]>;
-
-function bgPosition(frame: Frame): string {
-  // Percentage positioning works because background-size matches the full
-  // spritesheet and the element matches a single cell.
-  return `${(frame.col / (SHEET_COLS - 1)) * 100}% ${(frame.row / (SHEET_ROWS - 1)) * 100}%`;
-}
+import { useEffect, useState } from "react";
+import {
+  petFrameBackgroundPosition,
+  resolvePetAnimationSequence,
+  type PetAnimationState,
+} from "../domain/petAnimation";
 
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function usePrefersReducedMotion(): boolean {
+  const [reducedMotion, setReducedMotion] = useState(prefersReducedMotion);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return reducedMotion;
 }
 
 /**
@@ -66,13 +34,16 @@ export function usePetAnimation(
   ref: React.RefObject<HTMLElement | null>,
   state: PetAnimationState,
 ): void {
+  const reducedMotion = usePrefersReducedMotion();
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const frames = FRAME_TABLE[state];
+    const sequence = resolvePetAnimationSequence(state, reducedMotion);
+    const { frames } = sequence;
 
-    if (prefersReducedMotion()) {
-      el.style.backgroundPosition = bgPosition(frames[0]);
+    if (frames.length === 1) {
+      el.style.backgroundPosition = petFrameBackgroundPosition(frames[0]);
       return;
     }
 
@@ -83,11 +54,15 @@ export function usePetAnimation(
       const node = ref.current;
       if (!node) return;
       const frame = frames[index];
-      node.style.backgroundPosition = bgPosition(frame);
+      node.style.backgroundPosition = petFrameBackgroundPosition(frame);
       timeout = window.setTimeout(() => {
-        index = (index + 1) % frames.length;
+        index += 1;
+        if (index >= frames.length) {
+          if (sequence.loopStartIndex == null) return;
+          index = sequence.loopStartIndex;
+        }
         schedule();
-      }, frame.durationMs);
+      }, frame.frameDurationMs);
     }
 
     schedule();
@@ -95,5 +70,5 @@ export function usePetAnimation(
     return () => {
       if (timeout != null) window.clearTimeout(timeout);
     };
-  }, [ref, state]);
+  }, [ref, state, reducedMotion]);
 }

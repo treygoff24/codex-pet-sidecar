@@ -25,5 +25,5 @@ Unused cells after each row's final used column must be fully transparent.
 - `jumping`: anticipation, lift, peak, descent, settle.
 - `failed`: error/sad/deflated reaction; readable but not visually noisy.
 - `waiting`: patient idle variant; glance, small bounce, or prop motion.
-- `running`: generic/front-facing or in-place run loop.
+- `running`: active work/thinking loop while Codex is running. The Codex Mac app row uses a focused working pose, not literal locomotion.
 - `review`: focused/inspecting/thinking loop suitable for review state.

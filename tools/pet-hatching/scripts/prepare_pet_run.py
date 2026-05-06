@@ -26,7 +26,7 @@ ROWS = [
     ("jumping", 4, 5, "anticipation, lift, peak, descent, settle"),
     ("failed", 5, 8, "sad, failed, or deflated reaction"),
     ("waiting", 6, 6, "patient waiting loop with small motion"),
-    ("running", 7, 6, "generic in-place running loop"),
+    ("running", 7, 6, "active work or thinking loop while Codex is running"),
     ("review", 8, 6, "focused inspecting or review loop"),
 ]
 
@@ -69,8 +69,10 @@ STATE_REQUIREMENTS = {
         "Do not draw speed lines, dust clouds, floor shadows, motion trails, or detached motion effects.",
     ],
     "running": [
-        "Show in-place running through body, limb, and prop movement only.",
-        "Do not draw speed lines, dust clouds, floor shadows, motion trails, or detached motion effects.",
+        "This row is named `running` because Codex is running, not because the pet should literally sprint.",
+        "Show active work through a focused expression, tiny typing/tapping motion, thinking posture, or a small integrated work prop.",
+        "A tiny laptop, terminal tile, notebook, or tablet is allowed only in this row when it is physically attached to or overlapping the pet pose, has no readable text, stays inside each frame slot, and preserves the pet identity.",
+        "Do not draw locomotion, speed lines, dust clouds, floor shadows, motion trails, detached UI panels, code snippets, or floating symbols.",
     ],
 }
 

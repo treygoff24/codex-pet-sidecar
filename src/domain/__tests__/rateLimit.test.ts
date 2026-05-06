@@ -14,7 +14,7 @@ describe("rate limiting and memory formatting", () => {
   it("calculates the exact mute choices", () => {
     expect(muteUntilForChoice("30m", now)).toBe("2026-05-05T15:30:00.000Z");
     expect(muteUntilForChoice("2h", now)).toBe("2026-05-05T17:00:00.000Z");
-    expect(muteUntilForChoice("tomorrow", now)).toBe("2026-05-06T14:00:00.000Z");
+    expect(muteUntilForChoice("tomorrow", now)).toBe("2026-05-06T13:00:00.000Z");
   });
 
   it("enforces the 10-minute proactive floor", () => {

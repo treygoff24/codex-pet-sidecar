@@ -163,9 +163,9 @@ button {
   width: 192px;
   height: 208px;
   background-repeat: no-repeat;
-  background-size: 1536px 1872px;
+  background-size: 800% 900%;
   /* Pixel art / hard-edged sprites read better without bilinear upscaling. */
-  image-rendering: -webkit-optimize-contrast;
+  image-rendering: pixelated;
   display: grid;
   place-items: center;
   color: var(--ink-soft);
@@ -173,17 +173,6 @@ button {
   user-select: none;
   /* No drop-shadow filter — it haloes anti-aliased edges. We use a separate
      ground shadow below the sprite instead. */
-  animation: pet-breath 4.2s ease-in-out infinite;
-}
-
-@keyframes pet-breath {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-1.5px) scale(1.012);
-  }
 }
 
 .pet-shadow {
@@ -198,19 +187,7 @@ button {
     rgba(36, 21, 8, 0) 75%
   );
   filter: blur(1px);
-  animation: pet-shadow-breath 4.2s ease-in-out infinite;
   pointer-events: none;
-}
-@keyframes pet-shadow-breath {
-  0%,
-  100% {
-    transform: scaleX(1);
-    opacity: 0.85;
-  }
-  50% {
-    transform: scaleX(0.96);
-    opacity: 0.7;
-  }
 }
 
 /* Glass surfaces */

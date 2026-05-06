@@ -37,7 +37,10 @@
     "check": "npm run lint && npm run format:check && npm run build && rm -rf dist && npm test && npm run lint:rust && cargo test --manifest-path src-tauri/Cargo.toml",
     "doctor": "node scripts/doctor.mjs",
     "audit:public": "node scripts/audit-public.mjs",
-    "audit:artifacts": "node scripts/audit-artifacts.mjs"
+    "audit:artifacts": "node scripts/audit-artifacts.mjs",
+    "verify:codex-animation": "node scripts/verify-codex-animation-parity.mjs",
+    "verify:olive-row7-repair": "node scripts/verify-olive-row7-repair-workflow.mjs",
+    "verify:animation-parity": "npm run verify:codex-animation && npm run verify:olive-row7-repair"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

@@ -24,6 +24,17 @@ ROW_NAMES = [
     "running",
     "review",
 ]
+ROW_PURPOSES = [
+    "neutral",
+    "drag right",
+    "drag left",
+    "streaming/greeting",
+    "hover",
+    "blocked/error",
+    "needs input",
+    "active work",
+    "ready/review",
+]
 USED_COUNTS = [6, 8, 8, 4, 5, 8, 6, 6, 6]
 
 
@@ -58,7 +69,12 @@ def main() -> None:
     for row in range(ROWS):
         y = row * (cell_h + LABEL_HEIGHT)
         draw.rectangle((0, y, width, y + LABEL_HEIGHT - 1), fill="#111111")
-        draw.text((6, y + 5), f"row {row}: {ROW_NAMES[row]}", fill="#ffffff", font=font)
+        draw.text(
+            (6, y + 5),
+            f"row {row}: {ROW_NAMES[row]} ({ROW_PURPOSES[row]})",
+            fill="#ffffff",
+            font=font,
+        )
         draw.text(
             (width - 92, y + 5),
             f"{USED_COUNTS[row]} frames",
