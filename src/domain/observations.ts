@@ -16,7 +16,3 @@ export type ObservationDigest =
       degraded?: string;
     }
   | { type: "idle_state"; idleSince?: string; returnedAt?: string; observedAt: string };
-
-export type ProactiveTrigger =
-  | { type: "returned_from_idle"; digest: ObservationDigest }
-  | { type: "repo_changed"; digest: ObservationDigest };

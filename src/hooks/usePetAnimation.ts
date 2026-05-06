@@ -1,11 +1,10 @@
 import { useEffect } from "react";
 
-export type PetAnimationState = "idle" | "blink" | "talk" | "sleep";
-
 const SHEET_COLS = 8;
 const SHEET_ROWS = 9;
 
 type Frame = { row: number; col: number; durationMs: number };
+type PetAnimationState = "idle" | "blink" | "talk" | "sleep";
 
 // Idle: long open-eyed dwell punctuated by a soft blink, the way pets actually rest.
 const IDLE_FRAMES: Frame[] = [
@@ -40,12 +39,12 @@ const BLINK_FRAMES: Frame[] = [
   { row: 0, col: 0, durationMs: 800 },
 ];
 
-const FRAME_TABLE: Record<PetAnimationState, Frame[]> = {
+const FRAME_TABLE = {
   idle: IDLE_FRAMES,
   blink: BLINK_FRAMES,
   talk: TALK_FRAMES,
   sleep: SLEEP_FRAMES,
-};
+} satisfies Record<PetAnimationState, Frame[]>;
 
 function bgPosition(frame: Frame): string {
   // Percentage positioning works because background-size matches the full

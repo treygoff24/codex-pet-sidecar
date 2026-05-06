@@ -3,11 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { isAbsolute, resolve, relative } from "node:path";
 
-// ------------------------------------------------------------------------
-// Config: what's private, what's allowed, who counts as public identity.
-// All of this is module-scope so the file-content scan and the git-identity
-// scan can both reach it without redeclaring.
-// ------------------------------------------------------------------------
+// Public-tree audit configuration shared by file-content and git-identity scans.
 
 const repoRoot = process.cwd();
 const textExtensions = /\.(md|mdx|txt|json|toml|rs|ts|tsx|js|mjs|yml|yaml|html|css)$/;
@@ -64,7 +60,7 @@ function escapeRegex(s) {
 // preempt a more-specific match on `.../codex-pet-sidecar/issues`.
 const URL_TERMINATOR = `(?![A-Za-z0-9_/-])`;
 const PUBLIC_REPO_URL_REGEXES = [...PUBLIC_REPO_URLS]
-  .sort((a, b) => b.length - a.length)
+  .toSorted((a, b) => b.length - a.length)
   .map((url) => new RegExp(escapeRegex(url) + URL_TERMINATOR, "g"));
 
 function stripPublicRepoUrls(text) {
@@ -102,10 +98,6 @@ function isPublicEmail(email) {
 function isPublicName(name) {
   return PUBLIC_AUTHOR_NAMES.has(name);
 }
-
-// ------------------------------------------------------------------------
-// File scan
-// ------------------------------------------------------------------------
 
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).split("\n").filter(Boolean);
@@ -210,12 +202,10 @@ for (const file of files) {
   }
 }
 
-// ------------------------------------------------------------------------
 // Git identity scan: every commit's author and committer email/name must
 // either match the public allowlist or contain none of the private
 // content terms / private domain. Each field is checked individually so
 // a leak in one column can't be masked by a clean value in another.
-// ------------------------------------------------------------------------
 
 function gitFieldList(format) {
   return execFileSync("git", ["log", `--format=${format}`, "--all"], {
@@ -246,11 +236,9 @@ for (const name of authorNames) checkIdentityValue("author name", name, isPublic
 for (const email of committerEmails) checkIdentityValue("committer email", email, isPublicEmail);
 for (const name of committerNames) checkIdentityValue("committer name", name, isPublicName);
 
-// ------------------------------------------------------------------------
 // Inline self-tests for stripPublicRepoUrls — runs every audit pass so a
 // future edit to the URL allowlist can't silently break the boundary
 // rules.
-// ------------------------------------------------------------------------
 
 function selfTest() {
   const samples = [

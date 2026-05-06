@@ -1,88 +1,13 @@
-import { spawn } from "node:child_process";
+import {
+  assertWebSocketAvailable,
+  archiveThreadIfStarted,
+  connectAppServer,
+  initializeAppServer,
+  spawnAppServer,
+  waitForExit,
+} from "./lib/codex-app-server.mjs";
 
-if (typeof WebSocket === "undefined") {
-  throw new Error("This smoke requires a Node.js version with a global WebSocket implementation.");
-}
-
-function waitForExit(child, ms = 2_000) {
-  return Promise.race([
-    new Promise((resolve) => child.once("exit", resolve)),
-    new Promise((resolve) => setTimeout(resolve, ms)),
-  ]);
-}
-
-async function spawnAppServer(
-  command = "codex",
-  args = ["app-server", "--listen", "ws://127.0.0.1:0"],
-) {
-  const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
-  let stderr = "";
-  const url = await new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error(`timed out waiting for app-server URL: ${stderr}`)),
-      10_000,
-    );
-    child.once("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-      const match = stderr.match(/listening on:\s+(ws:\/\/127\.0\.0\.1:\d+)/);
-      if (match) {
-        clearTimeout(timeout);
-        resolve(match[1]);
-      }
-    });
-    child.once("exit", (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`app-server exited early with ${code}: ${stderr}`));
-    });
-  });
-  return { child, url };
-}
-
-function connect(url) {
-  const ws = new WebSocket(url);
-  let nextId = 1;
-  const pending = new Map();
-  const notifications = [];
-  ws.addEventListener("message", (event) => {
-    const msg = JSON.parse(event.data.toString());
-    if (msg.id !== undefined && pending.has(msg.id)) {
-      pending.get(msg.id).resolve(msg);
-      pending.delete(msg.id);
-      return;
-    }
-    notifications.push(msg);
-  });
-  function call(method, params = {}) {
-    const id = nextId++;
-    ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`timed out waiting for ${method}`));
-      }, 15_000);
-      pending.set(id, {
-        resolve: (msg) => {
-          clearTimeout(timeout);
-          if (msg.error) reject(new Error(`${method}: ${JSON.stringify(msg.error)}`));
-          else resolve(msg.result);
-        },
-      });
-    });
-  }
-  return {
-    ws,
-    notifications,
-    opened: new Promise((resolve, reject) => {
-      ws.addEventListener("open", resolve, { once: true });
-      ws.addEventListener("error", reject, { once: true });
-    }),
-    call,
-  };
-}
+assertWebSocketAvailable("smoke");
 
 function assertCodexOauthSubscription(account, authStatus) {
   const actualAccount = account.account;
@@ -160,17 +85,14 @@ async function assertBadPathIsRecoverable() {
 
 const badPathResult = await assertBadPathIsRecoverable();
 const { child, url } = await spawnAppServer();
-const client = connect(url);
+const client = connectAppServer(url);
 let threadId;
 try {
   await client.opened;
-  const initialize = await client.call("initialize", {
-    clientInfo: {
-      name: "codex-pet-sidecar-smoke",
-      title: "Codex Pet Sidecar Smoke",
-      version: "0.1.0",
-    },
-    capabilities: { experimentalApi: true },
+  const initialize = await initializeAppServer(client, {
+    name: "codex-pet-sidecar-smoke",
+    title: "Codex Pet Sidecar Smoke",
+    version: "0.1.0",
   });
   const account = await client.call("account/read", { refreshToken: true });
   const authStatus = await client.call("getAuthStatus", {
@@ -208,11 +130,7 @@ try {
     ),
   );
 } finally {
-  if (threadId) {
-    try {
-      await client.call("thread/archive", { threadId });
-    } catch {}
-  }
+  await archiveThreadIfStarted(client, threadId);
   client.ws.close();
   child.kill();
   await waitForExit(child);

@@ -6,15 +6,13 @@ pub enum ApprovalKind {
     CommandExecution,
     FileChange,
     Permissions,
-    LegacyExec,
-    LegacyPatch,
     Unknown,
 }
 
 pub fn approval_request(id: u64, method: &str, params: &Value) -> ApprovalRequest {
     let tool_name = match method {
-        "item/commandExecution/requestApproval" | "execCommandApproval" => "shell command",
-        "item/fileChange/requestApproval" | "applyPatchApproval" => "file change",
+        "item/commandExecution/requestApproval" => "shell command",
+        "item/fileChange/requestApproval" => "file change",
         "item/permissions/requestApproval" => "permissions",
         other => other,
     };
@@ -25,10 +23,7 @@ pub fn approval_request(id: u64, method: &str, params: &Value) -> ApprovalReques
         risk: approval_risk(method),
         allow_for_session: matches!(
             kind_for_method(method),
-            ApprovalKind::CommandExecution
-                | ApprovalKind::FileChange
-                | ApprovalKind::LegacyExec
-                | ApprovalKind::LegacyPatch
+            ApprovalKind::CommandExecution | ApprovalKind::FileChange
         ),
     }
 }
@@ -38,8 +33,6 @@ pub fn kind_for_method(method: &str) -> ApprovalKind {
         "item/commandExecution/requestApproval" => ApprovalKind::CommandExecution,
         "item/fileChange/requestApproval" => ApprovalKind::FileChange,
         "item/permissions/requestApproval" => ApprovalKind::Permissions,
-        "execCommandApproval" => ApprovalKind::LegacyExec,
-        "applyPatchApproval" => ApprovalKind::LegacyPatch,
         _ => ApprovalKind::Unknown,
     }
 }
@@ -48,9 +41,6 @@ pub fn response_for_action(kind: ApprovalKind, action: ApprovalAction) -> Value 
     match kind {
         ApprovalKind::CommandExecution => json!({"decision": command_decision(action)}),
         ApprovalKind::FileChange => json!({"decision": file_decision(action)}),
-        ApprovalKind::LegacyExec | ApprovalKind::LegacyPatch => {
-            json!({"decision": legacy_decision(action)})
-        }
         ApprovalKind::Permissions => match action {
             ApprovalAction::Deny => {
                 json!({"permissions":{"network":null,"fileSystem":null},"scope":"turn"})
@@ -78,14 +68,6 @@ fn file_decision(action: ApprovalAction) -> &'static str {
     command_decision(action)
 }
 
-fn legacy_decision(action: ApprovalAction) -> &'static str {
-    match action {
-        ApprovalAction::AllowOnce => "approved",
-        ApprovalAction::AllowSession => "approved_for_session",
-        ApprovalAction::Deny => "denied",
-    }
-}
-
 fn approval_detail(params: &Value) -> String {
     for key in ["command", "cmd", "reason", "summary", "description"] {
         if let Some(value) = params.get(key).and_then(Value::as_str) {
@@ -100,8 +82,8 @@ fn approval_detail(params: &Value) -> String {
 
 fn approval_risk(method: &str) -> ApprovalRisk {
     match method {
-        "item/commandExecution/requestApproval" | "execCommandApproval" => ApprovalRisk::Execute,
-        "item/fileChange/requestApproval" | "applyPatchApproval" => ApprovalRisk::Write,
+        "item/commandExecution/requestApproval" => ApprovalRisk::Execute,
+        "item/fileChange/requestApproval" => ApprovalRisk::Write,
         _ => ApprovalRisk::Unknown,
     }
 }
@@ -117,9 +99,6 @@ mod tests {
                 ["decision"],
             "acceptForSession"
         );
-        assert_eq!(
-            response_for_action(ApprovalKind::LegacyPatch, ApprovalAction::Deny)["decision"],
-            "denied"
-        );
+        assert_eq!(kind_for_method("applyPatchApproval"), ApprovalKind::Unknown);
     }
 }

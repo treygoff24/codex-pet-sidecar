@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { genericDefaultPersona, type PetConfig } from "../../domain/petConfig";
 import { useRuntimeRestart } from "../useRuntimeRestart";
 
+type RuntimeRestartConfig = Parameters<typeof useRuntimeRestart>[0];
+type RuntimeRestartHarnessProps = { cfg: RuntimeRestartConfig };
+
 const baseConfig = (overrides: Partial<PetConfig> = {}): PetConfig => ({
   petId: "olive",
   displayName: "Olive",
@@ -34,7 +37,7 @@ describe("useRuntimeRestart", () => {
     const start = vi.fn().mockResolvedValue(undefined);
     const onError = vi.fn();
     const { rerender } = renderHook(
-      ({ cfg }: { cfg: PetConfig | null }) => useRuntimeRestart(cfg, start, onError),
+      ({ cfg }: RuntimeRestartHarnessProps) => useRuntimeRestart(cfg, start, onError),
       { initialProps: { cfg: null as PetConfig | null } },
     );
 
@@ -51,14 +54,13 @@ describe("useRuntimeRestart", () => {
     const start = vi.fn().mockResolvedValue(undefined);
     const onError = vi.fn();
     const { rerender } = renderHook(
-      ({ cfg }: { cfg: PetConfig | null }) => useRuntimeRestart(cfg, start, onError),
+      ({ cfg }: RuntimeRestartHarnessProps) => useRuntimeRestart(cfg, start, onError),
       { initialProps: { cfg: baseConfig() } },
     );
 
     vi.advanceTimersByTime(450);
     expect(start).toHaveBeenCalledTimes(1);
 
-    // Persona-only change must not retrigger.
     rerender({ cfg: baseConfig({ persona: "a different voice" }) });
     vi.advanceTimersByTime(800);
     expect(start).toHaveBeenCalledTimes(1);
@@ -68,7 +70,7 @@ describe("useRuntimeRestart", () => {
     const start = vi.fn().mockResolvedValue(undefined);
     const onError = vi.fn();
     const { rerender } = renderHook(
-      ({ cfg }: { cfg: PetConfig | null }) => useRuntimeRestart(cfg, start, onError),
+      ({ cfg }: RuntimeRestartHarnessProps) => useRuntimeRestart(cfg, start, onError),
       { initialProps: { cfg: baseConfig() } },
     );
     vi.advanceTimersByTime(450);
@@ -94,7 +96,7 @@ describe("useRuntimeRestart", () => {
     const start = vi.fn().mockResolvedValue(undefined);
     const onError = vi.fn();
     const { rerender } = renderHook(
-      ({ cfg }: { cfg: PetConfig | null }) => useRuntimeRestart(cfg, start, onError),
+      ({ cfg }: RuntimeRestartHarnessProps) => useRuntimeRestart(cfg, start, onError),
       { initialProps: { cfg: baseConfig() } },
     );
     vi.advanceTimersByTime(450);
@@ -111,7 +113,7 @@ describe("useRuntimeRestart", () => {
     const start = vi.fn().mockResolvedValue(undefined);
     const onError = vi.fn();
     const { rerender } = renderHook(
-      ({ cfg }: { cfg: PetConfig | null }) => useRuntimeRestart(cfg, start, onError),
+      ({ cfg }: RuntimeRestartHarnessProps) => useRuntimeRestart(cfg, start, onError),
       { initialProps: { cfg: baseConfig({ workspaceCwd: "/a" }) } },
     );
     vi.advanceTimersByTime(450);
@@ -126,15 +128,13 @@ describe("useRuntimeRestart", () => {
     const start = vi.fn().mockResolvedValue(undefined);
     const onError = vi.fn();
     const { rerender } = renderHook(
-      ({ cfg }: { cfg: PetConfig | null }) => useRuntimeRestart(cfg, start, onError),
+      ({ cfg }: RuntimeRestartHarnessProps) => useRuntimeRestart(cfg, start, onError),
       { initialProps: { cfg: baseConfig() } },
     );
 
-    // Initial mount fires once.
     vi.advanceTimersByTime(450);
     expect(start).toHaveBeenCalledTimes(1);
 
-    // Three rapid safetyMode toggles within ~150ms.
     rerender({
       cfg: baseConfig({ runtime: { sessionPersistence: "ephemeral", safetyMode: "power" } }),
     });
@@ -146,9 +146,7 @@ describe("useRuntimeRestart", () => {
     rerender({
       cfg: baseConfig({ runtime: { sessionPersistence: "ephemeral", safetyMode: "power" } }),
     });
-    // Not enough time elapsed for any of the cancelled timers to fire.
     expect(start).toHaveBeenCalledTimes(1);
-    // After the last change settles, exactly one additional restart fires.
     vi.advanceTimersByTime(450);
     expect(start).toHaveBeenCalledTimes(2);
   });

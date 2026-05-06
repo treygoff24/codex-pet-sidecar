@@ -1,12 +1,12 @@
 export const MAX_PETS = 20;
 
-export type PetSource =
+type PetSource =
   | { type: "bundled"; bundledId: string }
   | { type: "user_created"; createdBy: string }
   | { type: "imported"; originalPath?: string }
   | { type: "migrated"; migrationId: string };
 
-export type PetLibraryEntry = {
+type PetLibraryEntry = {
   petId: string;
   displayName: string;
   source: PetSource;

@@ -1,11 +1,11 @@
-export type ObserverSettings = {
+type ObserverSettings = {
   activeApp: boolean;
   windowTitle: boolean;
   workspace: boolean;
   idle: boolean;
 };
 
-export type MuteState = {
+type MuteState = {
   until?: string;
 };
 
@@ -14,10 +14,23 @@ export type TuckState = {
   tuckedUntil?: string;
 };
 
-export type SessionPersistence = "ephemeral" | "savedHistory";
-export type RuntimeSafetyMode = "safe" | "power";
+export type TuckUntilInput = NonNullable<TuckState["tuckedUntil"]> | null;
 
-export type RuntimeConfig = {
+export const SESSION_PERSISTENCE = {
+  ephemeral: "ephemeral",
+  savedHistory: "savedHistory",
+} as const;
+
+type SessionPersistence = (typeof SESSION_PERSISTENCE)[keyof typeof SESSION_PERSISTENCE];
+
+export const RUNTIME_SAFETY_MODE = {
+  safe: "safe",
+  power: "power",
+} as const;
+
+type RuntimeSafetyMode = (typeof RUNTIME_SAFETY_MODE)[keyof typeof RUNTIME_SAFETY_MODE];
+
+type RuntimeConfig = {
   sessionPersistence: SessionPersistence;
   safetyMode: RuntimeSafetyMode;
 };

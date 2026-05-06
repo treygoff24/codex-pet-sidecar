@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { ApprovalRequest } from "../domain/runtimeEvents";
-import type { InstalledPet, PetConfig } from "../domain/petConfig";
+import type { ApprovalAction, ApprovalRequest } from "../domain/runtimeEvents";
+import type { InstalledPet, PetConfig, TuckUntilInput } from "../domain/petConfig";
 import type { PetLibrary } from "../domain/petLibrary";
 import { usePetAnimation } from "../hooks/usePetAnimation";
 import { useTypewriter } from "../hooks/useTypewriter";
-import type { ApprovalAction } from "../runtimeBridge";
 import { ApprovalPrompt } from "./ApprovalPrompt";
 import { ChatDrawer } from "./ChatDrawer";
 import { ChatInputBar } from "./ChatInputBar";
@@ -65,7 +64,7 @@ export function PetWindow({
   onSwitchPet: (petId: string) => void;
   onHatchPet: () => void;
   onImportPet: () => void;
-  onTuck: (until: string | null) => void;
+  onTuck: (until: TuckUntilInput) => void;
   onWake: () => void;
   onImprovePersonality: () => void;
 }) {
@@ -189,7 +188,7 @@ export function PetWindow({
           <PetSprite
             ref={spriteRef}
             spritesheetPath={pet?.spritesheetPath ?? config.spritesheetPath}
-            displayName={config.displayName || pet?.displayName || "Codex pet"}
+            displayName={config.displayName}
           />
         </button>
       </div>

@@ -1,10 +1,12 @@
-import { muteUntilForChoice, type MuteChoice } from "../domain/rateLimit";
+import { MUTE_CHOICES, muteUntilForChoice, type MuteChoice } from "../domain/rateLimit";
 
-const choices: Array<{ value: MuteChoice; label: string }> = [
-  { value: "30m", label: "30 minutes" },
-  { value: "2h", label: "2 hours" },
-  { value: "tomorrow", label: "Until tomorrow" },
-];
+const labels = {
+  "30m": "30 minutes",
+  "2h": "2 hours",
+  tomorrow: "Until tomorrow",
+} satisfies Record<MuteChoice, string>;
+
+const choices = MUTE_CHOICES.map((value) => ({ value, label: labels[value] }));
 
 export function MuteControl({ onMute }: { onMute: (until: string) => void }) {
   return (

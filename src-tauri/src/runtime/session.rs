@@ -7,6 +7,7 @@ use crate::runtime::json_rpc::{JsonRpcClient, WireEvent};
 use crate::runtime::process::AppServerProcess;
 use crate::runtime::prompt::{compose_base_instructions, compose_developer_instructions};
 use crate::state::{RuntimeConfig, RuntimeSafetyMode, SessionPersistence};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -329,6 +330,13 @@ enum CompletedTurn {
     Unknown,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AmbientDecision {
+    should_speak: bool,
+    message: String,
+}
+
 fn user_input_items(input: &PetUserInput) -> Vec<Value> {
     let mut items = vec![json!({"type":"text","text":input.text,"text_elements":[]})];
     for path in &input.local_images {
@@ -489,16 +497,12 @@ fn ambient_turn_event(turn: AmbientTurnState) -> Option<RuntimeEvent> {
 
 fn parse_ambient_decision(text: &str) -> Option<String> {
     let json_text = extract_json_object(text)?;
-    let value: Value = serde_json::from_str(json_text).ok()?;
-    if !value.get("shouldSpeak").and_then(Value::as_bool)? {
+    let decision: AmbientDecision = serde_json::from_str(json_text).ok()?;
+    if !decision.should_speak {
         return None;
     }
-    value
-        .get("message")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|message| !message.is_empty())
-        .map(ToOwned::to_owned)
+    let message = decision.message.trim();
+    (!message.is_empty()).then(|| message.to_string())
 }
 
 fn extract_json_object(text: &str) -> Option<&str> {

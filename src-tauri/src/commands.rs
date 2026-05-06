@@ -13,7 +13,7 @@ use crate::runtime::{
 use crate::skills::{hatching_prompt, personality_prompt, SkillPrompt};
 use crate::state::{
     discover_library_pets, ensure_library, import_staged_pet, load_active_pet_config, load_config,
-    save_config, set_active_pet as set_active_pet_in_library, PetConfig, PetLibrary,
+    save_config, set_active_pet as set_active_pet_in_library, PetConfig, PetLibrary, TuckConfig,
 };
 use serde::Serialize;
 use std::path::PathBuf;
@@ -43,8 +43,8 @@ pub type CommandResult<T> = Result<T, CommandError>;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PetVisibilityState {
-    pub tucked: bool,
-    pub tucked_until: Option<String>,
+    #[serde(flatten)]
+    pub tuck: TuckConfig,
     pub visible: bool,
 }
 
@@ -391,8 +391,10 @@ fn tuck_is_active(config: &PetConfig) -> bool {
 fn visibility_state(config: &PetConfig) -> PetVisibilityState {
     let tucked = tuck_is_active(config);
     PetVisibilityState {
-        tucked,
-        tucked_until: config.tuck.tucked_until.clone(),
+        tuck: TuckConfig {
+            tucked,
+            tucked_until: config.tuck.tucked_until.clone(),
+        },
         visible: !tucked,
     }
 }

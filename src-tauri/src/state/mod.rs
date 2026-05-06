@@ -4,7 +4,7 @@ pub mod paths;
 
 pub use config::{
     load_config, save_config, AmbientConfig, PetConfig, RuntimeConfig, RuntimeSafetyMode,
-    SessionPersistence,
+    SessionPersistence, TuckConfig,
 };
 pub use library::{
     discover_library_pets, ensure_library, import_staged_pet, load_active_pet_config,

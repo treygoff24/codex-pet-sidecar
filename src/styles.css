@@ -53,9 +53,7 @@ button {
   cursor: pointer;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Pet window — the canvas Olive lives in
-   ───────────────────────────────────────────────────────────── */
+/* Pet window — the canvas Olive lives in */
 
 .pet-window {
   position: relative;
@@ -131,9 +129,7 @@ button {
   color: var(--accent);
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Stage — pet sprite + speech bubble + ground shadow
-   ───────────────────────────────────────────────────────────── */
+/* Stage — pet sprite + speech bubble + ground shadow */
 
 .pet-stage {
   position: relative;
@@ -217,9 +213,7 @@ button {
   }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Glass surfaces
-   ───────────────────────────────────────────────────────────── */
+/* Glass surfaces */
 
 .surface {
   border: 1px solid var(--line);
@@ -229,9 +223,7 @@ button {
   backdrop-filter: blur(14px);
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Speech bubble — a real bubble, anchored above Olive
-   ───────────────────────────────────────────────────────────── */
+/* Speech bubble — a real bubble, anchored above Olive */
 
 .speech-bubble {
   /* Real grid item in row 1 of .pet-stage, bottom-aligned so the bubble
@@ -356,9 +348,7 @@ button {
   }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Chat input bar — always visible at bottom, low-vis until focus
-   ───────────────────────────────────────────────────────────── */
+/* Chat input bar — always visible at bottom, low-vis until focus */
 
 .chat-input-bar {
   display: flex;
@@ -414,9 +404,7 @@ button {
   cursor: not-allowed;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Transcript drawer — slides up from bottom
-   ───────────────────────────────────────────────────────────── */
+/* Transcript drawer — slides up from bottom */
 
 .transcript-drawer {
   position: absolute;
@@ -489,9 +477,7 @@ button {
   font-style: italic;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Settings sheet — slides up to cover canvas when ⚙ tapped
-   ───────────────────────────────────────────────────────────── */
+/* Settings sheet — slides up to cover canvas when tapped */
 
 .sheet-backdrop {
   position: absolute;
@@ -624,9 +610,7 @@ button {
   line-height: 1.4;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Mute popover — anchored under the snooze icon
-   ───────────────────────────────────────────────────────────── */
+/* Mute popover — anchored under the snooze icon */
 
 .mute-popover {
   position: absolute;
@@ -678,9 +662,7 @@ button {
   background: var(--accent-soft);
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Approval prompt — surfaces when Codex needs permission
-   ───────────────────────────────────────────────────────────── */
+/* Approval prompt — surfaces when Codex needs permission */
 
 .approval-prompt {
   position: absolute;
@@ -729,9 +711,7 @@ button {
   cursor: not-allowed;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Setup error pill
-   ───────────────────────────────────────────────────────────── */
+/* Setup error pill */
 
 .setup-error {
   position: absolute;
@@ -748,9 +728,7 @@ button {
   z-index: 6;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Pet picker — startup screen
-   ───────────────────────────────────────────────────────────── */
+/* Pet picker — startup screen */
 
 .pet-picker {
   width: 100%;

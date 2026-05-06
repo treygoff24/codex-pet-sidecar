@@ -1,12 +1,17 @@
+import type { ObservationDigest } from "./observations";
+
+export const APPROVAL_ACTION = {
+  allowOnce: "allow_once",
+  allowSession: "allow_session",
+  deny: "deny",
+} as const;
+
+export type ApprovalAction = (typeof APPROVAL_ACTION)[keyof typeof APPROVAL_ACTION];
+
 export type RuntimeSession = {
   threadId: string;
   websocketUrl: string;
   effectiveModel: string;
-};
-
-export type PetUserInput = {
-  text: string;
-  attachments?: Array<{ type: "localImage"; path: string }>;
 };
 
 export type ApprovalRequest = {
@@ -23,5 +28,5 @@ export type PetAgentEvent =
   | { type: "ambient_status"; message: string }
   | { type: "turn_completed"; finalText?: string }
   | { type: "approval_request"; request: ApprovalRequest }
-  | { type: "observation"; digest: import("./observations").ObservationDigest }
+  | { type: "observation"; digest: ObservationDigest }
   | { type: "error"; message: string };

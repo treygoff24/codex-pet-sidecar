@@ -8,9 +8,7 @@ export function ChatInputBar({
 }: {
   onSend: (text: string) => Promise<void> | void;
   disabled?: boolean;
-  /** Display name of the active pet, used to personalize the placeholder. */
   petName?: string;
-  /** Explicit override; takes precedence over `petName`. */
   placeholder?: string;
 }) {
   const effectivePlaceholder = placeholder ?? `talk to ${petName ?? "your pet"}…`;

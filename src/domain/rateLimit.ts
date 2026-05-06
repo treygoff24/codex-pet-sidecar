@@ -1,4 +1,6 @@
-export type MuteChoice = "30m" | "2h" | "tomorrow";
+export const MUTE_CHOICES = ["30m", "2h", "tomorrow"] as const;
+
+export type MuteChoice = (typeof MUTE_CHOICES)[number];
 
 const minuteMs = 60_000;
 

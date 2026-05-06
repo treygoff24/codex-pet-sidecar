@@ -1,3 +1,5 @@
+import type { TuckUntilInput } from "../domain/petConfig";
+
 function minutesFromNow(minutes: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
@@ -15,7 +17,7 @@ export function TuckWakeControl({
   onWake,
 }: {
   tucked: boolean;
-  onTuck: (until: string | null) => void;
+  onTuck: (until: TuckUntilInput) => void;
   onWake: () => void;
 }) {
   if (tucked) {

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { isTuckActive, type PetConfig } from "../domain/petConfig";
+import type { RuntimeSession } from "../domain/runtimeEvents";
 
 /**
  * Schedule a debounced runtime restart whenever `appliedConfig` changes in a
@@ -17,7 +18,7 @@ import { isTuckActive, type PetConfig } from "../domain/petConfig";
  */
 export function useRuntimeRestart(
   appliedConfig: PetConfig | null,
-  startPetRuntime: () => Promise<unknown>,
+  startPetRuntime: () => Promise<RuntimeSession>,
   onError: (caught: unknown) => void,
   debounceMs = 400,
 ) {

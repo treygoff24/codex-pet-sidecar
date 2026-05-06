@@ -1,5 +1,8 @@
-import type { ApprovalRequest } from "../domain/runtimeEvents";
-import type { ApprovalAction } from "../runtimeBridge";
+import {
+  APPROVAL_ACTION,
+  type ApprovalAction,
+  type ApprovalRequest,
+} from "../domain/runtimeEvents";
 
 export function ApprovalPrompt({
   request,
@@ -13,17 +16,17 @@ export function ApprovalPrompt({
       <strong>{request.toolName}</strong>
       <p>{request.detail}</p>
       <div>
-        <button type="button" onClick={() => onRespond("allow_once")}>
+        <button type="button" onClick={() => onRespond(APPROVAL_ACTION.allowOnce)}>
           Allow once
         </button>
         <button
           type="button"
           disabled={!request.allowForSession}
-          onClick={() => onRespond("allow_session")}
+          onClick={() => onRespond(APPROVAL_ACTION.allowSession)}
         >
           Allow for session
         </button>
-        <button type="button" onClick={() => onRespond("deny")}>
+        <button type="button" onClick={() => onRespond(APPROVAL_ACTION.deny)}>
           Deny
         </button>
       </div>

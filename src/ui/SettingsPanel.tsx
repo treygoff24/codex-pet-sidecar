@@ -1,6 +1,8 @@
 import { useState } from "react";
-import type { PetConfig } from "../domain/petConfig";
+import { RUNTIME_SAFETY_MODE, SESSION_PERSISTENCE, type PetConfig } from "../domain/petConfig";
 import { runtimeBridge } from "../runtimeBridge";
+
+type PickDirectory = typeof runtimeBridge.pickDirectory;
 
 export function SettingsPanel({
   config,
@@ -14,7 +16,7 @@ export function SettingsPanel({
   onImprovePersonality?: () => void;
   onResetPersonality?: () => void;
   /** Injectable for tests; defaults to the real Tauri dialog primitive. */
-  pickDirectory?: (opts?: { defaultPath?: string }) => Promise<string | null>;
+  pickDirectory?: PickDirectory;
 }) {
   const [powerArmed, setPowerArmed] = useState(false);
   const updateAmbient = (ambient: Partial<PetConfig["ambient"]>) =>
@@ -72,42 +74,45 @@ export function SettingsPanel({
         <label>
           <input
             type="radio"
-            checked={config.runtime.sessionPersistence === "ephemeral"}
-            onChange={() => updateRuntime({ sessionPersistence: "ephemeral" })}
+            checked={config.runtime.sessionPersistence === SESSION_PERSISTENCE.ephemeral}
+            onChange={() => updateRuntime({ sessionPersistence: SESSION_PERSISTENCE.ephemeral })}
           />
           Ephemeral sessions (recommended)
         </label>
         <label>
           <input
             type="radio"
-            checked={config.runtime.sessionPersistence === "savedHistory"}
-            onChange={() => updateRuntime({ sessionPersistence: "savedHistory" })}
+            checked={config.runtime.sessionPersistence === SESSION_PERSISTENCE.savedHistory}
+            onChange={() => updateRuntime({ sessionPersistence: SESSION_PERSISTENCE.savedHistory })}
           />
           Save pet sessions in Codex history
         </label>
         <label>
           <input
             type="radio"
-            checked={config.runtime.safetyMode === "safe"}
-            onChange={() => updateRuntime({ safetyMode: "safe" })}
+            checked={config.runtime.safetyMode === RUNTIME_SAFETY_MODE.safe}
+            onChange={() => updateRuntime({ safetyMode: RUNTIME_SAFETY_MODE.safe })}
           />
           Safe mode (recommended)
         </label>
         <label>
           <input
             type="radio"
-            checked={config.runtime.safetyMode === "power"}
+            checked={config.runtime.safetyMode === RUNTIME_SAFETY_MODE.power}
             onChange={() => setPowerArmed(true)}
           />
           Power mode: high-risk broad local access for trusted workspaces only
         </label>
-        {powerArmed && config.runtime.safetyMode !== "power" ? (
+        {powerArmed && config.runtime.safetyMode !== RUNTIME_SAFETY_MODE.power ? (
           <div className="power-confirmation" role="alert">
             <p>
               Power mode can run commands and file changes without asking, with broad local
               filesystem access.
             </p>
-            <button type="button" onClick={() => updateRuntime({ safetyMode: "power" })}>
+            <button
+              type="button"
+              onClick={() => updateRuntime({ safetyMode: RUNTIME_SAFETY_MODE.power })}
+            >
               Enable Power mode
             </button>
             <button type="button" onClick={() => setPowerArmed(false)}>

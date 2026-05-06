@@ -29,13 +29,11 @@ describe("pet UI helpers", () => {
     vi.useFakeTimers();
     const tick = () => act(() => vi.advanceTimersByTime(25));
     const { rerender } = render(<TypewriterHarness text="Hello" />);
-    // Step through three chained timeouts to reveal three chars.
     tick();
     tick();
     tick();
     const partial = screen.getByTestId("typed").textContent ?? "";
     expect(partial.length).toBeGreaterThanOrEqual(3);
-    // Append more text mid-stream — must NOT reset to zero.
     rerender(<TypewriterHarness text="Hello, world!" />);
     expect(screen.getByTestId("typed").textContent).toBe(partial);
     for (let i = 0; i < 40; i++) tick();
@@ -49,7 +47,6 @@ describe("pet UI helpers", () => {
     for (let i = 0; i < 8; i++) tick();
     expect(screen.getByTestId("typed")).toHaveTextContent("Hello");
     rerender(<TypewriterHarness text="Different" />);
-    // After replacement we should drop back to empty before re-typing.
     expect(screen.getByTestId("typed").textContent).toBe("");
     for (let i = 0; i < 14; i++) tick();
     expect(screen.getByTestId("typed")).toHaveTextContent("Different");

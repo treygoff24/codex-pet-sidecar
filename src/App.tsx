@@ -1,25 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PetLibrary } from "./domain/petLibrary";
-import { isTuckActive, type InstalledPet, type PetConfig } from "./domain/petConfig";
-import type { ApprovalRequest } from "./domain/runtimeEvents";
+import {
+  isTuckActive,
+  type InstalledPet,
+  type PetConfig,
+  type TuckUntilInput,
+} from "./domain/petConfig";
+import type { ApprovalAction, ApprovalRequest } from "./domain/runtimeEvents";
 import { useRuntimeRestart } from "./hooks/useRuntimeRestart";
-import { runtimeBridge, type ApprovalAction, type SkillPrompt } from "./runtimeBridge";
+import { runtimeBridge, type SkillPrompt } from "./runtimeBridge";
 import { OnboardingFlow } from "./ui/OnboardingFlow";
 import { PetPicker } from "./ui/PetPicker";
 import { PetWindow } from "./ui/PetWindow";
 import "./styles.css";
 
+function hasStringMessage(value: unknown): value is { message: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "message" in value &&
+    typeof value.message === "string"
+  );
+}
+
 function formatError(caught: unknown): string {
   if (caught instanceof Error) return caught.message;
   if (typeof caught === "string") return caught;
-  if (
-    caught &&
-    typeof caught === "object" &&
-    "message" in caught &&
-    typeof (caught as { message: unknown }).message === "string"
-  ) {
-    return (caught as { message: string }).message;
-  }
+  if (hasStringMessage(caught)) return caught.message;
   try {
     return JSON.stringify(caught);
   } catch {
@@ -150,7 +157,7 @@ function App() {
     if (config) setConfig({ ...config, mute: { until } });
   }
 
-  async function tuck(until: string | null) {
+  async function tuck(until: TuckUntilInput) {
     await runtimeBridge.tuckPet(until);
     if (config) setConfig({ ...config, tuck: { tucked: true, tuckedUntil: until ?? undefined } });
   }

@@ -3,21 +3,26 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type { PetLibrary } from "./domain/petLibrary";
-import type { InstalledPet, PetConfig, TuckState } from "./domain/petConfig";
-import type { PetAgentEvent, RuntimeSession } from "./domain/runtimeEvents";
-
-export type ApprovalAction = "allow_once" | "allow_session" | "deny";
+import type { InstalledPet, PetConfig, TuckState, TuckUntilInput } from "./domain/petConfig";
+import type { ApprovalAction, PetAgentEvent, RuntimeSession } from "./domain/runtimeEvents";
 
 export type SkillPrompt = {
   skill: string;
   prompt: string;
 };
 
-export type PetVisibilityState = {
-  tucked: boolean;
-  tuckedUntil?: string;
+type PetVisibilityState = TuckState & {
   visible: boolean;
 };
+
+async function pickSingleDirectory(opts?: { defaultPath?: string; title?: string }) {
+  const result = await openDialog({
+    directory: true,
+    multiple: false,
+    ...opts,
+  });
+  return typeof result === "string" ? result : null;
+}
 
 export const runtimeBridge = {
   listInstalledPets: () => invoke<InstalledPet[]>("list_installed_pets"),
@@ -32,8 +37,7 @@ export const runtimeBridge = {
   sendUserMessage: (text: string) => invoke<void>("send_user_message", { text }),
   interruptTurn: () => invoke<void>("interrupt_turn"),
   setMuteUntil: (until: string | null) => invoke<void>("set_mute_until", { until }),
-  tuckPet: (until: TuckState["tuckedUntil"] | null) =>
-    invoke<PetVisibilityState>("tuck_pet", { until }),
+  tuckPet: (until: TuckUntilInput) => invoke<PetVisibilityState>("tuck_pet", { until }),
   wakePet: () => invoke<PetVisibilityState>("wake_pet"),
   getPetVisibilityState: () => invoke<PetVisibilityState | null>("get_pet_visibility_state"),
   respondToApproval: (requestId: string, action: ApprovalAction) =>
@@ -41,28 +45,12 @@ export const runtimeBridge = {
   onPetEvent: (handler: (event: PetAgentEvent) => void): Promise<UnlistenFn> =>
     listen<PetAgentEvent>("pet://event", (event) => handler(event.payload)),
   startWindowDrag: () => getCurrentWindow().startDragging(),
-  petAssetUrl: (path: string) => {
-    try {
-      return convertFileSrc(path);
-    } catch {
-      return path;
-    }
-  },
-  pickDirectory: async (opts?: { defaultPath?: string }): Promise<string | null> => {
-    const result = await openDialog({
-      directory: true,
-      multiple: false,
-      defaultPath: opts?.defaultPath,
-    });
-    return typeof result === "string" ? result : null;
-  },
+  petAssetUrl: (path: string) => convertFileSrc(path),
+  pickDirectory: (opts?: { defaultPath?: string }): Promise<string | null> =>
+    pickSingleDirectory({ defaultPath: opts?.defaultPath }),
   /** Convenience wrapper: pick a staged-pet folder, defaulting to ~/Documents. */
-  pickPetFolder: async (): Promise<string | null> => {
-    const result = await openDialog({
-      directory: true,
-      multiple: false,
+  pickPetFolder: (): Promise<string | null> =>
+    pickSingleDirectory({
       title: "Choose a staged pet folder",
-    });
-    return typeof result === "string" ? result : null;
-  },
+    }),
 };
