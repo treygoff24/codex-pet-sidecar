@@ -21,32 +21,37 @@ function petConfig(overrides: Partial<PetConfig> = {}): PetConfig {
       includeScreenshot: false,
       retainScreenshots: false,
     },
-    proactive: { enabled: true, minMinutesBetweenMessages: 10 },
     runtime: { sessionPersistence: "ephemeral", safetyMode: "safe" },
     ...overrides,
   };
 }
 
 describe("SettingsPanel", () => {
-  it("keeps workspace cwd editable", async () => {
+  it("commits the workspace folder via the directory picker", async () => {
     const config = petConfig({ workspaceCwd: "/old" });
     const onChange = vi.fn();
-    function Harness() {
-      const [current, setCurrent] = useState(config);
-      return (
-        <SettingsPanel
-          config={current}
-          onChange={(next) => {
-            onChange(next);
-            setCurrent(next);
-          }}
-        />
-      );
-    }
-    render(<Harness />);
-    await userEvent.clear(screen.getByLabelText("Workspace folder"));
-    await userEvent.type(screen.getByLabelText("Workspace folder"), "/new");
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ workspaceCwd: "/new" }));
+    const pickDirectory = vi.fn().mockResolvedValue("/new");
+    render(<SettingsPanel config={config} onChange={onChange} pickDirectory={pickDirectory} />);
+    await userEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    expect(pickDirectory).toHaveBeenCalledWith({ defaultPath: "/old" });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ workspaceCwd: "/new" }));
+  });
+
+  it("does not call onChange when the directory picker is cancelled", async () => {
+    const onChange = vi.fn();
+    const pickDirectory = vi.fn().mockResolvedValue(null);
+    render(
+      <SettingsPanel config={petConfig()} onChange={onChange} pickDirectory={pickDirectory} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("clears workspace cwd back to the default", async () => {
+    const onChange = vi.fn();
+    render(<SettingsPanel config={petConfig({ workspaceCwd: "/repo" })} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: "Use default" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ workspaceCwd: undefined }));
   });
 
   it("updates ambient awareness settings", async () => {

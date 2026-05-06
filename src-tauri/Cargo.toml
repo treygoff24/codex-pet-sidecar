@@ -32,6 +32,7 @@ regex = "1"
 dirs = "6"
 time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
 image = { version = "0.25", default-features = false, features = ["webp"] }
+tauri-plugin-dialog = "2"
 
 [dev-dependencies]
 tempfile = "3"

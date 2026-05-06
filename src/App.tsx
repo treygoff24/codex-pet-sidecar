@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PetLibrary } from "./domain/petLibrary";
 import { isTuckActive, type InstalledPet, type PetConfig } from "./domain/petConfig";
 import type { ApprovalRequest } from "./domain/runtimeEvents";
+import { useRuntimeRestart } from "./hooks/useRuntimeRestart";
 import { runtimeBridge, type ApprovalAction, type SkillPrompt } from "./runtimeBridge";
 import { OnboardingFlow } from "./ui/OnboardingFlow";
 import { PetPicker } from "./ui/PetPicker";
@@ -29,7 +30,12 @@ function formatError(caught: unknown): string {
 function App() {
   const [library, setLibrary] = useState<PetLibrary>();
   const [pets, setPets] = useState<InstalledPet[]>([]);
+  // `config` is the optimistic UI mirror of the pet config — updated immediately
+  // on user edits so controlled inputs stay snappy.
+  // `appliedConfig` only advances after the disk write resolves; the runtime
+  // restart effect keys on it, so we never restart against a stale on-disk state.
   const [config, setConfig] = useState<PetConfig | null>(null);
+  const [appliedConfig, setAppliedConfig] = useState<PetConfig | null>(null);
   const [streamingText, setStreamingText] = useState("");
   const [lastReply, setLastReply] = useState("");
   const [transcript, setTranscript] = useState<string[]>([]);
@@ -46,6 +52,7 @@ function App() {
     ]);
     setLibrary(nextLibrary);
     setConfig(nextConfig);
+    setAppliedConfig(nextConfig);
     setPets(installedPets);
   }
 
@@ -116,10 +123,8 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!config?.petId || isTuckActive(config.tuck)) return;
-    runtimeBridge.startPetRuntime().catch((caught: unknown) => setError(formatError(caught)));
-  }, [config]);
+  const handleRestartError = useCallback((caught: unknown) => setError(formatError(caught)), []);
+  useRuntimeRestart(appliedConfig, runtimeBridge.startPetRuntime, handleRestartError);
 
   const selectedPet = useMemo(
     () => pets.find((pet) => pet.id === config?.petId),
@@ -135,8 +140,9 @@ function App() {
   }
 
   async function updateConfig(nextConfig: PetConfig) {
-    setConfig(nextConfig);
-    await runtimeBridge.savePetConfig(nextConfig);
+    setConfig(nextConfig); // optimistic UI
+    await runtimeBridge.savePetConfig(nextConfig); // wait for disk
+    setAppliedConfig(nextConfig); // restart-eligible only after save resolves
   }
 
   async function mute(until: string) {
@@ -176,13 +182,29 @@ function App() {
     }
   }
 
+  // Both the onboarding "Import existing Codex pet" button and the in-app
+  // toolbar "Import pet" button route here. The dialog plugin handles cancel
+  // (returns null), the import command itself rejects invalid packages with
+  // good error messages, so we just surface whatever comes back.
+  async function handleImportPet() {
+    setError(undefined);
+    try {
+      const folder = await runtimeBridge.pickPetFolder();
+      if (!folder) return;
+      await runtimeBridge.importPet(folder);
+      await refreshState();
+    } catch (caught) {
+      setError(formatError(caught));
+    }
+  }
+
   if (!library || !config) {
     if (pets.length > 0) return <PetPicker pets={pets} onPick={(pet) => void switchPet(pet.id)} />;
     return (
       <OnboardingFlow
         onUseOlive={() => void refreshState()}
         onHatch={() => void showSkillPrompt(runtimeBridge.startHatchingFlow)}
-        onImport={() => setError("Use Import pet from the pet library after staging a package.")}
+        onImport={() => void handleImportPet()}
       />
     );
   }
@@ -211,11 +233,7 @@ function App() {
       onConfigChange={updateConfig}
       onSwitchPet={switchPet}
       onHatchPet={() => void showSkillPrompt(runtimeBridge.startHatchingFlow)}
-      onImportPet={() =>
-        setError(
-          "Choose a staged pet folder from a future file picker or call import_pet with a path.",
-        )
-      }
+      onImportPet={() => void handleImportPet()}
       onImprovePersonality={() => void showSkillPrompt(runtimeBridge.startPersonalityFlow)}
       onApproval={respond}
       onStartDrag={runtimeBridge.startWindowDrag}

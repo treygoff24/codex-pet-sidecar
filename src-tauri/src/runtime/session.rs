@@ -91,7 +91,10 @@ impl RuntimeSessionManager {
         let thread_id = thread
             .pointer("/thread/id")
             .and_then(Value::as_str)
-            .unwrap_or_default()
+            .ok_or_else(|| AppError::JsonRpc {
+                method: "thread/start".into(),
+                message: "response missing /thread/id".into(),
+            })?
             .to_string();
         let effective_model = thread
             .get("model")
@@ -112,11 +115,15 @@ impl RuntimeSessionManager {
         let tracker_for_task = Arc::clone(&tracker);
         tokio::spawn(async move {
             while let Some(event) = wire_rx.recv().await {
+                // Only track approvals we know how to act on. Unknown kinds
+                // are auto-declined inside map_wire_event and never reach the
+                // user, so registering them in pending_approvals would just
+                // leak entries that are never popped.
                 if let WireEvent::ServerRequest { id, ref method, .. } = event {
-                    pending_for_task
-                        .lock()
-                        .await
-                        .insert(id.to_string(), kind_for_method(method));
+                    let kind = kind_for_method(method);
+                    if kind != ApprovalKind::Unknown {
+                        pending_for_task.lock().await.insert(id.to_string(), kind);
+                    }
                 }
                 if let Some(runtime_event) =
                     map_wire_event(event, &client_for_events, &tracker_for_task).await
@@ -152,7 +159,10 @@ impl RuntimeSessionManager {
                 .take_active_ambient_turns()
                 .into_iter()
                 .map(|(turn_id, state)| {
-                    cleanup_ambient_screenshot(&state);
+                    cleanup_screenshot_file(
+                        state.cleanup_screenshot_after_turn,
+                        state.screenshot_path.as_deref(),
+                    );
                     turn_id
                 })
                 .collect()
@@ -303,12 +313,14 @@ impl TurnTracker {
     }
 }
 
-fn cleanup_ambient_screenshot(state: &AmbientTurnState) {
-    if state.cleanup_screenshot_after_turn {
-        if let Some(path) = &state.screenshot_path {
-            let _ = std::fs::remove_file(path);
-        }
+/// Remove an ambient screenshot if the turn requested cleanup. No-op if cleanup
+/// wasn't requested, the path is missing, or the file is already gone.
+pub(crate) fn cleanup_screenshot_file(cleanup: bool, path: Option<&std::path::Path>) {
+    if !cleanup {
+        return;
     }
+    let Some(path) = path else { return };
+    let _ = std::fs::remove_file(path);
 }
 
 enum CompletedTurn {
@@ -367,15 +379,10 @@ fn thread_start_params(request: &StartPetSessionRequest) -> AppResult<Value> {
 }
 
 fn runtime_permissions(config: &RuntimeConfig) -> AppResult<(&'static str, &'static str)> {
-    match config.safety_mode {
-        RuntimeSafetyMode::Safe => {
-            if SAFE_APPROVAL_POLICY.is_empty() || SAFE_SANDBOX != "workspace-write" {
-                return Err(AppError::SafeRuntimeUnavailable);
-            }
-            Ok((SAFE_APPROVAL_POLICY, SAFE_SANDBOX))
-        }
-        RuntimeSafetyMode::Power => Ok(("never", "danger-full-access")),
-    }
+    Ok(match config.safety_mode {
+        RuntimeSafetyMode::Safe => (SAFE_APPROVAL_POLICY, SAFE_SANDBOX),
+        RuntimeSafetyMode::Power => ("never", "danger-full-access"),
+    })
 }
 
 fn pet_thread_config_overrides() -> Value {
@@ -432,11 +439,18 @@ async fn map_wire_event(
             })
         }
         WireEvent::ServerRequest { id, method, params } => {
-            let request = approval_request(id, &method, &params);
             if kind_for_method(&method) == ApprovalKind::Unknown {
+                // Auto-decline unknown approval methods so the server isn't
+                // left waiting, and don't surface a dialog the user can't act
+                // on. Logged so a maintainer can spot a kind we should be
+                // classifying.
                 let _ = client.respond(id, json!({"decision":"decline"})).await;
+                eprintln!("warning: auto-declined approval for unknown method `{method}`");
+                return None;
             }
-            Some(RuntimeEvent::ApprovalRequest { request })
+            Some(RuntimeEvent::ApprovalRequest {
+                request: approval_request(id, &method, &params),
+            })
         }
         WireEvent::Error(message) => {
             clear_tracker_on_error(tracker).await;
@@ -452,16 +466,18 @@ async fn clear_tracker_on_error(tracker: &Arc<Mutex<TurnTracker>>) {
         guard.clear()
     };
     for state in drained {
-        cleanup_ambient_screenshot(&state);
+        cleanup_screenshot_file(
+            state.cleanup_screenshot_after_turn,
+            state.screenshot_path.as_deref(),
+        );
     }
 }
 
 fn ambient_turn_event(turn: AmbientTurnState) -> Option<RuntimeEvent> {
-    if turn.cleanup_screenshot_after_turn {
-        if let Some(path) = &turn.screenshot_path {
-            let _ = std::fs::remove_file(path);
-        }
-    }
+    cleanup_screenshot_file(
+        turn.cleanup_screenshot_after_turn,
+        turn.screenshot_path.as_deref(),
+    );
     parse_ambient_decision(&turn.buffer).and_then(|message| {
         if message.trim().is_empty() {
             None
@@ -674,26 +690,22 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_ambient_screenshot_removes_file_only_when_flagged() {
+    fn cleanup_screenshot_file_removes_file_only_when_flagged() {
         let dir = tempfile::tempdir().expect("tempdir");
         let keep = dir.path().join("keep.jpg");
         let drop = dir.path().join("drop.jpg");
         std::fs::write(&keep, b"x").expect("write keep");
         std::fs::write(&drop, b"x").expect("write drop");
 
-        cleanup_ambient_screenshot(&AmbientTurnState {
-            buffer: String::new(),
-            screenshot_path: Some(keep.clone()),
-            cleanup_screenshot_after_turn: false,
-        });
-        cleanup_ambient_screenshot(&AmbientTurnState {
-            buffer: String::new(),
-            screenshot_path: Some(drop.clone()),
-            cleanup_screenshot_after_turn: true,
-        });
+        cleanup_screenshot_file(false, Some(keep.as_path()));
+        cleanup_screenshot_file(true, Some(drop.as_path()));
 
         assert!(keep.exists());
         assert!(!drop.exists());
+
+        // Missing path and missing file are both no-ops.
+        cleanup_screenshot_file(true, None);
+        cleanup_screenshot_file(true, Some(dir.path().join("never-existed.jpg").as_path()));
     }
 
     #[test]

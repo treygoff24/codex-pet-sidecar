@@ -20,4 +20,9 @@ describe("isTuckActive", () => {
     ).toBe(true);
     expect(isTuckActive({ tucked: true })).toBe(true);
   });
+
+  it("treats unparseable timestamps as expired so the user can wake the pet", () => {
+    expect(isTuckActive({ tucked: true, tuckedUntil: "not a date" })).toBe(false);
+    expect(isTuckActive({ tucked: true, tuckedUntil: "" })).toBe(true); // empty string still falls through to "no until" branch
+  });
 });

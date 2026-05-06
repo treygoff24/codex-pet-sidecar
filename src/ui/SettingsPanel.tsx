@@ -1,16 +1,20 @@
 import { useState } from "react";
 import type { PetConfig } from "../domain/petConfig";
+import { runtimeBridge } from "../runtimeBridge";
 
 export function SettingsPanel({
   config,
   onChange,
   onImprovePersonality,
   onResetPersonality,
+  pickDirectory = runtimeBridge.pickDirectory,
 }: {
   config: PetConfig;
   onChange: (config: PetConfig) => void;
   onImprovePersonality?: () => void;
   onResetPersonality?: () => void;
+  /** Injectable for tests; defaults to the real Tauri dialog primitive. */
+  pickDirectory?: (opts?: { defaultPath?: string }) => Promise<string | null>;
 }) {
   const [powerArmed, setPowerArmed] = useState(false);
   const updateAmbient = (ambient: Partial<PetConfig["ambient"]>) =>
@@ -41,16 +45,28 @@ export function SettingsPanel({
           </button>
         ) : null}
       </div>
-      <label>
-        Workspace folder
-        <input
-          value={config.workspaceCwd ?? ""}
-          placeholder="Optional; defaults to an app-owned scratch workspace"
-          onChange={(event) =>
-            onChange({ ...config, workspaceCwd: event.currentTarget.value || undefined })
-          }
-        />
-      </label>
+      <div className="workspace-picker">
+        <span className="workspace-picker__label">Workspace folder</span>
+        <p className="workspace-picker__value">
+          {config.workspaceCwd ?? "Default — an app-owned scratch workspace"}
+        </p>
+        <div className="workspace-picker__actions">
+          <button
+            type="button"
+            onClick={async () => {
+              const picked = await pickDirectory({ defaultPath: config.workspaceCwd });
+              if (picked) onChange({ ...config, workspaceCwd: picked });
+            }}
+          >
+            Choose folder
+          </button>
+          {config.workspaceCwd ? (
+            <button type="button" onClick={() => onChange({ ...config, workspaceCwd: undefined })}>
+              Use default
+            </button>
+          ) : null}
+        </div>
+      </div>
       <fieldset>
         <legend>Runtime safety</legend>
         <label>

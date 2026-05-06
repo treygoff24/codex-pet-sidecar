@@ -26,6 +26,7 @@ pub fn run() {
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<RuntimeEvent>();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::new(paths, event_tx))
         .setup(|app| {
             tray::setup_tray(app)?;

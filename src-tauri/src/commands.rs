@@ -306,14 +306,6 @@ async fn handle_observations(
     }
 }
 
-fn cleanup_unused_screenshot(cleanup_after_turn: bool, path: Option<&std::path::Path>) {
-    if cleanup_after_turn {
-        if let Some(path) = path {
-            let _ = std::fs::remove_file(path);
-        }
-    }
-}
-
 async fn start_ambient_turn(
     state: &tauri::State<'_, AppState>,
     config: &PetConfig,
@@ -337,7 +329,10 @@ async fn start_ambient_turn(
         })
         .await;
     if !matches!(turn_started, Ok(true)) {
-        cleanup_unused_screenshot(cleanup_screenshot_after_turn, screenshot_path.as_deref());
+        crate::runtime::session::cleanup_screenshot_file(
+            cleanup_screenshot_after_turn,
+            screenshot_path.as_deref(),
+        );
         return false;
     }
     true
@@ -382,7 +377,14 @@ fn tuck_is_active(config: &PetConfig) -> bool {
         None => true,
         Some(until) => OffsetDateTime::parse(until, &time::format_description::well_known::Rfc3339)
             .map(|time| time > OffsetDateTime::now_utc())
-            .unwrap_or(true),
+            .unwrap_or_else(|_| {
+                // Bad timestamp shouldn't strand the user with a permanently
+                // tucked pet. Treat as expired and surface a warning.
+                eprintln!(
+                    "warning: tucked_until is not a valid RFC3339 timestamp; treating as expired"
+                );
+                false
+            }),
     }
 }
 

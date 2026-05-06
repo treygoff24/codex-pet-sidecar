@@ -1,6 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type { PetLibrary } from "./domain/petLibrary";
 import type { InstalledPet, PetConfig, TuckState } from "./domain/petConfig";
 import type { PetAgentEvent, RuntimeSession } from "./domain/runtimeEvents";
@@ -46,5 +47,22 @@ export const runtimeBridge = {
     } catch {
       return path;
     }
+  },
+  pickDirectory: async (opts?: { defaultPath?: string }): Promise<string | null> => {
+    const result = await openDialog({
+      directory: true,
+      multiple: false,
+      defaultPath: opts?.defaultPath,
+    });
+    return typeof result === "string" ? result : null;
+  },
+  /** Convenience wrapper: pick a staged-pet folder, defaulting to ~/Documents. */
+  pickPetFolder: async (): Promise<string | null> => {
+    const result = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Choose a staged pet folder",
+    });
+    return typeof result === "string" ? result : null;
   },
 };

@@ -3,12 +3,17 @@ import { FormEvent, useState } from "react";
 export function ChatInputBar({
   onSend,
   disabled,
-  placeholder = "talk to olive…",
+  petName,
+  placeholder,
 }: {
   onSend: (text: string) => Promise<void> | void;
   disabled?: boolean;
+  /** Display name of the active pet, used to personalize the placeholder. */
+  petName?: string;
+  /** Explicit override; takes precedence over `petName`. */
   placeholder?: string;
 }) {
+  const effectivePlaceholder = placeholder ?? `talk to ${petName ?? "your pet"}…`;
   const [text, setText] = useState("");
 
   async function submit(event: FormEvent) {
@@ -34,7 +39,7 @@ export function ChatInputBar({
         id="pet-chat-input"
         value={text}
         onChange={(event) => setText(event.currentTarget.value)}
-        placeholder={placeholder}
+        placeholder={effectivePlaceholder}
         disabled={disabled}
         autoComplete="off"
       />

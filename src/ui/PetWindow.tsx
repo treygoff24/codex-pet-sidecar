@@ -194,7 +194,7 @@ export function PetWindow({
         </button>
       </div>
 
-      <ChatInputBar onSend={handleSend} />
+      <ChatInputBar onSend={handleSend} petName={pet?.displayName ?? config.displayName} />
 
       {muteOpen ? (
         <div className="mute-popover" role="dialog" aria-label="Snooze options">

@@ -37,10 +37,6 @@ export type PetConfig = {
     includeScreenshot: boolean;
     retainScreenshots: boolean;
   };
-  proactive: {
-    enabled: boolean;
-    minMinutesBetweenMessages: number;
-  };
   runtime: RuntimeConfig;
 };
 
@@ -60,6 +56,8 @@ export function isTuckActive(tuck: TuckState, now = new Date()): boolean {
   if (!tuck.tucked) return false;
   if (!tuck.tuckedUntil) return true;
   const until = Date.parse(tuck.tuckedUntil);
-  if (Number.isNaN(until)) return true;
+  // Treat unparseable timestamps as expired so the user can wake the pet.
+  // Mirrors the Rust-side fallback in commands::tuck_is_active.
+  if (Number.isNaN(until)) return false;
   return until > now.getTime();
 }

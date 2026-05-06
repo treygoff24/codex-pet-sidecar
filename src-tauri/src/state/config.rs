@@ -18,7 +18,6 @@ pub struct PetConfig {
     pub observers: ObserverConfig,
     #[serde(default = "default_ambient_config")]
     pub ambient: AmbientConfig,
-    pub proactive: ProactiveConfig,
     #[serde(default)]
     pub runtime: RuntimeConfig,
 }
@@ -77,13 +76,6 @@ pub struct ObserverConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct ProactiveConfig {
-    pub enabled: bool,
-    pub min_minutes_between_messages: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 pub struct AmbientConfig {
     pub enabled: bool,
     pub interval_minutes: u64,
@@ -127,10 +119,6 @@ pub fn default_pet_config(
             idle: false,
         },
         ambient: default_ambient_config(),
-        proactive: ProactiveConfig {
-            enabled: true,
-            min_minutes_between_messages: 10,
-        },
         runtime: RuntimeConfig::default(),
     }
 }
@@ -238,6 +226,9 @@ mod tests {
 
     #[test]
     fn old_config_loads_with_default_ambient_runtime_and_tuck_settings() {
+        // Includes a now-removed `proactive` key — serde must ignore it
+        // cleanly so existing user configs on disk keep loading after the
+        // ProactiveConfig removal.
         let payload = serde_json::json!({
             "petId": "olive",
             "displayName": "Olive",
@@ -261,6 +252,11 @@ mod tests {
         assert_eq!(loaded.ambient.effective_interval_minutes(), 15);
         assert!(!loaded.tuck.tucked);
         assert_eq!(loaded.runtime.safety_mode, RuntimeSafetyMode::Safe);
+
+        // The `proactive` key must not survive a round-trip — proves the
+        // field is genuinely removed, not just unread.
+        let reserialized = serde_json::to_value(&loaded).expect("reserialize");
+        assert!(reserialized.get("proactive").is_none());
     }
 
     #[test]
@@ -282,10 +278,6 @@ mod tests {
                 "intervalMinutes": 4,
                 "includeScreenshot": true,
                 "retainScreenshots": true
-            },
-            "proactive": {
-                "enabled": true,
-                "minMinutesBetweenMessages": 10
             }
         });
         let loaded: PetConfig = serde_json::from_value(payload).expect("config loads");
@@ -325,10 +317,6 @@ mod tests {
                     "intervalMinutes": 15,
                     "includeScreenshot": false,
                     "retainScreenshots": false
-                },
-                "proactive": {
-                    "enabled": true,
-                    "minMinutesBetweenMessages": 10
                 }
             })
             .to_string(),
