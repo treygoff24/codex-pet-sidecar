@@ -3,31 +3,45 @@ import { formatMemoryForBaseInstructions } from "../memory";
 import { canSendProactiveMessage, isMuted, muteUntilForChoice } from "../rateLimit";
 
 describe("rate limiting and memory formatting", () => {
-  const now = new Date("2026-05-05T15:00:00.000Z");
+  const now = new Date(2026, 4, 5, 11, 0, 0, 0);
 
   it("honors active mute and ignores malformed mute timestamps", () => {
-    expect(isMuted(now, "2026-05-05T15:01:00.000Z")).toBe(true);
-    expect(isMuted(now, "2026-05-05T14:59:00.000Z")).toBe(false);
+    expect(isMuted(now, new Date(now.getTime() + 60_000).toISOString())).toBe(true);
+    expect(isMuted(now, new Date(now.getTime() - 60_000).toISOString())).toBe(false);
     expect(isMuted(now, "not-a-date")).toBe(false);
   });
 
   it("calculates the exact mute choices", () => {
-    expect(muteUntilForChoice("30m", now)).toBe("2026-05-05T15:30:00.000Z");
-    expect(muteUntilForChoice("2h", now)).toBe("2026-05-05T17:00:00.000Z");
-    expect(muteUntilForChoice("tomorrow", now)).toBe("2026-05-06T13:00:00.000Z");
+    expect(muteUntilForChoice("30m", now)).toBe(new Date(2026, 4, 5, 11, 30, 0, 0).toISOString());
+    expect(muteUntilForChoice("2h", now)).toBe(new Date(2026, 4, 5, 13, 0, 0, 0).toISOString());
+    expect(muteUntilForChoice("tomorrow", now)).toBe(
+      new Date(2026, 4, 6, 9, 0, 0, 0).toISOString(),
+    );
   });
 
   it("enforces the 10-minute proactive floor", () => {
     expect(canSendProactiveMessage({ now, minMinutes: 10 })).toBe(true);
     expect(
-      canSendProactiveMessage({ now, minMinutes: 10, lastSentAt: "2026-05-05T14:51:00.000Z" }),
+      canSendProactiveMessage({
+        now,
+        minMinutes: 10,
+        lastSentAt: new Date(now.getTime() - 9 * 60_000).toISOString(),
+      }),
     ).toBe(false);
     expect(
-      canSendProactiveMessage({ now, minMinutes: 10, lastSentAt: "2026-05-05T14:50:00.000Z" }),
+      canSendProactiveMessage({
+        now,
+        minMinutes: 10,
+        lastSentAt: new Date(now.getTime() - 10 * 60_000).toISOString(),
+      }),
     ).toBe(true);
     expect(canSendProactiveMessage({ now, minMinutes: 10, lastSentAt: "bad" })).toBe(true);
     expect(
-      canSendProactiveMessage({ now, minMinutes: 10, muteUntil: "2026-05-05T16:00:00.000Z" }),
+      canSendProactiveMessage({
+        now,
+        minMinutes: 10,
+        muteUntil: new Date(now.getTime() + 60 * 60_000).toISOString(),
+      }),
     ).toBe(false);
   });
 

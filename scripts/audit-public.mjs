@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { isAbsolute, resolve, relative } from "node:path";
 
 // Public-tree audit configuration shared by file-content and git-identity scans.
@@ -130,7 +130,7 @@ for (const file of files) {
 
   const stat = lstatSync(file);
   if (stat.isSymbolicLink()) {
-    const target = readFileSync(file, "utf8");
+    const target = readlinkSync(file);
     const resolved = resolve(file, "..", target);
     if (
       isAbsolute(target) ||

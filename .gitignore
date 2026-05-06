@@ -1,9 +1,11 @@
 node_modules/
 dist/
 .vite/
+.venv/
 .DS_Store
 *.log
 *.tmp
+.claude/
 src-tauri/target/
 
 # Local pet generation and QA artifacts

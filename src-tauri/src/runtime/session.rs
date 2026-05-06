@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
-use which::which;
 
 const PET_REASONING_EFFORT: &str = "medium";
 const DISABLED_PET_MCP_SERVERS: [&str; 4] = ["pencil", "porkbun", "resend", "serena"];
@@ -76,8 +75,7 @@ impl RuntimeSessionManager {
         event_tx: mpsc::UnboundedSender<RuntimeEvent>,
     ) -> AppResult<RuntimeSession> {
         self.shutdown().await?;
-        let codex_path = which("codex").map_err(|_| AppError::CodexNotFound)?;
-        let process = AppServerProcess::spawn_from_path(&codex_path).await?;
+        let process = AppServerProcess::spawn().await?;
         let websocket_url = process.websocket_url.clone();
         let (wire_tx, mut wire_rx) = mpsc::unbounded_channel();
         let client = JsonRpcClient::connect(&websocket_url, wire_tx).await?;

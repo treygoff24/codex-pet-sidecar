@@ -1,10 +1,10 @@
 use crate::error::{AppError, AppResult};
 use regex::Regex;
-use std::path::Path;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::time::{timeout, Duration};
+use which::which;
 
 pub struct AppServerProcess {
     pub websocket_url: String,
@@ -12,13 +12,25 @@ pub struct AppServerProcess {
 }
 
 impl AppServerProcess {
-    pub async fn spawn_from_path(codex_path: &Path) -> AppResult<Self> {
-        let mut child = Command::new(codex_path)
-            .args(["app-server", "--listen", "ws://127.0.0.1:0"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()?;
+    pub async fn spawn() -> AppResult<Self> {
+        let direct = match which("codex") {
+            Ok(codex_path) => spawn_app_server_command(Command::new(codex_path)),
+            Err(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "codex was not found on PATH",
+            )),
+        };
+        let child = match direct {
+            Ok(child) => child,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                spawn_app_server_command(login_shell_app_server_command())?
+            }
+            Err(error) => return Err(error.into()),
+        };
+        Self::from_child(child).await
+    }
+
+    async fn from_child(mut child: Child) -> AppResult<Self> {
         let stderr = child
             .stderr
             .take()
@@ -50,6 +62,20 @@ impl AppServerProcess {
         }
         Ok(())
     }
+}
+
+fn spawn_app_server_command(mut command: Command) -> std::io::Result<Child> {
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+}
+
+fn login_shell_app_server_command() -> Command {
+    let mut command = Command::new("/bin/zsh");
+    command.args(["-lc", "exec codex app-server --listen ws://127.0.0.1:0"]);
+    command
 }
 
 impl Drop for AppServerProcess {

@@ -17,6 +17,7 @@ If you want to iterate on just the frontend, `npm run dev` runs Vite alone on po
 For deeper diagnostics, the project includes:
 
 ```bash
+npm run setup:python             # needed for pet-hatching checks
 node scripts/doctor.mjs           # preflight: Node, Cargo, Codex CLI, image-gen
 npm run smoke:runtime             # exercise the Codex app-server handshake
 node scripts/smoke-skill-workflows.mjs   # check pet-hatching/personality skills

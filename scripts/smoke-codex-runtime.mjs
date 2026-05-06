@@ -37,7 +37,7 @@ function assertCodexOauthSubscription(account, authStatus) {
 
   return {
     accountType: actualAccount.type,
-    email: actualAccount.email,
+    email: actualAccount.email ? "[redacted]" : null,
     planType: actualAccount.planType,
     authMethod: authStatus.authMethod,
   };

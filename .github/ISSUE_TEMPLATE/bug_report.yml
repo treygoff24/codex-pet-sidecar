@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a reproducible problem with Codex Pet Sidecar.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Codex Pet Sidecar.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: macOS, Codex CLI, Node, Rust, and app version if known.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant logs only after removing secrets or private paths.
+      render: shell

@@ -12,7 +12,7 @@ Hobby project, not an OpenAI product. Built on Tauri 2 + React, talking to a sid
 
 ## What you need
 
-A Mac, Node + Cargo, and the Codex CLI on your `PATH`. If you don't have Codex yet, install it once:
+A Mac, Node + Cargo, Python with Pillow, and the Codex CLI on your `PATH`. If you don't have Codex yet, install it once:
 
 ```bash
 # Either:
@@ -29,6 +29,7 @@ Then sign in: run `codex` in any terminal and pick "Sign in with ChatGPT". The p
 git clone https://github.com/treygoff24/codex-pet-sidecar.git
 cd codex-pet-sidecar
 npm install
+npm run setup:python # optional unless you hatch pets
 npm run tauri:dev
 ```
 

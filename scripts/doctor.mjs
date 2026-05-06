@@ -39,12 +39,17 @@ checks.push({
 });
 
 const validateScript = "tools/pet-hatching/scripts/validate_atlas.py";
+const python =
+  process.env.PYTHON || (existsSync(".venv/bin/python") ? ".venv/bin/python" : "python3");
+const validateCheck = existsSync(validateScript) ? run(python, [validateScript, "--help"]) : null;
 checks.push({
   name: "pet-hatching-validate-help",
-  ok: existsSync(validateScript) && run("python3", [validateScript, "--help"]).ok,
-  detail: existsSync(validateScript)
-    ? "validate_atlas.py is runnable"
-    : "missing validate_atlas.py",
+  ok: Boolean(validateCheck?.ok),
+  detail: !existsSync(validateScript)
+    ? "missing validate_atlas.py"
+    : validateCheck?.ok
+      ? "validate_atlas.py is runnable"
+      : `validate_atlas.py failed; run npm run setup:python, or set PYTHON to an environment with Pillow. ${validateCheck?.stderr || validateCheck?.error}`,
 });
 
 const imageGeneration =
