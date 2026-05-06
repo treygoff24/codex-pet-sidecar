@@ -3,3 +3,7 @@ Codex Pet Sidecar includes repo-local pet hatching scripts adapted from the loca
 Bundled Olive sample pet:
 - Sprite asset: publisher-owned generated sample asset, dimensions 1536x1872.
 - Persona: fictionalized public sample copy using Riley and Morgan as sample names.
+
+Application icons:
+- Files under `src-tauri/icons/` are derived from the default Tauri 2 scaffold
+  icon set, distributed under MIT and Apache-2.0 by the Tauri project.

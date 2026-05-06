@@ -1,60 +1,63 @@
 # Codex Pet Sidecar
 
-Codex Pet Sidecar is an open-source local desktop pet for macOS. It runs as a Tauri 2 app with a React/Vite frontend, keeps pet assets and settings in the app's support directory, and talks to a sidecar-owned `codex app-server` process for optional pet conversation.
+A small desktop pet for macOS that can actually do work. Drop Olive (or one you make yourself) into the corner of your screen, click her, and have a real conversation backed by your own Codex CLI. She remembers previous chats in a memory file you control, and she can run code or take actions on your machine when you let her.
 
-Olive, a fictional imperial dog, ships as the bundled sample pet so a fresh launch has something delightful without requiring a private global pet folder.
+Hobby project, not an OpenAI product. Built on Tauri 2 + React, talking to a sidecar `codex app-server` process.
 
-## Requirements
+[![check](https://github.com/treygoff24/codex-pet-sidecar/actions/workflows/check.yml/badge.svg)](https://github.com/treygoff24/codex-pet-sidecar/actions/workflows/check.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)
 
-- macOS.
-- Node.js and npm.
-- Rust and Cargo.
-- A working Codex CLI on `PATH` for chat/runtime features.
-- Codex authentication configured by the user.
-- Optional image-generation access if you want Codex to hatch new pets.
+![Olive at the edge of the desktop](docs/screenshots/olive-hero.png)
 
-This is not an official Codex Mac app feature and does not patch or inspect the Codex Mac app bundle.
+## What you need
 
-## Quick start from source
+A Mac, Node + Cargo, and the Codex CLI on your `PATH`. If you don't have Codex yet, install it once:
 
 ```bash
+# Either:
+npm install -g @openai/codex
+# Or:
+brew install --cask codex
+```
+
+Then sign in: run `codex` in any terminal and pick "Sign in with ChatGPT". The pet uses that auth, so it works for the lifetime of your session. If you want to generate brand-new pets through the hatching workflow, you'll also want image-generation access in your Codex account, but that's optional. Olive ships with the repo so you can play immediately.
+
+## Quick start
+
+```bash
+git clone https://github.com/treygoff24/codex-pet-sidecar.git
+cd codex-pet-sidecar
 npm install
-npm run check
 npm run tauri:dev
 ```
 
-For frontend-only iteration:
+First launch puts Olive in the corner of your screen. Click her sprite to chat. Hover the top-right of her window for the toolbar (settings, mute, transcript, tuck). The menu-bar icon lets you switch pets, snooze, or quit.
 
-```bash
-npm run dev
-```
+## Safety and privacy
 
-## Safety model
+Defaults favor safety. Codex CLI runs in `workspace-write` mode with `approvalPolicy: on-request`, so the pet asks before doing anything outside its workspace. Power mode (broad local filesystem access, no per-action approval) exists but is intentionally awkward to enable; flip it on per-pet only when you trust the workspace.
 
-Public defaults use ephemeral pet sessions and a safer workspace-write runtime mode. Saved pet sessions and Power mode are explicit opt-ins. Power mode can grant broad filesystem access to Codex and should only be enabled for trusted workspaces.
+Pet sessions are ephemeral by default. Each launch is a fresh thread, with the pet's persona and memory file as the only persistent context. You can opt a pet into saved sessions if you want history threaded through Codex CLI's normal storage.
 
-## Privacy model
+Local context (active app, window title, workspace status, idle state, screenshots) is opt-in per category. Screenshots default off and require macOS Screen Recording permission. There's no telemetry. The memory file lives in your app-support directory; you can read or edit it directly.
 
-The app stores pet profiles, personality files, and memory files locally under the platform app-support directory. Observers for active app, window title, workspace status, idle state, and screenshots are controlled from settings. Screenshots are opt-in and may require macOS Screen Recording permission. The project does not include telemetry.
+## Pet library
 
-## Pet library and hatching
+The app keeps up to 20 pets in an app-owned library. Olive comes bundled and gets copied in on first launch. Switch the active pet from the toolbar; settings are per-pet.
 
-The app supports one active pet and up to 20 installed pets. Bundled Olive is copied into the app-owned pet library on first launch. New pets can be staged with the repo-local `.codex/skills/pet-hatching` workflow and imported after validation. Personality files can be edited manually or drafted with `.codex/skills/pet-personality`.
+To import a pet you've staged elsewhere, click Import in the toolbar and pick the folder. The importer rejects absolute paths, traversal, symlinks pointing outside the package, and non-regular files before exposing any assets to the app.
 
-## Useful commands
+## Make your own pet
 
-```bash
-npm run check
-npm run audit:public
-npm run audit:artifacts
-node scripts/doctor.mjs
-npm run smoke:runtime
-node scripts/smoke-skill-workflows.mjs
-```
+Hatching a brand-new pet is more involved than installing an existing one. The `tools/pet-hatching/` directory has the deterministic scripts that turn a generated image set into an installable package. `.codex/skills/pet-hatching/SKILL.md` is the assistant-driven version of the same flow. See [tools/pet-hatching/README.md](tools/pet-hatching/README.md) for the walkthrough.
 
-## Troubleshooting
+## Contributing
 
-- `codex binary was not found on PATH`: install or expose the Codex CLI before starting the runtime.
-- Safe runtime unavailable: update Codex CLI or explicitly enable Power mode only if you accept the risk.
-- No pet appears: run `npm run audit:artifacts` and confirm `assets/pets/olive` is present in source builds.
-- Screenshot awareness is text-only: grant Screen Recording permission or leave screenshot context disabled.
+Run `npm run check` before opening a PR. The full repo gate (TypeScript build, Vitest, clippy, cargo test, plus audit scripts) lives in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+For security issues, please use [private vulnerability reporting](https://github.com/treygoff24/codex-pet-sidecar/security/advisories/new) rather than a public issue.
+
+## License
+
+MIT. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

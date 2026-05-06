@@ -16,3 +16,9 @@ ambient-screenshots/
 *.mp4
 !docs/verification/assets/**/*.mp4
 !tools/**/fixtures/**/*.mp4
+
+# Internal working notes — public docs go in docs/specs, docs/skills, or docs/spikes.
+docs/plans/
+docs/verification/
+docs/reviews/
+!docs/verification/assets/
