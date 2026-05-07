@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { RUNTIME_SAFETY_MODE, SESSION_PERSISTENCE, type PetConfig } from "../domain/petConfig";
+import type { OfficialUpdateState } from "../hooks/useOfficialUpdater";
 import { runtimeBridge } from "../runtimeBridge";
 
 type PickDirectory = typeof runtimeBridge.pickDirectory;
@@ -10,6 +11,9 @@ export function SettingsPanel({
   onImprovePersonality,
   onResetPersonality,
   pickDirectory = runtimeBridge.pickDirectory,
+  updateState,
+  onCheckForUpdate,
+  onInstallUpdate,
 }: {
   config: PetConfig;
   onChange: (config: PetConfig) => void;
@@ -17,6 +21,9 @@ export function SettingsPanel({
   onResetPersonality?: () => void;
   /** Injectable for tests; defaults to the real Tauri dialog primitive. */
   pickDirectory?: PickDirectory;
+  updateState?: OfficialUpdateState;
+  onCheckForUpdate?: () => void;
+  onInstallUpdate?: () => void;
 }) {
   const [powerArmed, setPowerArmed] = useState(false);
   const updateAmbient = (ambient: Partial<PetConfig["ambient"]>) =>
@@ -47,6 +54,13 @@ export function SettingsPanel({
           </button>
         ) : null}
       </div>
+      {updateState ? (
+        <SoftwareUpdatePanel
+          updateState={updateState}
+          onCheckForUpdate={onCheckForUpdate}
+          onInstallUpdate={onInstallUpdate}
+        />
+      ) : null}
       <div className="workspace-picker">
         <span className="workspace-picker__label">Workspace folder</span>
         <p className="workspace-picker__value">
@@ -197,5 +211,61 @@ export function SettingsPanel({
         </label>
       </fieldset>
     </section>
+  );
+}
+
+function SoftwareUpdatePanel({
+  updateState,
+  onCheckForUpdate,
+  onInstallUpdate,
+}: {
+  updateState: OfficialUpdateState;
+  onCheckForUpdate?: () => void;
+  onInstallUpdate?: () => void;
+}) {
+  const percent =
+    updateState.contentLength && updateState.contentLength > 0
+      ? Math.min(100, Math.round((updateState.downloadedBytes / updateState.contentLength) * 100))
+      : undefined;
+  const busy = updateState.status === "checking" || updateState.status === "downloading";
+  return (
+    <fieldset className="software-update">
+      <legend>Software update</legend>
+      {updateState.enabled ? (
+        <>
+          <p>
+            Official release channel
+            {updateState.currentVersion ? ` · Current ${updateState.currentVersion}` : ""}
+          </p>
+          {updateState.status === "available" ? (
+            <div className="software-update__available" role="status">
+              <strong>Version {updateState.availableVersion} is available.</strong>
+              {updateState.notes ? <p>{updateState.notes}</p> : null}
+              <button type="button" onClick={onInstallUpdate} disabled={busy}>
+                Install and relaunch
+              </button>
+            </div>
+          ) : null}
+          {updateState.status === "up-to-date" ? <p>You're up to date.</p> : null}
+          {updateState.status === "downloading" ? (
+            <p role="status">Downloading update{percent == null ? "…" : `… ${percent}%`}</p>
+          ) : null}
+          {updateState.status === "relaunching" ? <p role="status">Relaunching…</p> : null}
+          {updateState.status === "error" ? (
+            <div className="software-update__error" role="alert">
+              <p>{updateState.error}</p>
+              <button type="button" onClick={onCheckForUpdate} disabled={busy}>
+                Try again
+              </button>
+            </div>
+          ) : null}
+          <button type="button" onClick={onCheckForUpdate} disabled={busy}>
+            {updateState.status === "checking" ? "Checking…" : "Check for updates"}
+          </button>
+        </>
+      ) : (
+        <p>Dev channel: update with git pull && npm ci, then restart npm run tauri:dev.</p>
+      )}
+    </fieldset>
   );
 }

@@ -48,6 +48,8 @@ const PUBLIC_REPO_URLS = [
   "https://github.com/treygoff24/codex-pet-sidecar/issues",
   "https://github.com/treygoff24/codex-pet-sidecar/security/advisories/new",
   "https://github.com/treygoff24/codex-pet-sidecar#readme",
+  "https://github.com/treygoff24/codex-pet-sidecar/releases/latest",
+  "https://github.com/treygoff24/codex-pet-sidecar/releases/latest/download/latest.json",
   "https://github.com/treygoff24/codex-pet-sidecar/actions/workflows/check.yml",
   "https://github.com/treygoff24/codex-pet-sidecar/actions/workflows/check.yml/badge.svg",
 ];

@@ -28,6 +28,13 @@ const runtimeBridgeMock = vi.hoisted(() => ({
 vi.mock("./runtimeBridge", () => ({
   runtimeBridge: runtimeBridgeMock,
 }));
+vi.mock("./hooks/useOfficialUpdater", () => ({
+  useOfficialUpdater: () => ({
+    state: { enabled: false, status: "disabled", downloadedBytes: 0 },
+    checkForUpdates: vi.fn(),
+    installUpdate: vi.fn(),
+  }),
+}));
 
 import App from "./App";
 

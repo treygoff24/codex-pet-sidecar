@@ -8,6 +8,7 @@ import {
 } from "./domain/petConfig";
 import type { ApprovalAction } from "./domain/runtimeEvents";
 import { INITIAL_RUNTIME_STATE, reduceRuntime } from "./domain/runtimeState";
+import { useOfficialUpdater } from "./hooks/useOfficialUpdater";
 import { useRuntimeRestart } from "./hooks/useRuntimeRestart";
 import { runtimeBridge, type SkillPrompt } from "./runtimeBridge";
 import { OnboardingFlow } from "./ui/OnboardingFlow";
@@ -45,6 +46,7 @@ function App() {
   const [config, setConfig] = useState<PetConfig | null>(null);
   const [appliedConfig, setAppliedConfig] = useState<PetConfig | null>(null);
   const [runtime, dispatch] = useReducer(reduceRuntime, INITIAL_RUNTIME_STATE);
+  const updater = useOfficialUpdater();
 
   async function refreshState() {
     const [nextLibrary, nextConfig, installedPets] = await Promise.all([
@@ -197,6 +199,9 @@ function App() {
       onImprovePersonality={() => void showSkillPrompt(runtimeBridge.startPersonalityFlow)}
       onApproval={respond}
       onStartDrag={runtimeBridge.startWindowDrag}
+      updateState={updater.state}
+      onCheckForUpdate={() => void updater.checkForUpdates()}
+      onInstallUpdate={() => void updater.installUpdate()}
     />
   );
 }

@@ -30,6 +30,8 @@ Implemented in `src/hooks/usePetAnimation.ts` and `src/ui/PetSprite.tsx`.
 The animation map in `src/domain/petAnimation.ts` is grounded in the local Codex Mac app
 avatar bundle (`/Applications/Codex.app/Contents/Resources/app.asar`, extracted asset
 `webview/assets/codex-avatar-*.js` on 2026-05-05).
+That extraction is development provenance only; installing or running Codex Pet
+Sidecar does not depend on the Codex Mac app bundle.
 
 Recheck the copied constants against an extracted Codex app bundle with:
 

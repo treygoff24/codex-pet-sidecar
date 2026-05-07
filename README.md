@@ -10,9 +10,14 @@ Hobby project, not an OpenAI product. Built on Tauri 2 + React, talking to a sid
 
 ![Olive at the edge of the desktop](docs/screenshots/olive-hero.png)
 
-## What you need
+## Install the official app
 
-A Mac, Node + Cargo, Python with Pillow, and the Codex CLI on your `PATH`. If you don't have Codex yet, install it once:
+Download the latest signed and notarized DMG from
+[GitHub Releases](https://github.com/treygoff24/codex-pet-sidecar/releases/latest),
+open it, and drag Codex Pet Sidecar into Applications.
+
+You still need the Codex CLI on your `PATH`. If you don't have Codex yet, install it
+once:
 
 ```bash
 # Either:
@@ -21,19 +26,43 @@ npm install -g @openai/codex
 brew install --cask codex
 ```
 
-Then sign in: run `codex` in any terminal and pick "Sign in with ChatGPT". The pet uses that auth, so it works for the lifetime of your session. If you want to generate brand-new pets through the hatching workflow, you'll also want image-generation access in your Codex account, but that's optional. Olive ships with the repo so you can play immediately.
+Then sign in: run `codex` in any terminal and pick "Sign in with ChatGPT". The pet
+uses that auth, so it works for the lifetime of your session.
 
-## Quick start
+Official installs check GitHub Releases for updates. When a new signed release is
+available, the app shows an update prompt in Settings; you choose when to install
+and relaunch.
+
+## Run from source / dev channel
+
+Use this path if you want the fastest changes from `main` or want to contribute.
+You need macOS, Node 22, Rust/Cargo, and the Codex CLI.
 
 ```bash
 git clone https://github.com/treygoff24/codex-pet-sidecar.git
 cd codex-pet-sidecar
-npm install
-npm run setup:python # optional unless you hatch pets
+npm ci
+node scripts/doctor.mjs
 npm run tauri:dev
 ```
 
-First launch puts Olive in the corner of your screen. Click her sprite to chat. Hover the top-right of her window for the toolbar (settings, mute, transcript, tuck). The menu-bar icon lets you switch pets, snooze, or quit.
+Update the dev channel with:
+
+```bash
+git pull
+npm ci
+npm run tauri:dev
+```
+
+Python with Pillow is optional unless you hatch brand-new pets:
+
+```bash
+npm run setup:python
+```
+
+First launch puts Olive in the corner of your screen. Click her sprite to chat.
+Hover the top-right of her window for the toolbar (settings, mute, transcript,
+tuck). The menu-bar icon lets you switch pets, snooze, or quit.
 
 ## Safety and privacy
 

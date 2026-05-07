@@ -586,6 +586,21 @@ button {
   font-size: 12px;
   line-height: 1.4;
 }
+.software-update__available {
+  display: grid;
+  gap: 8px;
+}
+.software-update__available strong {
+  color: var(--accent);
+  font-size: 13px;
+}
+.software-update .software-update__error,
+.software-update .software-update__error p {
+  color: #8a2d20;
+}
+.software-update button {
+  justify-self: start;
+}
 
 /* Mute popover — anchored under the snooze icon */
 
@@ -700,6 +715,20 @@ button {
   border: 1px solid rgba(180, 60, 40, 0.35);
   background: rgba(255, 240, 232, 0.95);
   color: #6d291f;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 6;
+}
+.update-prompt {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 104px;
+  border-radius: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(77, 128, 67, 0.35);
+  background: rgba(238, 250, 232, 0.95);
+  color: #28551f;
   font-size: 12px;
   cursor: pointer;
   z-index: 6;

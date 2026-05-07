@@ -3,6 +3,7 @@ import { resolvePetWindowAnimation } from "../domain/petAnimation";
 import type { InstalledPet, PetConfig, TuckUntilInput } from "../domain/petConfig";
 import type { PetLibrary } from "../domain/petLibrary";
 import type { ApprovalAction, ApprovalRequest } from "../domain/runtimeEvents";
+import type { OfficialUpdateState } from "../hooks/useOfficialUpdater";
 import { useBubbleFade } from "../hooks/useBubbleFade";
 import { useDragAnimation } from "../hooks/useDragAnimation";
 import { usePetAnimation } from "../hooks/usePetAnimation";
@@ -48,6 +49,9 @@ export function PetWindow({
   onTuck,
   onWake,
   onImprovePersonality,
+  updateState,
+  onCheckForUpdate,
+  onInstallUpdate,
 }: {
   config: PetConfig;
   tucked: boolean;
@@ -73,6 +77,9 @@ export function PetWindow({
   onTuck: (until: TuckUntilInput) => void;
   onWake: () => void;
   onImprovePersonality: () => void;
+  updateState?: OfficialUpdateState;
+  onCheckForUpdate?: () => void;
+  onInstallUpdate?: () => void;
 }) {
   // While streaming, the bubble shows live typed-out text. After streaming
   // ends, it lingers on the last completed reply so the user can actually read it.
@@ -223,6 +230,12 @@ export function PetWindow({
         </button>
       ) : null}
 
+      {updateState?.status === "available" && !settingsOpen ? (
+        <button type="button" className="update-prompt" onClick={() => setSettingsOpen(true)}>
+          Update {updateState.availableVersion} available · Open settings
+        </button>
+      ) : null}
+
       {settingsOpen ? (
         <>
           <button
@@ -246,6 +259,9 @@ export function PetWindow({
               config={config}
               onChange={onConfigChange}
               onImprovePersonality={onImprovePersonality}
+              updateState={updateState}
+              onCheckForUpdate={onCheckForUpdate}
+              onInstallUpdate={onInstallUpdate}
             />
           </section>
         </>

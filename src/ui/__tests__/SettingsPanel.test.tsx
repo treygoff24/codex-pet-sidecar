@@ -145,4 +145,58 @@ describe("SettingsPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Reset to bundled Olive" }));
     expect(onReset).toHaveBeenCalled();
   });
+
+  it("renders official update availability and calls install", async () => {
+    const onInstall = vi.fn();
+    render(
+      <SettingsPanel
+        config={petConfig()}
+        onChange={vi.fn()}
+        updateState={{
+          enabled: true,
+          status: "available",
+          currentVersion: "0.1.0",
+          availableVersion: "0.2.0",
+          notes: "Better pets",
+          downloadedBytes: 0,
+        }}
+        onInstallUpdate={onInstall}
+      />,
+    );
+
+    expect(screen.getByText("Version 0.2.0 is available.")).toBeInTheDocument();
+    expect(screen.getByText("Better pets")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Install and relaunch" }));
+    expect(onInstall).toHaveBeenCalled();
+  });
+
+  it("shows download progress with percentage", () => {
+    render(
+      <SettingsPanel
+        config={petConfig()}
+        onChange={vi.fn()}
+        updateState={{
+          enabled: true,
+          status: "downloading",
+          contentLength: 1000,
+          downloadedBytes: 250,
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/Downloading update/)).toBeInTheDocument();
+    expect(screen.getByText(/25%/)).toBeInTheDocument();
+  });
+
+  it("explains dev-channel updates when official updates are disabled", () => {
+    render(
+      <SettingsPanel
+        config={petConfig()}
+        onChange={vi.fn()}
+        updateState={{ enabled: false, status: "disabled", downloadedBytes: 0 }}
+      />,
+    );
+
+    expect(screen.getByText(/Dev channel: update with git pull/)).toBeInTheDocument();
+  });
 });

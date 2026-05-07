@@ -39,7 +39,8 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app", "dmg"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -53,5 +54,13 @@
       "../assets/pets/olive/README.md",
       "../assets/pets/olive/spritesheet.webp"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBNjc4MkQ1NjU2QTY0RkIKUldUN1pHcGwxWUpueW4ydHFFNjdEd2xwSmNHMWN0dmdaRTl5RHlIeGE1QklyTzhab0pMUDEK",
+      "endpoints": [
+        "https://github.com/treygoff24/codex-pet-sidecar/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

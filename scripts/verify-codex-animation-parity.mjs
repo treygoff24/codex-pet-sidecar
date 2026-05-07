@@ -17,7 +17,7 @@ function usage() {
   node scripts/verify-codex-animation-parity.mjs /path/to/codex-avatar-*.js
   node scripts/verify-codex-animation-parity.mjs /path/to/extracted-codex-assets-dir
 
-Extract Codex.app first, for example:
+Extract Codex.app first, for instance:
   npx --yes @electron/asar extract /Applications/Codex.app/Contents/Resources/app.asar /tmp/codex-asar-pet
   node scripts/verify-codex-animation-parity.mjs
 `);
