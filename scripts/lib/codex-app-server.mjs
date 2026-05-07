@@ -18,8 +18,9 @@ export function waitForExit(child, ms = 2_000) {
 export async function spawnAppServer(
   command = "codex",
   args = ["app-server", "--listen", "ws://127.0.0.1:0"],
+  options = {},
 ) {
-  const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], ...options });
   let stderr = "";
   const url = await new Promise((resolve, reject) => {
     const timeout = setTimeout(

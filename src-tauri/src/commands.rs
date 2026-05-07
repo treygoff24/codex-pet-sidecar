@@ -126,6 +126,7 @@ pub async fn start_pet_runtime(
                 memory_markdown,
                 memory_path,
                 workspace_cwd,
+                runtime_codex_home: state.paths.runtime_codex_home_dir(),
                 runtime: config.runtime.clone(),
             },
             state.event_tx.clone(),

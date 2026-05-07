@@ -60,9 +60,7 @@ pub fn save_library(paths: &AppPaths, library: &PetLibrary) -> AppResult<()> {
 }
 
 pub fn load_active_pet_config(paths: &AppPaths) -> AppResult<Option<PetConfig>> {
-    let Some(library) = load_library(paths)? else {
-        return Ok(None);
-    };
+    let library = ensure_library(paths)?;
     let Some(active_id) = library.active_pet_id else {
         return Ok(None);
     };
@@ -82,11 +80,11 @@ pub fn set_active_pet(paths: &AppPaths, pet_id: &str) -> AppResult<PetLibrary> {
 
 pub fn ensure_library(paths: &AppPaths) -> AppResult<PetLibrary> {
     if let Some(library) = load_library(paths)? {
-        return Ok(library);
+        return repair_library(paths, library);
     }
     let legacy = migrate_legacy_if_present(paths)?;
     if let Some(library) = legacy {
-        return Ok(library);
+        return repair_library(paths, library);
     }
     import_bundled_olive(paths)
 }
@@ -139,7 +137,7 @@ pub fn import_staged_pet(paths: &AppPaths, source_dir: &Path) -> AppResult<PetLi
 }
 
 fn import_bundled_olive(paths: &AppPaths) -> AppResult<PetLibrary> {
-    let source = bundled_olive_dir();
+    let source = paths.bundled_olive_dir.clone();
     let pet = validate_pet_package(&source)?;
     let target = copy_pet_package(&source, paths, BUNDLED_DEFAULT_PET_ID)?;
     let persona = read_to_string(&target.join("personality.md"))?;
@@ -165,6 +163,122 @@ fn import_bundled_olive(paths: &AppPaths) -> AppResult<PetLibrary> {
     };
     save_library(paths, &library)?;
     Ok(library)
+}
+
+fn repair_library(paths: &AppPaths, library: PetLibrary) -> AppResult<PetLibrary> {
+    let original = library.clone();
+    let mut repaired = PetLibrary {
+        active_pet_id: library.active_pet_id,
+        pets: Vec::new(),
+    };
+
+    for entry in library.pets {
+        validate_pet_id(&entry.pet_id)?;
+        let pet_dir = paths.pet_support_dir(&entry.pet_id);
+        match read_pet_dir(&pet_dir) {
+            Ok(Some(pet)) => {
+                ensure_pet_config(paths, &pet)?;
+                repaired.pets.push(PetLibraryEntry {
+                    display_name: pet.display_name,
+                    ..entry
+                });
+            }
+            Ok(None)
+            | Err(AppError::InvalidPetAsset { .. })
+            | Err(AppError::InvalidPetMetadata { .. }) => {}
+            Err(error) => return Err(error),
+        }
+    }
+
+    if !repaired
+        .pets
+        .iter()
+        .any(|pet| pet.pet_id == BUNDLED_DEFAULT_PET_ID)
+        && repaired.pets.len() < MAX_PETS
+    {
+        repaired.pets.push(import_bundled_olive_entry(paths)?);
+    }
+
+    let active_is_valid = repaired
+        .active_pet_id
+        .as_ref()
+        .is_some_and(|active| repaired.pets.iter().any(|pet| &pet.pet_id == active));
+    if !active_is_valid {
+        repaired.active_pet_id = repaired
+            .pets
+            .iter()
+            .find(|pet| pet.pet_id == BUNDLED_DEFAULT_PET_ID)
+            .or_else(|| repaired.pets.first())
+            .map(|pet| pet.pet_id.clone());
+    }
+
+    if repaired != original {
+        save_library(paths, &repaired)?;
+    }
+    Ok(repaired)
+}
+
+fn import_bundled_olive_entry(paths: &AppPaths) -> AppResult<PetLibraryEntry> {
+    let source = paths.bundled_olive_dir.clone();
+    let olive = validate_pet_package(&source)?;
+    copy_pet_package(&source, paths, BUNDLED_DEFAULT_PET_ID)?;
+    let persona = read_to_string(
+        &paths
+            .pet_support_dir(BUNDLED_DEFAULT_PET_ID)
+            .join("personality.md"),
+    )?;
+    let config = default_pet_config(
+        BUNDLED_DEFAULT_PET_ID.to_string(),
+        olive.display_name.clone(),
+        paths
+            .pet_support_dir(BUNDLED_DEFAULT_PET_ID)
+            .join("spritesheet.webp"),
+        persona,
+    );
+    save_pet_config(paths, BUNDLED_DEFAULT_PET_ID, &config)?;
+    let now = now_string()?;
+    Ok(PetLibraryEntry {
+        pet_id: BUNDLED_DEFAULT_PET_ID.to_string(),
+        display_name: olive.display_name,
+        source: PetSource::Bundled {
+            bundled_id: BUNDLED_DEFAULT_PET_ID.to_string(),
+        },
+        created_at: now.clone(),
+        updated_at: now,
+    })
+}
+
+fn ensure_pet_config(paths: &AppPaths, pet: &InstalledPet) -> AppResult<()> {
+    let expected_spritesheet = paths.pet_support_dir(&pet.id).join("spritesheet.webp");
+    let mut config = load_pet_config(paths, &pet.id)?.unwrap_or_else(|| {
+        default_pet_config(
+            pet.id.clone(),
+            pet.display_name.clone(),
+            expected_spritesheet.clone(),
+            read_optional_string(&paths.pet_support_dir(&pet.id).join("personality.md"))
+                .ok()
+                .flatten()
+                .unwrap_or_else(default_generic_persona),
+        )
+    });
+
+    let mut changed = false;
+    if config.pet_id != pet.id {
+        config.pet_id = pet.id.clone();
+        changed = true;
+    }
+    if config.display_name != pet.display_name {
+        config.display_name = pet.display_name.clone();
+        changed = true;
+    }
+    if config.spritesheet_path != expected_spritesheet {
+        config.spritesheet_path = expected_spritesheet;
+        changed = true;
+    }
+    if changed || !paths.pet_config_path(&pet.id).exists() {
+        save_pet_config(paths, &pet.id, &config)?;
+    }
+    Ok(())
 }
 
 fn migrate_legacy_if_present(paths: &AppPaths) -> AppResult<Option<PetLibrary>> {
@@ -213,8 +327,8 @@ fn migrate_legacy_if_present(paths: &AppPaths) -> AppResult<Option<PetLibrary>> 
         .any(|pet| pet.pet_id == BUNDLED_DEFAULT_PET_ID)
         && library.pets.len() < MAX_PETS
     {
-        let olive = validate_pet_package(&bundled_olive_dir())?;
-        copy_pet_package(&bundled_olive_dir(), paths, BUNDLED_DEFAULT_PET_ID)?;
+        let olive = validate_pet_package(&paths.bundled_olive_dir)?;
+        copy_pet_package(&paths.bundled_olive_dir, paths, BUNDLED_DEFAULT_PET_ID)?;
         let persona = read_to_string(
             &paths
                 .pet_support_dir(BUNDLED_DEFAULT_PET_ID)
@@ -327,10 +441,6 @@ fn default_generic_persona() -> String {
         .to_string()
 }
 
-fn bundled_olive_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../assets/pets/olive")
-}
-
 fn now_string() -> AppResult<String> {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
@@ -359,6 +469,12 @@ mod tests {
         .expect("manifest");
     }
 
+    fn write_bundled_olive(dir: &Path) {
+        write_pet(dir, BUNDLED_DEFAULT_PET_ID);
+        std::fs::write(dir.join("personality.md"), "bundled persona").expect("personality");
+        std::fs::write(dir.join("README.md"), "bundled readme").expect("readme");
+    }
+
     #[test]
     fn first_launch_imports_bundled_olive() {
         let root = tempdir().expect("tempdir");
@@ -384,6 +500,176 @@ mod tests {
     }
 
     #[test]
+    fn first_launch_imports_bundled_olive_from_installed_resource_dir() {
+        let root = tempdir().expect("tempdir");
+        let resource_olive = root.path().join("Resources/_up_/assets/pets/olive");
+        write_bundled_olive(&resource_olive);
+        let paths =
+            AppPaths::with_bundled_olive(root.path().join("support"), resource_olive.clone());
+
+        let library = ensure_library(&paths).expect("library");
+        let config = load_active_pet_config(&paths)
+            .expect("load")
+            .expect("config");
+
+        assert_eq!(
+            library.active_pet_id.as_deref(),
+            Some(BUNDLED_DEFAULT_PET_ID)
+        );
+        assert_eq!(config.pet_id, BUNDLED_DEFAULT_PET_ID);
+        assert_eq!(
+            config.spritesheet_path,
+            paths
+                .pet_support_dir(BUNDLED_DEFAULT_PET_ID)
+                .join("spritesheet.webp")
+        );
+        assert_ne!(
+            config.spritesheet_path,
+            resource_olive.join("spritesheet.webp")
+        );
+        assert!(paths
+            .pet_support_dir(BUNDLED_DEFAULT_PET_ID)
+            .join("personality.md")
+            .exists());
+    }
+
+    #[test]
+    fn migration_does_not_activate_stale_legacy_pet_without_package_assets() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(
+            root.path().join("codex"),
+            root.path().join("support"),
+            root.path().join("repo"),
+        );
+        let stale_dir = paths.pet_support_dir("stale");
+        std::fs::create_dir_all(&stale_dir).expect("stale dir");
+        let stale_config = default_pet_config(
+            "stale".into(),
+            "Stale".into(),
+            root.path().join("missing.webp"),
+            "stale persona".into(),
+        );
+        save_pet_config(&paths, "stale", &stale_config).expect("stale config");
+
+        let library = ensure_library(&paths).expect("library");
+        let active = load_active_pet_config(&paths)
+            .expect("active")
+            .expect("active config");
+
+        assert_eq!(
+            library.active_pet_id.as_deref(),
+            Some(BUNDLED_DEFAULT_PET_ID)
+        );
+        assert!(!library.pets.iter().any(|pet| pet.pet_id == "stale"));
+        assert_eq!(active.pet_id, BUNDLED_DEFAULT_PET_ID);
+    }
+
+    #[test]
+    fn existing_library_rehomes_missing_active_pet_to_olive() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(
+            root.path().join("codex"),
+            root.path().join("support"),
+            root.path().join("repo"),
+        );
+        write_bundled_olive(&paths.pet_support_dir(BUNDLED_DEFAULT_PET_ID));
+        let olive_config = default_pet_config(
+            BUNDLED_DEFAULT_PET_ID.into(),
+            "Olive".into(),
+            paths
+                .pet_support_dir(BUNDLED_DEFAULT_PET_ID)
+                .join("spritesheet.webp"),
+            "persona".into(),
+        );
+        save_pet_config(&paths, BUNDLED_DEFAULT_PET_ID, &olive_config).expect("olive config");
+        let now = now_string().expect("now");
+        save_library(
+            &paths,
+            &PetLibrary {
+                active_pet_id: Some("stale".into()),
+                pets: vec![
+                    PetLibraryEntry {
+                        pet_id: "stale".into(),
+                        display_name: "Stale".into(),
+                        source: PetSource::Migrated {
+                            migration_id: "library-v1".into(),
+                        },
+                        created_at: now.clone(),
+                        updated_at: now.clone(),
+                    },
+                    PetLibraryEntry {
+                        pet_id: BUNDLED_DEFAULT_PET_ID.into(),
+                        display_name: "Olive".into(),
+                        source: PetSource::Bundled {
+                            bundled_id: BUNDLED_DEFAULT_PET_ID.into(),
+                        },
+                        created_at: now.clone(),
+                        updated_at: now,
+                    },
+                ],
+            },
+        )
+        .expect("library");
+
+        let library = ensure_library(&paths).expect("repair");
+        let active = load_active_pet_config(&paths)
+            .expect("active")
+            .expect("active config");
+
+        assert_eq!(
+            library.active_pet_id.as_deref(),
+            Some(BUNDLED_DEFAULT_PET_ID)
+        );
+        assert_eq!(library.pets.len(), 1);
+        assert_eq!(active.pet_id, BUNDLED_DEFAULT_PET_ID);
+    }
+
+    #[test]
+    fn repair_rehomes_valid_pet_config_spritesheet_under_app_support() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(
+            root.path().join("codex"),
+            root.path().join("support"),
+            root.path().join("repo"),
+        );
+        let pet_dir = paths.pet_support_dir("manny");
+        write_pet(&pet_dir, "manny");
+        let mut config = default_pet_config(
+            "manny".into(),
+            "Manny".into(),
+            root.path().join("external/spritesheet.webp"),
+            "persona".into(),
+        );
+        config.workspace_cwd = Some(root.path().join("repo"));
+        save_pet_config(&paths, "manny", &config).expect("config");
+        let now = now_string().expect("now");
+        save_library(
+            &paths,
+            &PetLibrary {
+                active_pet_id: Some("manny".into()),
+                pets: vec![PetLibraryEntry {
+                    pet_id: "manny".into(),
+                    display_name: "Manny".into(),
+                    source: PetSource::Imported {
+                        original_path: None,
+                    },
+                    created_at: now.clone(),
+                    updated_at: now,
+                }],
+            },
+        )
+        .expect("library");
+
+        ensure_library(&paths).expect("repair");
+        let repaired = load_pet_config(&paths, "manny")
+            .expect("load")
+            .expect("config");
+
+        assert_eq!(repaired.spritesheet_path, pet_dir.join("spritesheet.webp"));
+        assert_eq!(repaired.workspace_cwd, config.workspace_cwd);
+    }
+
+    #[test]
     fn import_rejects_twenty_first_pet() {
         let root = tempdir().expect("tempdir");
         let paths = AppPaths::with_roots(
@@ -393,14 +679,26 @@ mod tests {
         );
         let now = now_string().unwrap();
         let pets = (0..MAX_PETS)
-            .map(|index| PetLibraryEntry {
-                pet_id: format!("pet-{index}"),
-                display_name: format!("Pet {index}"),
-                source: PetSource::Imported {
-                    original_path: None,
-                },
-                created_at: now.clone(),
-                updated_at: now.clone(),
+            .map(|index| {
+                let id = format!("pet-{index}");
+                let dir = paths.pet_support_dir(&id);
+                write_pet(&dir, &id);
+                let config = default_pet_config(
+                    id.clone(),
+                    format!("Pet {index}"),
+                    dir.join("spritesheet.webp"),
+                    "persona".into(),
+                );
+                save_pet_config(&paths, &id, &config).unwrap();
+                PetLibraryEntry {
+                    pet_id: id,
+                    display_name: format!("Pet {index}"),
+                    source: PetSource::Imported {
+                        original_path: None,
+                    },
+                    created_at: now.clone(),
+                    updated_at: now.clone(),
+                }
             })
             .collect();
         save_library(

@@ -33,6 +33,8 @@ pub enum AppError {
     InvalidPetMetadata { path: PathBuf, reason: String },
     #[error("app support directory could not be resolved")]
     MissingAppSupportDir,
+    #[error("application path could not be resolved: {0}")]
+    PathResolution(String),
     #[error("command `{0}` failed: {1}")]
     CommandFailed(String, String),
     #[error("pet {0} was not found in the library")]

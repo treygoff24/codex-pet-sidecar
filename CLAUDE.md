@@ -15,4 +15,4 @@ The repository's general conventions live in `AGENTS.md` — read it before work
 - **Format-on-edit hook is wired.** TS/TSX/JS/JSX run through `oxfmt`, Rust through `rustfmt`. If a hook fails, fix the underlying issue — don't bypass it.
 - **macOS-specific quirks:** `macOSPrivateApi: true` is required for the transparent always-on-top window. The Tauri asset protocol is scoped to bundled sample assets and the app-owned pet library — pet sprites should live in sidecar-managed pet packages.
 - Pet imports should go through the app-owned sidecar library; do not rely on a developer-local global pet folder.
-- **Disabled MCP servers in pet sessions:** `pencil`, `porkbun`, `resend`, `serena` are intentionally excluded from pet Codex threads (hardcoded in `src-tauri/src/runtime/session.rs`). Don't re-enable without a reason.
+- **Pet runtime isolation:** pet Codex threads run through an app-owned runtime home with minimal config, not the developer's global Codex MCP/plugin config. Keep this isolation intact unless there is a deliberate compatibility plan.

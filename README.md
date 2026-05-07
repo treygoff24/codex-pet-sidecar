@@ -46,12 +46,24 @@ node scripts/doctor.mjs
 npm run tauri:dev
 ```
 
+To install a local app bundle without the DMG or updater channel:
+
+```bash
+npm run install:dev
+```
+
+The dev installer builds an app-only bundle, replaces the local dev install in
+your user Applications folder, ad-hoc signs it for local testing, and preserves
+app data unless you pass `-- --reset-app-data`. Use `-- --system` to install to
+`/Applications`, or `-- --clean-other-installs` after a successful build if you
+also want to remove the non-selected install location.
+
 Update the dev channel with:
 
 ```bash
 git pull
 npm ci
-npm run tauri:dev
+npm run install:dev
 ```
 
 Python with Pillow is optional unless you hatch brand-new pets:

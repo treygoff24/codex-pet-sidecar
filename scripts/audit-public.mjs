@@ -20,6 +20,12 @@ const allowedCodexFiles = new Set([
 const allowedBinary = new Set(["assets/pets/olive/spritesheet.webp"]);
 
 const generatedProtocol = (file) => file.startsWith("protocol/app-server/");
+const codexRuntimeImplementation = (file) =>
+  [
+    "src-tauri/src/runtime/process.rs",
+    "scripts/smoke-codex-runtime.mjs",
+    "scripts/audit-public.mjs",
+  ].includes(file);
 
 // String fragments that must not appear in any tracked source content.
 // Built from concatenated tokens so this script doesn't itself trip the
@@ -187,7 +193,7 @@ for (const file of files) {
     ].join(""),
   );
   if (
-    file !== "scripts/audit-public.mjs" &&
+    !codexRuntimeImplementation(file) &&
     !generatedProtocol(file) &&
     localCodexResiduePattern.test(text)
   ) {

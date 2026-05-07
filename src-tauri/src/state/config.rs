@@ -169,10 +169,8 @@ pub fn load_pet_config(paths: &AppPaths, pet_id: &str) -> AppResult<Option<PetCo
 }
 
 pub fn load_config(paths: &AppPaths) -> AppResult<Option<PetConfig>> {
-    if let Some(library) = crate::state::library::load_library(paths)? {
-        if let Some(active_id) = library.active_pet_id {
-            return load_pet_config(paths, &active_id);
-        }
+    if crate::state::library::load_library(paths)?.is_some() {
+        return crate::state::library::load_active_pet_config(paths);
     }
     let pets_dir = paths.pets_dir();
     if !pets_dir.exists() {

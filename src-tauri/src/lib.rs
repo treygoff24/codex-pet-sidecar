@@ -22,15 +22,15 @@ use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let paths = state::AppPaths::discover().expect("resolve application paths");
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<RuntimeEvent>();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(AppState::new(paths, event_tx))
-        .setup(|app| {
+        .setup(move |app| {
+            let paths = state::AppPaths::discover(app.handle()).expect("resolve application paths");
+            app.manage(AppState::new(paths, event_tx));
             tray::setup_tray(app)?;
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

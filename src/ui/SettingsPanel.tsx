@@ -264,7 +264,7 @@ function SoftwareUpdatePanel({
           </button>
         </>
       ) : (
-        <p>Dev channel: update with git pull && npm ci, then restart npm run tauri:dev.</p>
+        <p>Dev channel: update with git pull && npm ci && npm run install:dev.</p>
       )}
     </fieldset>
   );

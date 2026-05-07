@@ -15,7 +15,6 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
 const PET_REASONING_EFFORT: &str = "medium";
-const DISABLED_PET_MCP_SERVERS: [&str; 4] = ["pencil", "porkbun", "resend", "serena"];
 const SAFE_APPROVAL_POLICY: &str = "on-request";
 const SAFE_SANDBOX: &str = "workspace-write";
 
@@ -26,6 +25,7 @@ pub struct StartPetSessionRequest {
     pub memory_markdown: String,
     pub memory_path: PathBuf,
     pub workspace_cwd: PathBuf,
+    pub runtime_codex_home: PathBuf,
     pub runtime: RuntimeConfig,
 }
 
@@ -75,7 +75,7 @@ impl RuntimeSessionManager {
         event_tx: mpsc::UnboundedSender<RuntimeEvent>,
     ) -> AppResult<RuntimeSession> {
         self.shutdown().await?;
-        let process = AppServerProcess::spawn().await?;
+        let process = AppServerProcess::spawn(&request.runtime_codex_home).await?;
         let websocket_url = process.websocket_url.clone();
         let (wire_tx, mut wire_rx) = mpsc::unbounded_channel();
         let client = JsonRpcClient::connect(&websocket_url, wire_tx).await?;
@@ -392,14 +392,8 @@ fn runtime_permissions(config: &RuntimeConfig) -> AppResult<(&'static str, &'sta
 }
 
 fn pet_thread_config_overrides() -> Value {
-    let mut disabled_servers = serde_json::Map::new();
-    for server in DISABLED_PET_MCP_SERVERS {
-        disabled_servers.insert(server.to_string(), json!({ "enabled": false }));
-    }
-
     json!({
-        "model_reasoning_effort": PET_REASONING_EFFORT,
-        "mcp_servers": disabled_servers
+        "model_reasoning_effort": PET_REASONING_EFFORT
     })
 }
 
@@ -522,6 +516,7 @@ mod tests {
             memory_markdown: "# Memory".into(),
             memory_path: PathBuf::from("/tmp/memory.md"),
             workspace_cwd: PathBuf::from("/tmp"),
+            runtime_codex_home: PathBuf::from("/tmp/codex-runtime-home"),
             runtime: RuntimeConfig::default(),
         };
         assert!(request.memory_path.is_absolute());
@@ -541,6 +536,7 @@ mod tests {
             memory_markdown: "# Memory".into(),
             memory_path: PathBuf::from("/tmp/memory.md"),
             workspace_cwd: PathBuf::from("/tmp"),
+            runtime_codex_home: PathBuf::from("/tmp/codex-runtime-home"),
             runtime: RuntimeConfig::default(),
         };
         let params = thread_start_params(&request).expect("params");
@@ -558,6 +554,7 @@ mod tests {
             memory_markdown: "# Memory".into(),
             memory_path: PathBuf::from("/tmp/memory.md"),
             workspace_cwd: PathBuf::from("/tmp"),
+            runtime_codex_home: PathBuf::from("/tmp/codex-runtime-home"),
             runtime: RuntimeConfig {
                 session_persistence: SessionPersistence::SavedHistory,
                 safety_mode: RuntimeSafetyMode::Power,
@@ -731,11 +728,9 @@ mod tests {
     }
 
     #[test]
-    fn pet_thread_config_uses_medium_reasoning_and_disables_selected_mcps() {
+    fn pet_thread_start_config_is_minimal_and_does_not_inherit_mcps() {
         let config = pet_thread_config_overrides();
         assert_eq!(config["model_reasoning_effort"], "medium");
-        for server in DISABLED_PET_MCP_SERVERS {
-            assert_eq!(config["mcp_servers"][server]["enabled"], false);
-        }
+        assert!(config.get("mcp_servers").is_none());
     }
 }

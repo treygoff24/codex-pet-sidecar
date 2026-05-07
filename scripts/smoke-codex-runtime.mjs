@@ -6,6 +6,17 @@ import {
   spawnAppServer,
   waitForExit,
 } from "./lib/codex-app-server.mjs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 
 assertWebSocketAvailable("smoke");
 
@@ -43,15 +54,52 @@ function assertCodexOauthSubscription(account, authStatus) {
   };
 }
 
-const disabledPetMcpServers = ["pencil", "porkbun", "resend", "serena"];
+const stablePath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
 function petThreadConfigOverrides() {
   return {
     model_reasoning_effort: "medium",
-    mcp_servers: Object.fromEntries(
-      disabledPetMcpServers.map((server) => [server, { enabled: false }]),
-    ),
   };
+}
+
+function isolatedEnv(codexHome, home = homedir()) {
+  return {
+    CODEX_HOME: codexHome,
+    HOME: home,
+    PATH: stablePath,
+    SHELL: "/bin/zsh",
+    TERM: "xterm-256color",
+    USER: process.env.USER ?? "",
+  };
+}
+
+function linkOrCopyAuth(targetHome) {
+  const source = join(homedir(), ".codex", "auth.json");
+  if (!existsSync(source)) return;
+  const target = join(targetHome, "auth.json");
+  try {
+    symlinkSync(source, target);
+  } catch {
+    copyFileSync(source, target);
+  }
+}
+
+function prepareIsolatedCodexHome() {
+  const codexHome = mkdtempSync(join(tmpdir(), "codex-pet-sidecar-runtime-"));
+  writeFileSync(join(codexHome, "config.toml"), "[analytics]\nenabled = false\n");
+  linkOrCopyAuth(codexHome);
+  return codexHome;
+}
+
+function prepareBrokenHostCodexHome() {
+  const home = mkdtempSync(join(tmpdir(), "codex-pet-sidecar-broken-host-"));
+  const codexHome = join(home, ".codex");
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(
+    join(codexHome, "config.toml"),
+    '[mcp_servers.broken_global]\ncommand = "/definitely/missing/mcp"\n',
+  );
+  return home;
 }
 
 function assertPetThreadDefaults(thread) {
@@ -84,7 +132,13 @@ async function assertBadPathIsRecoverable() {
 }
 
 const badPathResult = await assertBadPathIsRecoverable();
-const { child, url } = await spawnAppServer();
+const isolatedHome = prepareIsolatedCodexHome();
+const brokenHostHome = prepareBrokenHostCodexHome();
+const { child, url } = await spawnAppServer(undefined, undefined, {
+  env: {
+    ...isolatedEnv(isolatedHome, brokenHostHome),
+  },
+});
 const client = connectAppServer(url);
 let threadId;
 try {
@@ -134,4 +188,6 @@ try {
   client.ws.close();
   child.kill();
   await waitForExit(child);
+  rmSync(isolatedHome, { recursive: true, force: true });
+  rmSync(brokenHostHome, { recursive: true, force: true });
 }
