@@ -36,7 +36,7 @@ and relaunch.
 ## Run from source / dev channel
 
 Use this path if you want the fastest changes from `main` or want to contribute.
-You need macOS, Node 22, Rust/Cargo, and the Codex CLI.
+You need macOS, Node 22.12 or newer, Rust/Cargo, and the Codex CLI.
 
 ```bash
 git clone https://github.com/treygoff24/codex-pet-sidecar.git
