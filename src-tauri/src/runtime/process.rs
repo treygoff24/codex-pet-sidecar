@@ -93,6 +93,10 @@ fn app_server_launch_spec_with_discovered(
     }
 }
 
+// Build the env handed to `codex app-server` for a pet session. The smoke
+// harness in `scripts/smoke-codex-runtime.mjs` (`isolatedEnv`) must mirror
+// this set: the smoke test only proves that the Codex auth check passes
+// against a runtime that matches what we ship. Keep them in sync.
 fn isolated_env(runtime_codex_home: &Path) -> Vec<(String, String)> {
     let mut env = vec![
         (
@@ -136,10 +140,18 @@ fn link_or_copy_user_auth(runtime_codex_home: &Path) -> AppResult<()> {
     }
     #[cfg(unix)]
     {
-        std::os::unix::fs::symlink(&source, &target).or_else(|_| {
+        if let Err(error) = std::os::unix::fs::symlink(&source, &target) {
+            // Symlink can fail on filesystems that don't support them
+            // (some sandboxed homes, network mounts). The copy fallback
+            // is correct for those, but log the original error so a real
+            // permission/IO problem doesn't hide behind it.
+            eprintln!(
+                "runtime: symlink {} → {} failed ({error}); falling back to copy",
+                source.display(),
+                target.display(),
+            );
             std::fs::copy(&source, &target)?;
-            Ok::<(), std::io::Error>(())
-        })?;
+        }
     }
     #[cfg(not(unix))]
     {

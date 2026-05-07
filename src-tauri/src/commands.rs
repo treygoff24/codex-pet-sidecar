@@ -552,11 +552,7 @@ mod tests {
     #[test]
     fn default_runtime_workspace_is_app_owned_scratch() {
         let root = tempfile::tempdir().expect("tempdir");
-        let paths = crate::state::AppPaths::with_roots(
-            root.path().join("codex"),
-            root.path().join("support"),
-            root.path().join("repo"),
-        );
+        let paths = crate::state::AppPaths::with_roots(root.path().join("support"));
         let workspace = resolve_runtime_workspace(&paths, None).expect("workspace");
         assert!(workspace.ends_with("runtime-workspace"));
         assert!(workspace.exists());
@@ -565,11 +561,7 @@ mod tests {
     #[test]
     fn rejects_dangerous_workspace_roots() {
         let root = tempfile::tempdir().expect("tempdir");
-        let paths = crate::state::AppPaths::with_roots(
-            root.path().join("codex"),
-            root.path().join("support"),
-            root.path().join("repo"),
-        );
+        let paths = crate::state::AppPaths::with_roots(root.path().join("support"));
         assert!(validate_user_workspace(&paths, std::path::Path::new("/")).is_err());
         std::fs::create_dir_all(&paths.app_support).expect("support");
         assert!(validate_user_workspace(&paths, &paths.app_support).is_err());

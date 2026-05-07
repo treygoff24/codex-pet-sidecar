@@ -62,6 +62,10 @@ function petThreadConfigOverrides() {
   };
 }
 
+// Mirrors `isolated_env` in src-tauri/src/runtime/process.rs. The smoke
+// harness only proves the Codex runtime works against the env we actually
+// ship — if you change one side (added var, different stable PATH), change
+// the other.
 function isolatedEnv(codexHome, home = homedir()) {
   return {
     CODEX_HOME: codexHome,

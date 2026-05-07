@@ -28,7 +28,7 @@ impl AppPaths {
     }
 
     #[cfg(test)]
-    pub fn with_roots(_codex_home: PathBuf, app_support: PathBuf, _launch_cwd: PathBuf) -> Self {
+    pub fn with_roots(app_support: PathBuf) -> Self {
         Self {
             app_support,
             bundled_olive_dir: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -83,11 +83,7 @@ mod tests {
 
     #[test]
     fn pet_paths_are_under_app_support() {
-        let paths = AppPaths::with_roots(
-            PathBuf::from("/tmp/codex"),
-            PathBuf::from("/tmp/support"),
-            PathBuf::from("/tmp/repo"),
-        );
+        let paths = AppPaths::with_roots(PathBuf::from("/tmp/support"));
 
         assert_eq!(
             paths.pet_memory_path("olive"),

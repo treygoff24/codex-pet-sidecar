@@ -196,11 +196,7 @@ mod tests {
     #[test]
     fn missing_config_loads_none_and_round_trip_preserves_workspace() {
         let root = tempdir().expect("tempdir");
-        let paths = AppPaths::with_roots(
-            root.path().join("codex"),
-            root.path().join("support"),
-            root.path().to_path_buf(),
-        );
+        let paths = AppPaths::with_roots(root.path().join("support"));
         assert!(load_config(&paths).expect("load").is_none());
         let config = PetConfig::first_launch(
             "olive".into(),
@@ -289,11 +285,7 @@ mod tests {
     #[test]
     fn legacy_fallback_rejects_invalid_pet_id() {
         let root = tempdir().expect("tempdir");
-        let paths = AppPaths::with_roots(
-            root.path().join("codex"),
-            root.path().join("support"),
-            root.path().join("repo"),
-        );
+        let paths = AppPaths::with_roots(root.path().join("support"));
         let pet_dir = paths.pet_support_dir("legacy");
         std::fs::create_dir_all(&pet_dir).expect("pet dir");
         std::fs::write(

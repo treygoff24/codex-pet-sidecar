@@ -20,7 +20,10 @@ const allowedCodexFiles = new Set([
 const allowedBinary = new Set(["assets/pets/olive/spritesheet.webp"]);
 
 const generatedProtocol = (file) => file.startsWith("protocol/app-server/");
-const codexRuntimeImplementation = (file) =>
+// Files allowlisted to mention the local-Codex residue token: the runtime
+// that has to read it, the smoke harness that exercises that runtime, and
+// this auditor itself (which has to spell the pattern out to detect it).
+const isCodexResidueAllowlisted = (file) =>
   [
     "src-tauri/src/runtime/process.rs",
     "scripts/smoke-codex-runtime.mjs",
@@ -193,7 +196,7 @@ for (const file of files) {
     ].join(""),
   );
   if (
-    !codexRuntimeImplementation(file) &&
+    !isCodexResidueAllowlisted(file) &&
     !generatedProtocol(file) &&
     localCodexResiduePattern.test(text)
   ) {
