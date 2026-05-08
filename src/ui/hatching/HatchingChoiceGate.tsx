@@ -9,17 +9,22 @@ import { useEffect, useState } from "react";
 import { hatchingBridge } from "../../hatchingBridge";
 import type { OrphanSummary } from "../../domain/hatching";
 import { getPhaseDisplayName } from "../../domain/hatching";
+import { HatchingLibraryFullBanner } from "./HatchingLibraryFullBanner";
 
 interface HatchingChoiceGateProps {
   onStartNew: () => void;
   onResumeSession: (sessionId: string) => void;
   isLoading?: boolean;
+  isLibraryFull?: boolean;
+  onOpenLibrary?: () => void;
 }
 
 export function HatchingChoiceGate({
   onStartNew,
   onResumeSession,
   isLoading = false,
+  isLibraryFull = false,
+  onOpenLibrary,
 }: HatchingChoiceGateProps) {
   const [orphans, setOrphans] = useState<OrphanSummary[]>([]);
   const [isLoadingOrphans, setIsLoadingOrphans] = useState(true);
@@ -59,13 +64,18 @@ export function HatchingChoiceGate({
         Start fresh with a new pet or resume an interrupted session.
       </p>
 
+      {/* Library Full Banner */}
+      {isLibraryFull && onOpenLibrary && (
+        <HatchingLibraryFullBanner onOpenLibrary={onOpenLibrary} />
+      )}
+
       {/* Start Fresh Option */}
       <div className="hatching-choice-gate__option">
         <button
           type="button"
           className="hatching-choice-gate__card hatching-choice-gate__card--primary"
           onClick={onStartNew}
-          disabled={isLoading || isLoadingOrphans}
+          disabled={isLoading || isLoadingOrphans || isLibraryFull}
           aria-label="Start creating a new pet"
         >
           <div className="hatching-choice-gate__card-icon">✨</div>

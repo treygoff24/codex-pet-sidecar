@@ -2303,6 +2303,68 @@ button:disabled {
   font-weight: 600;
 }
 
+/* Hatching Library Full Banner */
+
+.hatching-library-full-banner {
+  padding: 16px;
+  border-radius: 16px;
+  border: 2px solid rgba(180, 60, 40, 0.35);
+  background: rgba(255, 240, 232, 0.95);
+  margin-bottom: 16px;
+}
+
+.hatching-library-full-banner__content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.hatching-library-full-banner__icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.hatching-library-full-banner__message {
+  flex: 1;
+  min-width: 0;
+}
+
+.hatching-library-full-banner__title {
+  margin: 0 0 4px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #6d291f;
+}
+
+.hatching-library-full-banner__description {
+  margin: 0;
+  font-size: 13px;
+  color: #8a3f32;
+  line-height: 1.4;
+}
+
+.hatching-library-full-banner__button {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: #6d291f;
+  color: #fff8ea;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    transform 140ms var(--ease-snappy),
+    background 140ms var(--ease-snappy);
+}
+
+.hatching-library-full-banner__button:hover {
+  transform: translateY(-1px);
+  background: #5a2319;
+}
+
 /* Respect reduced motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   *,

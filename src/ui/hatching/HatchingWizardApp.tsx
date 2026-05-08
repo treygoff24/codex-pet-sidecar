@@ -18,6 +18,12 @@ export function HatchingWizardApp() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLibraryFull] = useState(false); // TODO: Check library status from backend
+
+  const handleOpenLibrary = useCallback(() => {
+    // TODO: Implement library opening logic
+    console.log("Open library to archive a pet");
+  }, []);
 
   const handleNext = useCallback(() => {
     setCurrentStepIndex((prev) => prev + 1);
@@ -47,6 +53,8 @@ export function HatchingWizardApp() {
             handleNext();
           }}
           isLoading={isLoading}
+          isLibraryFull={isLibraryFull}
+          onOpenLibrary={handleOpenLibrary}
         />
       ),
       canProceed: false,
