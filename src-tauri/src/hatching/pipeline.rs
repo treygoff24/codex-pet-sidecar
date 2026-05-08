@@ -5,6 +5,7 @@
 
 use crate::error::{AppError, AppResult};
 use crate::hatching::atlas::validate_atlas;
+#[allow(unused_imports)]
 use crate::hatching::session::{HatchingPhase, HatchingSession, RowKey, RowStatus};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -19,6 +20,7 @@ use uuid::Uuid;
 /// 4. Validate the atlas against the Codex spec
 /// 5. Package the validated atlas as a pet
 /// 6. Import the pet into the library
+#[allow(dead_code)]
 pub async fn run_hatching_pipeline(
     _session_id: Uuid,
     _runtime_home: PathBuf,
@@ -93,6 +95,7 @@ pub async fn import_hatched_pet(
 }
 
 /// Validate that all required rows are present and ready for atlas composition.
+#[allow(dead_code)]
 pub fn validate_rows_for_composition(session: &HatchingSession) -> AppResult<()> {
     let required_rows = vec![
         RowKey::Idle,
@@ -138,6 +141,7 @@ pub fn validate_rows_for_composition(session: &HatchingSession) -> AppResult<()>
 }
 
 /// Helper to get runtime_home from session.
+#[allow(dead_code)]
 fn runtime_home_from_session(session: &HatchingSession) -> PathBuf {
     session.runtime_home.clone()
 }

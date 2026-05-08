@@ -37,6 +37,7 @@
     "setup:python": "python3 -m venv .venv && ./.venv/bin/python -m pip install -r requirements.txt && ./.venv/bin/python -m pip install -r tools/pet-hatching/build/requirements-build.txt",
     "smoke:runtime": "node scripts/smoke-codex-runtime.mjs",
     "smoke:pyinstaller": "node scripts/smoke-pyinstaller.mjs",
+    "smoke:hatching-runtime": "node scripts/smoke-hatching-runtime.mjs",
     "lint": "oxlint",
     "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "format": "oxfmt && cargo fmt --manifest-path src-tauri/Cargo.toml",

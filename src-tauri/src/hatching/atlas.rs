@@ -267,10 +267,10 @@ pub fn validate_atlas(
             }
             
             // Check for near-opaque used cells (potential background issue)
-            if used && nontransparent > (CELL_WIDTH * CELL_HEIGHT) as u32 * near_opaque_threshold as u32 {
+            if used && nontransparent > (CELL_WIDTH * CELL_HEIGHT) * near_opaque_threshold as u32 {
                 near_opaque_used_cells
                     .entry(format!("{} row {}", state, row_index))
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(column_index);
             }
             
@@ -314,6 +314,7 @@ pub fn validate_atlas(
 /// Compose atlas from individual row strips.
 ///
 /// Port of `compose_atlas.py` frames-root mode.
+#[allow(dead_code)]
 pub fn compose_atlas_from_frames(frames_root: &Path) -> AppResult<RgbaImage> {
     let mut atlas = RgbaImage::new(ATLAS_WIDTH, ATLAS_HEIGHT);
     
@@ -348,6 +349,7 @@ pub fn compose_atlas_from_frames(frames_root: &Path) -> AppResult<RgbaImage> {
 }
 
 /// Find frame files for a row in various locations.
+#[allow(dead_code)]
 fn find_row_frames(root: &Path, state: &str, row_index: u32) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     
@@ -400,6 +402,7 @@ fn find_row_frames(root: &Path, state: &str, row_index: u32) -> Vec<PathBuf> {
 }
 
 /// Check if a file is an image based on extension.
+#[allow(dead_code)]
 fn is_image_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
@@ -408,6 +411,7 @@ fn is_image_file(path: &Path) -> bool {
 }
 
 /// Paste a frame centered in a cell.
+#[allow(dead_code)]
 fn paste_centered(atlas: &mut RgbaImage, frame: &RgbaImage, row: u32, column: u32) -> AppResult<()> {
     let mut frame = frame.clone();
     
@@ -437,6 +441,7 @@ fn paste_centered(atlas: &mut RgbaImage, frame: &RgbaImage, row: u32, column: u3
 }
 
 /// Save atlas as PNG and optionally WebP.
+#[allow(dead_code)]
 pub fn save_atlas_outputs(
     atlas: &RgbaImage,
     output_path: &Path,
@@ -467,6 +472,7 @@ pub fn save_atlas_outputs(
 /// Package a validated atlas as a pet.
 ///
 /// Port of `package_custom_pet.py`.
+#[allow(dead_code)]
 pub fn package_pet(
     pet_id: &str,
     display_name: &str,
