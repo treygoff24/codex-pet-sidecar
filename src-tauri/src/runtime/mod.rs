@@ -1,4 +1,5 @@
 pub mod approvals;
+pub mod auth;
 pub mod events;
 pub mod json_rpc;
 pub mod process;

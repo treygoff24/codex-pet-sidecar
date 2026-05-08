@@ -6,6 +6,6 @@ pub mod imagegen_fixture;
 pub mod session;
 
 // Forward-declared empty modules for Wave 1 PRs to extend
-// pub mod runtime;
+pub mod runtime;
 // pub mod reference_image;
 // pub mod commands;

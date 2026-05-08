@@ -1,4 +1,5 @@
 use crate::error::{AppError, AppResult};
+use crate::runtime::auth::link_or_copy_user_auth;
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -123,40 +124,6 @@ fn prepare_runtime_codex_home(runtime_codex_home: &Path) -> AppResult<()> {
         "[analytics]\nenabled = false\n",
     )?;
     link_or_copy_user_auth(runtime_codex_home)?;
-    Ok(())
-}
-
-fn link_or_copy_user_auth(runtime_codex_home: &Path) -> AppResult<()> {
-    let Some(home) = dirs::home_dir() else {
-        return Err(AppError::CodexAuthNotFound);
-    };
-    let source = home.join(".codex").join("auth.json");
-    if !source.exists() {
-        return Err(AppError::CodexAuthNotFound);
-    }
-    let target = runtime_codex_home.join("auth.json");
-    if target.exists() {
-        std::fs::remove_file(&target)?;
-    }
-    #[cfg(unix)]
-    {
-        if let Err(error) = std::os::unix::fs::symlink(&source, &target) {
-            // Symlink can fail on filesystems that don't support them
-            // (some sandboxed homes, network mounts). The copy fallback
-            // is correct for those, but log the original error so a real
-            // permission/IO problem doesn't hide behind it.
-            eprintln!(
-                "runtime: symlink {} → {} failed ({error}); falling back to copy",
-                source.display(),
-                target.display(),
-            );
-            std::fs::copy(&source, &target)?;
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        std::fs::copy(&source, &target)?;
-    }
     Ok(())
 }
 

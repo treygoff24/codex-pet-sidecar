@@ -47,6 +47,9 @@ pub enum AppError {
     InvalidWorkspace { path: PathBuf, reason: String },
     #[error("Codex authentication not found. Install Codex CLI and run `codex` to sign in with ChatGPT.")]
     CodexAuthNotFound,
+    #[error("hatching runtime for session {0} is missing or corrupt")]
+    #[allow(dead_code)]
+    HatchingRuntimeMissing(String),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
