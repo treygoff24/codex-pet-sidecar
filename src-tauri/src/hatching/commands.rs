@@ -105,6 +105,7 @@ pub async fn get_hatching_state(
 /// Submit the pet brief for a hatching session.
 ///
 /// Validates that the brief has non-empty display_name, description, and a normalized/unique pet_id.
+/// If the brief changes after prototype iterations have started, invalidates the prototype state.
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn submit_brief(
@@ -136,9 +137,44 @@ pub async fn submit_brief(
     let registry = std::sync::Arc::clone(&state.hatching_session_registry);
     let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
 
+    // Brief-change invalidation guard: if brief changes after prototype iterations,
+    // clear prototype state and reset phase to Brief
+    let brief_changed = session
+        .brief
+        .as_ref()
+        .map(|old_brief| {
+            old_brief.display_name != brief.display_name
+                || old_brief.description != brief.description
+                || old_brief.personality != brief.personality
+                || old_brief.palette != brief.palette
+                || old_brief.backstory != brief.backstory
+                || old_brief.speech_style != brief.speech_style
+                || old_brief.behavioral_quirks != brief.behavioral_quirks
+                || old_brief.visual_notes != brief.visual_notes
+        })
+        .unwrap_or(false);
+
+    if brief_changed {
+        // Clear prototype state if brief changed
+        session.prototype = None;
+        // Reset phase to Brief if we were in a later phase
+        if matches!(
+            session.phase,
+            HatchingPhase::Prototype
+                | HatchingPhase::Generating { .. }
+                | HatchingPhase::Review
+                | HatchingPhase::Importing
+        ) {
+            session.phase = HatchingPhase::Brief;
+        }
+    }
+
     session.brief = Some(brief);
     session.archetype = archetype_id;
-    session.phase = HatchingPhase::Brief;
+    // Only set phase to Brief if not already set by invalidation guard
+    if !brief_changed {
+        session.phase = HatchingPhase::Brief;
+    }
 
     // TODO: Link reference_image_id to session.reference_image if provided
 
@@ -294,6 +330,7 @@ pub async fn archive_pet(_session_id: Uuid) -> CommandResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hatching::session::{HatchingPhase, PrototypeState, PrototypeIteration};
 
     #[test]
     fn not_implemented_error_round_trips() {
@@ -302,5 +339,160 @@ mod tests {
         };
         assert!(error.to_string().contains("test_command"));
         assert!(error.to_string().contains("not yet implemented"));
+    }
+
+    #[test]
+    fn brief_change_invalidation_clears_prototype() {
+        use std::collections::HashMap;
+
+        let id = Uuid::new_v4();
+        let mut session = crate::hatching::session::HatchingSession {
+            id,
+            runtime_home: PathBuf::from("/tmp/runtime"),
+            workspace: PathBuf::from("/tmp/workspace"),
+            codex_thread_id: None,
+            brief: Some(PetBrief {
+                display_name: "Old Name".to_string(),
+                pet_id: "old-name".to_string(),
+                description: "Old description".to_string(),
+                personality: vec!["old".to_string()],
+                palette: None,
+                backstory: None,
+                speech_style: None,
+                behavioral_quirks: None,
+                visual_notes: None,
+            }),
+            archetype: None,
+            reference_image: None,
+            prototype: Some(PrototypeState {
+                iterations: vec![PrototypeIteration {
+                    n: 1,
+                    revised_prompt: "old prompt".to_string(),
+                    summary_of_changes: "initial".to_string(),
+                    user_feedback: None,
+                    image: crate::hatching::session::ImageArtifact {
+                        source_path: PathBuf::from("/tmp/source.png"),
+                        output_path: PathBuf::from("/tmp/output.png"),
+                        source_provenance: crate::hatching::session::SourceProvenance::BuiltInImagegen,
+                        source_sha256: "abc".to_string(),
+                        output_sha256: "def".to_string(),
+                        metadata: crate::hatching::session::ImageMetadata {
+                            width: 192,
+                            height: 208,
+                            mode: "RGBA".to_string(),
+                            format: "PNG".to_string(),
+                        },
+                    },
+                    generated_at: time::OffsetDateTime::now_utc(),
+                }],
+                current: 0,
+            }),
+            rows: HashMap::new(),
+            phase: HatchingPhase::Prototype,
+            created_at: time::OffsetDateTime::now_utc(),
+        };
+
+        // Simulate brief change
+        let new_brief = PetBrief {
+            display_name: "New Name".to_string(),
+            pet_id: "new-name".to_string(),
+            description: "New description".to_string(),
+            personality: vec!["new".to_string()],
+            palette: None,
+            backstory: None,
+            speech_style: None,
+            behavioral_quirks: None,
+            visual_notes: None,
+        };
+
+        let brief_changed = session
+            .brief
+            .as_ref()
+            .map(|old_brief| {
+                old_brief.display_name != new_brief.display_name
+                    || old_brief.description != new_brief.description
+                    || old_brief.personality != new_brief.personality
+                    || old_brief.palette != new_brief.palette
+                    || old_brief.backstory != new_brief.backstory
+                    || old_brief.speech_style != new_brief.speech_style
+                    || old_brief.behavioral_quirks != new_brief.behavioral_quirks
+                    || old_brief.visual_notes != new_brief.visual_notes
+            })
+            .unwrap_or(false);
+
+        assert!(brief_changed);
+
+        if brief_changed {
+            session.prototype = None;
+            if matches!(
+                session.phase,
+                HatchingPhase::Prototype
+                    | HatchingPhase::Generating { .. }
+                    | HatchingPhase::Review
+                    | HatchingPhase::Importing
+            ) {
+                session.phase = HatchingPhase::Brief;
+            }
+        }
+
+        assert!(session.prototype.is_none());
+        assert!(matches!(session.phase, HatchingPhase::Brief));
+    }
+
+    #[test]
+    fn brief_unchanged_does_not_invalidate_prototype() {
+        use std::collections::HashMap;
+
+        let id = Uuid::new_v4();
+        let original_brief = PetBrief {
+            display_name: "Same Name".to_string(),
+            pet_id: "same-name".to_string(),
+            description: "Same description".to_string(),
+            personality: vec!["same".to_string()],
+            palette: None,
+            backstory: None,
+            speech_style: None,
+            behavioral_quirks: None,
+            visual_notes: None,
+        };
+
+        let session = crate::hatching::session::HatchingSession {
+            id,
+            runtime_home: PathBuf::from("/tmp/runtime"),
+            workspace: PathBuf::from("/tmp/workspace"),
+            codex_thread_id: None,
+            brief: Some(original_brief.clone()),
+            archetype: None,
+            reference_image: None,
+            prototype: Some(PrototypeState {
+                iterations: vec![],
+                current: 0,
+            }),
+            rows: HashMap::new(),
+            phase: HatchingPhase::Prototype,
+            created_at: time::OffsetDateTime::now_utc(),
+        };
+
+        // Simulate brief unchanged
+        let brief_changed = session
+            .brief
+            .as_ref()
+            .map(|old_brief| {
+                old_brief.display_name != original_brief.display_name
+                    || old_brief.description != original_brief.description
+                    || old_brief.personality != original_brief.personality
+                    || old_brief.palette != original_brief.palette
+                    || old_brief.backstory != original_brief.backstory
+                    || old_brief.speech_style != original_brief.speech_style
+                    || old_brief.behavioral_quirks != original_brief.behavioral_quirks
+                    || old_brief.visual_notes != original_brief.visual_notes
+            })
+            .unwrap_or(false);
+
+        assert!(!brief_changed);
+
+        // Prototype should remain unchanged
+        assert!(session.prototype.is_some());
+        assert!(matches!(session.phase, HatchingPhase::Prototype));
     }
 }
