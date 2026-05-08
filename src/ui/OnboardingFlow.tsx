@@ -13,6 +13,9 @@ export function OnboardingFlow({
     <section className="onboarding-flow" aria-label="Welcome">
       <h1>Meet Olive</h1>
       <p>Olive is the bundled sample pet. Use her now, hatch your own later.</p>
+      <p className="onboarding-flow__note">
+        <small>Requires Codex CLI with an active ChatGPT subscription</small>
+      </p>
       <button type="button" onClick={onUseOlive}>
         Use Olive now
       </button>

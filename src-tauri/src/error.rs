@@ -45,6 +45,8 @@ pub enum AppError {
     PetLimitReached(usize),
     #[error("invalid workspace {path:?}: {reason}")]
     InvalidWorkspace { path: PathBuf, reason: String },
+    #[error("Codex authentication not found. Install Codex CLI and run `codex` to sign in with ChatGPT.")]
+    CodexAuthNotFound,
 }
 
 pub type AppResult<T> = Result<T, AppError>;

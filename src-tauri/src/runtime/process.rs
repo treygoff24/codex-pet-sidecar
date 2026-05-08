@@ -128,11 +128,11 @@ fn prepare_runtime_codex_home(runtime_codex_home: &Path) -> AppResult<()> {
 
 fn link_or_copy_user_auth(runtime_codex_home: &Path) -> AppResult<()> {
     let Some(home) = dirs::home_dir() else {
-        return Ok(());
+        return Err(AppError::CodexAuthNotFound);
     };
     let source = home.join(".codex").join("auth.json");
     if !source.exists() {
-        return Ok(());
+        return Err(AppError::CodexAuthNotFound);
     }
     let target = runtime_codex_home.join("auth.json");
     if target.exists() {
