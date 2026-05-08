@@ -4,7 +4,8 @@ use crate::pets::{
     InstalledPet,
 };
 use crate::state::config::{default_pet_config, load_pet_config, save_pet_config, PetConfig};
-use crate::state::paths::AppPaths;
+use crate::state::paths::{AppPaths, RESERVED_PET_IDS};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -414,6 +415,97 @@ fn now_string() -> AppResult<String> {
         .map_err(|error| AppError::CommandFailed("format timestamp".to_string(), error.to_string()))
 }
 
+/// Normalize a display name to a valid pet_id.
+///
+/// Rules:
+/// - Convert to lowercase
+/// - Replace non-alphanumeric characters with dashes
+/// - Collapse repeated dashes into single dashes
+/// - Trim leading/trailing dashes
+/// - Validate against regex: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+/// - Reject reserved IDs
+///
+/// Returns an error if the normalized ID is invalid or reserved.
+#[allow(dead_code)]
+pub fn normalize_display_name_to_pet_id(display_name: &str) -> AppResult<String> {
+    // Convert to lowercase
+    let normalized = display_name.to_lowercase();
+
+    // Replace non-alphanumeric characters with dashes
+    let normalized: String = normalized
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect();
+
+    // Collapse repeated dashes into single dashes
+    let normalized = Regex::new(r"-+").unwrap().replace_all(&normalized, "-");
+
+    // Trim leading/trailing dashes
+    let normalized = normalized.trim_matches('-').to_string();
+
+    // Validate against regex: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+    let id_regex = Regex::new(r"^[a-z0-9]+(?:-[a-z0-9]+)*$").unwrap();
+    if !id_regex.is_match(&normalized) {
+        return Err(AppError::InvalidPetMetadata {
+            path: PathBuf::from(display_name),
+            reason: format!(
+                "normalized pet_id '{}' does not match required pattern",
+                normalized
+            ),
+        });
+    }
+
+    // Reject reserved IDs
+    if RESERVED_PET_IDS.contains(&normalized.as_str()) {
+        return Err(AppError::InvalidPetMetadata {
+            path: PathBuf::from(display_name),
+            reason: format!("pet_id '{}' is reserved", normalized),
+        });
+    }
+
+    Ok(normalized)
+}
+
+/// Check if a pet_id collides with existing pets and suggest a numbered variant if needed.
+///
+/// Checks both:
+/// - Library entries (already imported pets)
+/// - On-disk packages (pet directories in the pets folder)
+///
+/// Returns the first available pet_id, either the original or a numbered variant (e.g., "my-pet-2").
+#[allow(dead_code)]
+pub fn resolve_pet_id_collision(paths: &AppPaths, base_pet_id: &str) -> AppResult<String> {
+    let library = match load_library(paths)? {
+        Some(lib) => lib,
+        None => PetLibrary {
+            active_pet_id: None,
+            pets: Vec::new(),
+        },
+    };
+
+    // Check if base ID is available
+    if !library.pets.iter().any(|pet| pet.pet_id == base_pet_id)
+        && !paths.pet_support_dir(base_pet_id).exists()
+    {
+        return Ok(base_pet_id.to_string());
+    }
+
+    // Try numbered variants: base-2, base-3, etc.
+    for i in 2..=100 {
+        let candidate = format!("{}-{}", base_pet_id, i);
+        if !library.pets.iter().any(|pet| pet.pet_id == candidate)
+            && !paths.pet_support_dir(&candidate).exists()
+        {
+            return Ok(candidate);
+        }
+    }
+
+    Err(AppError::InvalidPetMetadata {
+        path: PathBuf::from(base_pet_id),
+        reason: "could not resolve pet_id collision after 100 attempts".to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -719,5 +811,162 @@ mod tests {
         let library = ensure_library(&paths).unwrap();
         assert_eq!(library.pets.len(), MAX_PETS);
         assert!(!library.pets.iter().any(|pet| pet.pet_id == "olive"));
+    }
+
+    #[test]
+    fn normalize_display_name_to_pet_id_basic() {
+        assert_eq!(
+            normalize_display_name_to_pet_id("My Pet").unwrap(),
+            "my-pet"
+        );
+        assert_eq!(
+            normalize_display_name_to_pet_id("Hello World").unwrap(),
+            "hello-world"
+        );
+        assert_eq!(
+            normalize_display_name_to_pet_id("Test123").unwrap(),
+            "test123"
+        );
+    }
+
+    #[test]
+    fn normalize_display_name_to_pet_id_special_chars() {
+        assert_eq!(
+            normalize_display_name_to_pet_id("My@Pet#Name!").unwrap(),
+            "my-pet-name"
+        );
+        assert_eq!(
+            normalize_display_name_to_pet_id("Test---With---Dashes").unwrap(),
+            "test-with-dashes"
+        );
+        assert_eq!(
+            normalize_display_name_to_pet_id("  Leading and Trailing  ").unwrap(),
+            "leading-and-trailing"
+        );
+    }
+
+    #[test]
+    fn normalize_display_name_to_pet_id_reserved() {
+        assert!(normalize_display_name_to_pet_id("Olive").is_err());
+        assert!(normalize_display_name_to_pet_id("Codex").is_err());
+        assert!(normalize_display_name_to_pet_id("Default").is_err());
+        assert!(normalize_display_name_to_pet_id("Assets").is_err());
+        assert!(normalize_display_name_to_pet_id("Tmp").is_err());
+        assert!(normalize_display_name_to_pet_id("Hatching").is_err());
+    }
+
+    #[test]
+    fn normalize_display_name_to_pet_id_invalid() {
+        // Only special characters should fail regex validation
+        assert!(normalize_display_name_to_pet_id("---").is_err());
+        assert!(normalize_display_name_to_pet_id("!!!").is_err());
+    }
+
+    #[test]
+    fn resolve_pet_id_collision_no_collision() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+
+        // No library, no on-disk packages
+        assert_eq!(
+            resolve_pet_id_collision(&paths, "my-pet").unwrap(),
+            "my-pet"
+        );
+    }
+
+    #[test]
+    fn resolve_pet_id_collision_library_entry() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+        let now = now_string().unwrap();
+
+        // Create a library entry
+        save_library(
+            &paths,
+            &PetLibrary {
+                active_pet_id: Some("my-pet".into()),
+                pets: vec![PetLibraryEntry {
+                    pet_id: "my-pet".into(),
+                    display_name: "My Pet".into(),
+                    source: PetSource::UserCreated {
+                        created_by: "user".into(),
+                    },
+                    created_at: now.clone(),
+                    updated_at: now,
+                }],
+            },
+        )
+        .unwrap();
+
+        // Should suggest my-pet-2
+        assert_eq!(
+            resolve_pet_id_collision(&paths, "my-pet").unwrap(),
+            "my-pet-2"
+        );
+    }
+
+    #[test]
+    fn resolve_pet_id_collision_on_disk_package() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+
+        // Create an on-disk package
+        write_pet(&paths.pet_support_dir("my-pet"), "my-pet");
+
+        // Should suggest my-pet-2
+        assert_eq!(
+            resolve_pet_id_collision(&paths, "my-pet").unwrap(),
+            "my-pet-2"
+        );
+    }
+
+    #[test]
+    fn resolve_pet_id_collision_multiple_variants() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+
+        // Create my-pet and my-pet-2 on disk
+        write_pet(&paths.pet_support_dir("my-pet"), "my-pet");
+        write_pet(&paths.pet_support_dir("my-pet-2"), "my-pet-2");
+
+        // Should suggest my-pet-3
+        assert_eq!(
+            resolve_pet_id_collision(&paths, "my-pet").unwrap(),
+            "my-pet-3"
+        );
+    }
+
+    #[test]
+    fn resolve_pet_id_collision_combined_library_and_disk() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+        let now = now_string().unwrap();
+
+        // Create library entry for my-pet
+        save_library(
+            &paths,
+            &PetLibrary {
+                active_pet_id: Some("my-pet".into()),
+                pets: vec![PetLibraryEntry {
+                    pet_id: "my-pet".into(),
+                    display_name: "My Pet".into(),
+                    source: PetSource::UserCreated {
+                        created_by: "user".into(),
+                    },
+                    created_at: now.clone(),
+                    updated_at: now,
+                }],
+            },
+        )
+        .unwrap();
+
+        // Create my-pet-2 on disk
+        write_pet(&paths.pet_support_dir("my-pet-2"), "my-pet-2");
+
+        // Should suggest my-pet-3
+        assert_eq!(
+            resolve_pet_id_collision(&paths, "my-pet").unwrap(),
+            "my-pet-3"
+        );
     }
 }
