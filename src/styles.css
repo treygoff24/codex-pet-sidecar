@@ -1082,6 +1082,280 @@ button:disabled {
   border-color: rgba(180, 60, 40, 0.35);
 }
 
+/* Hatching Choice Gate */
+
+.hatching-choice-gate {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.hatching-choice-gate__title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hatching-choice-gate__description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-choice-gate__option {
+  display: grid;
+}
+
+.hatching-choice-gate__card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    transform 140ms var(--ease-snappy),
+    background 140ms var(--ease-snappy),
+    border-color 140ms var(--ease-snappy);
+  min-height: 44px;
+}
+
+.hatching-choice-gate__card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: var(--paper-strong);
+  border-color: rgba(167, 107, 46, 0.35);
+}
+
+.hatching-choice-gate__card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-choice-gate__card--primary {
+  background: var(--ink);
+  color: #fff8ea;
+  border-color: var(--ink);
+}
+
+.hatching-choice-gate__card--primary:hover:not(:disabled) {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.hatching-choice-gate__card-icon {
+  font-size: 24px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+
+.hatching-choice-gate__card-content {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hatching-choice-gate__card-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.hatching-choice-gate__card-description {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-choice-gate__card--secondary .hatching-choice-gate__card-description {
+  display: none;
+}
+
+.hatching-choice-gate__card-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.hatching-choice-gate__card-date,
+.hatching-choice-gate__card-phase {
+  display: flex;
+  align-items: center;
+}
+
+.hatching-choice-gate__section {
+  display: grid;
+  gap: 8px;
+}
+
+.hatching-choice-gate__section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hatching-choice-gate__sessions {
+  display: grid;
+  gap: 8px;
+}
+
+.hatching-choice-gate__loading,
+.hatching-choice-gate__error,
+.hatching-choice-gate__empty {
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.hatching-choice-gate__loading {
+  color: var(--ink-soft);
+}
+
+.hatching-choice-gate__error {
+  border: 1px solid rgba(180, 60, 40, 0.35);
+  background: rgba(255, 240, 232, 0.95);
+  color: #6d291f;
+}
+
+.hatching-choice-gate__empty {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* Hatching Welcome */
+
+.hatching-welcome {
+  display: grid;
+  gap: 20px;
+  align-content: center;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.hatching-welcome__success {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.hatching-welcome__success-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff8ea;
+  font-size: 32px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  animation: success-pop 400ms var(--ease-soft);
+}
+
+@keyframes success-pop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.hatching-welcome__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hatching-welcome__description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  max-width: 400px;
+}
+
+.hatching-welcome__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.hatching-welcome__button {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 12px 24px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    transform 140ms var(--ease-snappy),
+    background 140ms var(--ease-snappy),
+    opacity 140ms var(--ease-snappy);
+}
+
+.hatching-welcome__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.hatching-welcome__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-welcome__button--primary {
+  background: var(--ink);
+  color: #fff8ea;
+}
+
+.hatching-welcome__button--secondary {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.hatching-welcome__info {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--line);
+}
+
+.hatching-welcome__info-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-welcome__info-text strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 /* Respect reduced motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   *,
