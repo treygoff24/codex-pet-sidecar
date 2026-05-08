@@ -59,10 +59,7 @@ pub async fn revert_to_iteration(
 /// 4. Update phase to Generating with initial progress
 /// 5. Persist session
 /// 6. Trigger background row generation (separate task)
-pub async fn accept_prototype(
-    _session_id: Uuid,
-    _runtime_home: PathBuf,
-) -> AppResult<()> {
+pub async fn accept_prototype(_session_id: Uuid, _runtime_home: PathBuf) -> AppResult<()> {
     // TODO: Implement prototype acceptance and generation phase transition
     Err(AppError::NotImplemented {
         command: "accept_prototype (requires Codex client integration)".to_string(),

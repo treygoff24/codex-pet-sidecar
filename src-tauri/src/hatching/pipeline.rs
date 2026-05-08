@@ -35,7 +35,7 @@ pub async fn run_hatching_pipeline(
     // 4. Validate using atlas::validate_atlas
     // 5. Package using atlas::package_pet
     // 6. Import using the library module
-    
+
     Err(AppError::NotImplemented {
         command: "run_hatching_pipeline (requires Codex client integration)".to_string(),
     })
@@ -53,7 +53,7 @@ pub async fn import_hatched_pet(
 ) -> AppResult<String> {
     // This is a partial implementation using the Rust atlas operations
     // It demonstrates the packaging workflow, but still needs session integration
-    
+
     // For demonstration, validate that workspace exists
     if !workspace.exists() {
         return Err(AppError::IoWithPath {
@@ -64,7 +64,7 @@ pub async fn import_hatched_pet(
             ),
         });
     }
-    
+
     // Check for expected atlas file
     let atlas_path = workspace.join("atlas.png");
     if !atlas_path.exists() {
@@ -76,7 +76,7 @@ pub async fn import_hatched_pet(
             ),
         });
     }
-    
+
     // Validate the atlas
     let validation_result = validate_atlas(&atlas_path, 50, 0.95, false, false)?;
     if !validation_result.ok {
@@ -85,11 +85,11 @@ pub async fn import_hatched_pet(
             reason: format!("Atlas validation failed: {:?}", validation_result.errors),
         });
     }
-    
+
     // TODO: Package the pet using package_pet
     // TODO: Import into library using the library module
     // TODO: Activate if requested
-    
+
     // For now, return a placeholder pet_id
     Ok(format!("hatched-{}", session_id))
 }
@@ -108,7 +108,7 @@ pub fn validate_rows_for_composition(session: &HatchingSession) -> AppResult<()>
         RowKey::Running,
         RowKey::Review,
     ];
-    
+
     for row_key in required_rows {
         match session.rows.get(&row_key) {
             Some(row_state) => {
@@ -136,7 +136,7 @@ pub fn validate_rows_for_composition(session: &HatchingSession) -> AppResult<()>
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -151,48 +151,48 @@ mod tests {
     use super::*;
     use crate::hatching::session::{HatchingSession, RowState, RowStatus};
     use std::collections::HashMap;
-    
+
     #[test]
     fn test_validate_rows_for_composition_all_ready() {
         let session = create_test_session_with_ready_rows();
         let result = validate_rows_for_composition(&session);
         assert!(result.is_ok());
     }
-    
+
     #[test]
     fn test_validate_rows_for_composition_missing_row() {
         let mut session = create_test_session_with_ready_rows();
         session.rows.remove(&RowKey::Idle);
-        
+
         let result = validate_rows_for_composition(&session);
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_validate_rows_for_composition_not_ready() {
         let mut session = create_test_session_with_ready_rows();
         if let Some(row) = session.rows.get_mut(&RowKey::Idle) {
             row.status = RowStatus::Generating;
         }
-        
+
         let result = validate_rows_for_composition(&session);
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_validate_rows_for_composition_no_image() {
         let mut session = create_test_session_with_ready_rows();
         if let Some(row) = session.rows.get_mut(&RowKey::Idle) {
             row.image = None;
         }
-        
+
         let result = validate_rows_for_composition(&session);
         assert!(result.is_err());
     }
-    
+
     fn create_test_session_with_ready_rows() -> HatchingSession {
         use crate::hatching::session::{ImageArtifact, ImageMetadata, SourceProvenance};
-        
+
         let mut rows = HashMap::new();
         for row_key in [
             RowKey::Idle,
@@ -230,7 +230,7 @@ mod tests {
                 },
             );
         }
-        
+
         HatchingSession {
             id: Uuid::new_v4(),
             runtime_home: PathBuf::from("/tmp/runtime"),

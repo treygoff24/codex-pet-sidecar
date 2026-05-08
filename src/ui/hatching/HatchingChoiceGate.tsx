@@ -11,6 +11,16 @@ import type { OrphanSummary } from "../../domain/hatching";
 import { getPhaseDisplayName } from "../../domain/hatching";
 import { HatchingLibraryFullBanner } from "./HatchingLibraryFullBanner";
 
+const formatDate = (isoString: string): string => {
+  const date = new Date(isoString);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 interface HatchingChoiceGateProps {
   onStartNew: () => void;
   onResumeSession: (sessionId: string) => void;
@@ -47,16 +57,6 @@ export function HatchingChoiceGate({
     }
   };
 
-  const formatDate = (isoString: string): string => {
-    const date = new Date(isoString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
   return (
     <div className="hatching-choice-gate">
       <h3 className="hatching-choice-gate__title">Create Your Pet</h3>
@@ -80,9 +80,7 @@ export function HatchingChoiceGate({
         >
           <div className="hatching-choice-gate__card-icon">✨</div>
           <div className="hatching-choice-gate__card-content">
-            <div className="hatching-choice-gate__card-title">
-              Start Fresh
-            </div>
+            <div className="hatching-choice-gate__card-title">Start Fresh</div>
             <div className="hatching-choice-gate__card-description">
               Create a completely new pet from scratch
             </div>
@@ -93,9 +91,7 @@ export function HatchingChoiceGate({
       {/* Resume Sessions Option */}
       {orphans.length > 0 && (
         <div className="hatching-choice-gate__section">
-          <h4 className="hatching-choice-gate__section-title">
-            Resume Interrupted Sessions
-          </h4>
+          <h4 className="hatching-choice-gate__section-title">Resume Interrupted Sessions</h4>
           <div className="hatching-choice-gate__sessions">
             {orphans.map((orphan) => (
               <button
@@ -127,22 +123,14 @@ export function HatchingChoiceGate({
 
       {/* Loading State */}
       {isLoadingOrphans && (
-        <div
-          className="hatching-choice-gate__loading"
-          role="status"
-          aria-live="polite"
-        >
+        <div className="hatching-choice-gate__loading" role="status" aria-live="polite">
           Loading sessions...
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div
-          className="hatching-choice-gate__error"
-          role="alert"
-          aria-live="assertive"
-        >
+        <div className="hatching-choice-gate__error" role="alert" aria-live="assertive">
           {error}
         </div>
       )}

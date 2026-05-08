@@ -126,14 +126,15 @@ export function HatchingWizardApp() {
     {
       id: "generation",
       title: "Generation",
-      phase: { Generating: { rowsCompleted: 0, rowsTotal: 8, estimatedRemaining: 0, totalImagegenCalls: 0 } },
-      content: (
-        <HatchingGenerationProgress
-          progress={null}
-          currentRow={undefined}
-          error={error}
-        />
-      ),
+      phase: {
+        Generating: {
+          rowsCompleted: 0,
+          rowsTotal: 8,
+          estimatedRemaining: 0,
+          totalImagegenCalls: 0,
+        },
+      },
+      content: <HatchingGenerationProgress progress={null} currentRow={undefined} error={error} />,
       canProceed: false,
       canGoBack: false,
       onCancel: handleCancel,

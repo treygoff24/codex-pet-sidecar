@@ -7,6 +7,14 @@
 
 import type { GenerationProgress } from "../../domain/hatching";
 
+const formatTime = (milliseconds: number): string => {
+  const seconds = Math.ceil(milliseconds / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds}s`;
+};
+
 interface HatchingProgressProps {
   progress: GenerationProgress | null;
   currentRow?: string;
@@ -18,17 +26,7 @@ export function HatchingGenerationProgress({
   currentRow,
   error = null,
 }: HatchingProgressProps) {
-  const percentage = progress
-    ? (progress.rowsCompleted / progress.rowsTotal) * 100
-    : 0;
-
-  const formatTime = (milliseconds: number): string => {
-    const seconds = Math.ceil(milliseconds / 1000);
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
-  };
+  const percentage = progress ? (progress.rowsCompleted / progress.rowsTotal) * 100 : 0;
 
   return (
     <div className="hatching-progress">
@@ -60,9 +58,7 @@ export function HatchingGenerationProgress({
       {progress && (
         <div className="hatching-progress__details">
           <div className="hatching-progress__detail">
-            <span className="hatching-progress__detail-label">
-              Completed:
-            </span>
+            <span className="hatching-progress__detail-label">Completed:</span>
             <span className="hatching-progress__detail-value">
               {progress.rowsCompleted} of {progress.rowsTotal} rows
             </span>
@@ -70,9 +66,7 @@ export function HatchingGenerationProgress({
 
           {progress.estimatedRemaining > 0 && (
             <div className="hatching-progress__detail">
-              <span className="hatching-progress__detail-label">
-                Estimated time remaining:
-              </span>
+              <span className="hatching-progress__detail-label">Estimated time remaining:</span>
               <span className="hatching-progress__detail-value">
                 {formatTime(progress.estimatedRemaining)}
               </span>
@@ -81,23 +75,15 @@ export function HatchingGenerationProgress({
 
           {progress.totalImagegenCalls > 0 && (
             <div className="hatching-progress__detail">
-              <span className="hatching-progress__detail-label">
-                Image generation calls:
-              </span>
-              <span className="hatching-progress__detail-value">
-                {progress.totalImagegenCalls}
-              </span>
+              <span className="hatching-progress__detail-label">Image generation calls:</span>
+              <span className="hatching-progress__detail-value">{progress.totalImagegenCalls}</span>
             </div>
           )}
 
           {currentRow && (
             <div className="hatching-progress__current">
-              <span className="hatching-progress__current-label">
-                Currently generating:
-              </span>
-              <span className="hatching-progress__current-value">
-                {currentRow}
-              </span>
+              <span className="hatching-progress__current-label">Currently generating:</span>
+              <span className="hatching-progress__current-value">{currentRow}</span>
             </div>
           )}
         </div>
@@ -113,12 +99,12 @@ export function HatchingGenerationProgress({
       {/* Info Section */}
       <div className="hatching-progress__info">
         <p className="hatching-progress__info-text">
-          This process generates all 8 animation row strips and composes them into a
-          single atlas file for your pet.
+          This process generates all 8 animation row strips and composes them into a single atlas
+          file for your pet.
         </p>
         <p className="hatching-progress__info-text">
-          <strong>Note:</strong> Row generation uses the Codex imagegen integration.
-          This feature will be fully available once the Codex client integration is complete.
+          <strong>Note:</strong> Row generation uses the Codex imagegen integration. This feature
+          will be fully available once the Codex client integration is complete.
         </p>
       </div>
     </div>

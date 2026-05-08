@@ -187,14 +187,12 @@ export interface OrphanSummary {
  * Helper to check if a phase is a specific type.
  */
 export function isPhaseGenerating(
-  phase: HatchingPhase
+  phase: HatchingPhase,
 ): phase is { Generating: GenerationProgress } {
   return typeof phase === "object" && "Generating" in phase;
 }
 
-export function isPhaseDone(
-  phase: HatchingPhase
-): phase is { Done: { petId: string } } {
+export function isPhaseDone(phase: HatchingPhase): phase is { Done: { petId: string } } {
   return typeof phase === "object" && "Done" in phase;
 }
 

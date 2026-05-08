@@ -83,12 +83,8 @@ export function HatchingAtlasReview({
               disabled={isLoading}
               aria-label={`Regenerate ${row.label} row`}
             >
-              <div className="hatching-atlas-review__row-label">
-                {row.label}
-              </div>
-              <div className="hatching-atlas-review__row-description">
-                {row.description}
-              </div>
+              <div className="hatching-atlas-review__row-label">{row.label}</div>
+              <div className="hatching-atlas-review__row-description">{row.description}</div>
             </button>
           ))}
         </div>
@@ -127,8 +123,8 @@ export function HatchingAtlasReview({
       {/* Info Section */}
       <div className="hatching-atlas-review__info">
         <p className="hatching-atlas-review__info-text">
-          <strong>Note:</strong> Atlas generation uses the Codex imagegen integration.
-          This feature will be fully available once the Codex client integration is complete.
+          <strong>Note:</strong> Atlas generation uses the Codex imagegen integration. This feature
+          will be fully available once the Codex client integration is complete.
         </p>
         <p className="hatching-atlas-review__info-text">
           For now, you can import the placeholder and proceed to the welcome step.

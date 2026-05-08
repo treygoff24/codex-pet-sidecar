@@ -20,10 +20,7 @@ use uuid::Uuid;
 /// 3. Update session phase to Review when all rows complete
 /// 4. Update GenerationProgress with completed count
 #[allow(dead_code)]
-pub async fn generate_all_rows(
-    _session_id: Uuid,
-    _runtime_home: PathBuf,
-) -> AppResult<()> {
+pub async fn generate_all_rows(_session_id: Uuid, _runtime_home: PathBuf) -> AppResult<()> {
     // TODO: Implement actual row generation when Codex client is available
     // For now, return an error indicating this needs Codex integration
     Err(AppError::NotImplemented {
@@ -66,13 +63,13 @@ pub async fn regenerate_row(
             // For running-left, re-derive from running-right
             let running_right_path = runtime_home.join("decoded/running-right.png");
             let running_left_path = runtime_home.join("decoded/running-left.png");
-            
+
             let (artifact, mirror_decision) = derive_running_left(
                 &running_right_path,
                 &running_left_path,
                 "Re-generated from atlas review",
             )?;
-            
+
             Ok(RowState {
                 prompt: "Derived from running-right via deterministic mirror".to_string(),
                 image: Some(artifact),
@@ -86,7 +83,10 @@ pub async fn regenerate_row(
         _ => {
             // For other rows, still need Codex integration
             Err(AppError::NotImplemented {
-                command: format!("regenerate_row for {:?} (requires Codex client integration)", row_key),
+                command: format!(
+                    "regenerate_row for {:?} (requires Codex client integration)",
+                    row_key
+                ),
             })
         }
     }

@@ -3,7 +3,8 @@ use crate::commands::{CommandError, CommandResult};
 use crate::error::AppError;
 use crate::hatching::pipeline::import_hatched_pet as pipeline_import_hatched_pet;
 use crate::hatching::prototype::{
-    accept_prototype as prototype_accept_prototype, generate_prototype as prototype_generate_prototype,
+    accept_prototype as prototype_accept_prototype,
+    generate_prototype as prototype_generate_prototype,
     revert_to_iteration as prototype_revert_to_iteration,
 };
 use crate::hatching::reference_image::validate_and_copy_reference;
@@ -287,10 +288,7 @@ pub async fn revert_to_iteration(
 
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn accept_prototype(
-    state: State<'_, AppState>,
-    session_id: Uuid,
-) -> CommandResult<()> {
+pub async fn accept_prototype(state: State<'_, AppState>, session_id: Uuid) -> CommandResult<()> {
     let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
@@ -372,7 +370,7 @@ pub async fn archive_pet(_session_id: Uuid) -> CommandResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hatching::session::{HatchingPhase, PrototypeState, PrototypeIteration};
+    use crate::hatching::session::{HatchingPhase, PrototypeIteration, PrototypeState};
 
     #[test]
     fn not_implemented_error_round_trips() {
@@ -415,7 +413,8 @@ mod tests {
                     image: crate::hatching::session::ImageArtifact {
                         source_path: PathBuf::from("/tmp/source.png"),
                         output_path: PathBuf::from("/tmp/output.png"),
-                        source_provenance: crate::hatching::session::SourceProvenance::BuiltInImagegen,
+                        source_provenance:
+                            crate::hatching::session::SourceProvenance::BuiltInImagegen,
                         source_sha256: "abc".to_string(),
                         output_sha256: "def".to_string(),
                         metadata: crate::hatching::session::ImageMetadata {

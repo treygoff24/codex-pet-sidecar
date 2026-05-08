@@ -19,7 +19,10 @@ import type {
 /**
  * Helper to pick a single file for reference image upload.
  */
-async function pickSingleImage(opts?: { defaultPath?: string; title?: string }): Promise<string | null> {
+async function pickSingleImage(opts?: {
+  defaultPath?: string;
+  title?: string;
+}): Promise<string | null> {
   const result = await openDialog({
     multiple: false,
     filters: [
@@ -65,9 +68,8 @@ export const hatchingBridge = {
     sessionId: string,
     brief: PetBrief,
     archetypeId: string | null,
-    referenceImageId: string | null
-  ): Promise<void> =>
-    invoke("submit_brief", { sessionId, brief, archetypeId, referenceImageId }),
+    referenceImageId: string | null,
+  ): Promise<void> => invoke("submit_brief", { sessionId, brief, archetypeId, referenceImageId }),
 
   /**
    * Upload and validate a reference image for a hatching session.
@@ -103,8 +105,7 @@ export const hatchingBridge = {
   /**
    * Accept the current prototype iteration.
    */
-  acceptPrototype: (sessionId: string): Promise<void> =>
-    invoke("accept_prototype", { sessionId }),
+  acceptPrototype: (sessionId: string): Promise<void> => invoke("accept_prototype", { sessionId }),
 
   /**
    * Regenerate a specific animation row.
@@ -121,8 +122,7 @@ export const hatchingBridge = {
   /**
    * Archive a hatching session.
    */
-  archivePet: (sessionId: string): Promise<void> =>
-    invoke("archive_pet", { sessionId }),
+  archivePet: (sessionId: string): Promise<void> => invoke("archive_pet", { sessionId }),
 
   /**
    * Pick a reference image file.

@@ -8,6 +8,16 @@
 import { useState } from "react";
 import type { PetBrief } from "../../domain/hatching";
 
+const normalizePetId = (name: string): string => {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+};
+
 interface HatchingBriefProps {
   initialBrief?: PetBrief | null;
   onSubmit: (brief: PetBrief) => void;
@@ -20,35 +30,16 @@ interface ValidationErrors {
   personality?: string;
 }
 
-export function HatchingBrief({
-  initialBrief,
-  onSubmit,
-  isLoading = false,
-}: HatchingBriefProps) {
+export function HatchingBrief({ initialBrief, onSubmit, isLoading = false }: HatchingBriefProps) {
   const [displayName, setDisplayName] = useState(initialBrief?.displayName || "");
   const [description, setDescription] = useState(initialBrief?.description || "");
-  const [personality, setPersonality] = useState<string[]>(
-    initialBrief?.personality || []
-  );
+  const [personality, setPersonality] = useState<string[]>(initialBrief?.personality || []);
   const [backstory, setBackstory] = useState(initialBrief?.backstory || "");
   const [speechStyle, setSpeechStyle] = useState(initialBrief?.speechStyle || "");
-  const [behavioralQuirks, setBehavioralQuirks] = useState(
-    initialBrief?.behavioralQuirks || ""
-  );
+  const [behavioralQuirks, setBehavioralQuirks] = useState(initialBrief?.behavioralQuirks || "");
   const [visualNotes, setVisualNotes] = useState(initialBrief?.visualNotes || "");
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-
-  // Normalize display name to pet_id (lowercase, hyphens for spaces, alphanumeric only)
-  const normalizePetId = (name: string): string => {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, "")
-      .trim()
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  };
 
   const petId = normalizePetId(displayName);
 
@@ -123,8 +114,13 @@ export function HatchingBrief({
     setPersonality(personality.filter((_, i) => i !== index));
   };
 
-  const isValid = !errors.displayName && !errors.description && !errors.personality &&
-                 displayName.trim() && description.trim() && personality.length > 0;
+  const isValid =
+    !errors.displayName &&
+    !errors.description &&
+    !errors.personality &&
+    displayName.trim() &&
+    description.trim() &&
+    personality.length > 0;
 
   return (
     <div className="hatching-brief">
@@ -191,9 +187,7 @@ export function HatchingBrief({
               {errors.description}
             </div>
           )}
-          <div className="hatching-brief__hint">
-            {description.length} / 500 characters
-          </div>
+          <div className="hatching-brief__hint">{description.length} / 500 characters</div>
         </div>
 
         {/* Personality Traits */}
@@ -240,9 +234,7 @@ export function HatchingBrief({
               {errors.personality}
             </div>
           )}
-          <div className="hatching-brief__hint">
-            {personality.length} / 10 traits
-          </div>
+          <div className="hatching-brief__hint">{personality.length} / 10 traits</div>
         </div>
 
         {/* Backstory */}
@@ -260,9 +252,7 @@ export function HatchingBrief({
             rows={3}
             maxLength={1000}
           />
-          <div className="hatching-brief__hint">
-            {backstory.length} / 1000 characters
-          </div>
+          <div className="hatching-brief__hint">{backstory.length} / 1000 characters</div>
         </div>
 
         {/* Speech Style */}
@@ -280,9 +270,7 @@ export function HatchingBrief({
             placeholder="e.g., formal, casual, quirky"
             maxLength={100}
           />
-          <div className="hatching-brief__hint">
-            How your pet speaks and communicates
-          </div>
+          <div className="hatching-brief__hint">How your pet speaks and communicates</div>
         </div>
 
         {/* Behavioral Quirks */}
@@ -300,9 +288,7 @@ export function HatchingBrief({
             rows={2}
             maxLength={500}
           />
-          <div className="hatching-brief__hint">
-            {behavioralQuirks.length} / 500 characters
-          </div>
+          <div className="hatching-brief__hint">{behavioralQuirks.length} / 500 characters</div>
         </div>
 
         {/* Visual Notes */}
@@ -320,9 +306,7 @@ export function HatchingBrief({
             rows={2}
             maxLength={500}
           />
-          <div className="hatching-brief__hint">
-            {visualNotes.length} / 500 characters
-          </div>
+          <div className="hatching-brief__hint">{visualNotes.length} / 500 characters</div>
         </div>
       </div>
 

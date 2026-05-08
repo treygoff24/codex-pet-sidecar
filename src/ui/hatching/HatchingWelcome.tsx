@@ -26,9 +26,7 @@ export function HatchingWelcome({
         <div className="hatching-welcome__success-icon" aria-hidden="true">
           ✓
         </div>
-        <h3 className="hatching-welcome__title">
-          {petName} is Ready!
-        </h3>
+        <h3 className="hatching-welcome__title">{petName} is Ready!</h3>
         <p className="hatching-welcome__description">
           Your new pet has been successfully created and added to your library.
         </p>

@@ -19,7 +19,7 @@ function runRustAtlasTests() {
   try {
     console.log("Running hatching runtime smoke tests...");
     console.log("Testing atlas operations (mirroring, validation, composition, packaging)...");
-    
+
     // Run the comprehensive Rust test suite for atlas operations
     execSync("cargo test --manifest-path src-tauri/Cargo.toml --lib hatching::atlas", {
       stdio: "inherit",
@@ -42,7 +42,7 @@ function runRustAtlasTests() {
     console.log("  - SHA-256 hashing for provenance tracking");
     console.log("  - WebP encoding for pet packaging");
     console.log("  - Row validation for atlas composition");
-    
+
     return { ok: true, testCount: 145 };
   } catch (error) {
     console.error("✗ Hatching runtime smoke test failed:", error);

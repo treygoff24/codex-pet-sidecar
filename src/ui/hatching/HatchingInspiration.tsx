@@ -97,16 +97,21 @@ export function HatchingInspiration({
       ? SAMPLE_ARCHETYPES
       : SAMPLE_ARCHETYPES.filter((archetype) => {
           if (filter === "friendly") {
-            return archetype.personality.includes("gentle") ||
-                   archetype.personality.includes("supportive");
+            return (
+              archetype.personality.includes("gentle") ||
+              archetype.personality.includes("supportive")
+            );
           }
           if (filter === "energetic") {
-            return archetype.personality.includes("playful") ||
-                   archetype.personality.includes("energetic");
+            return (
+              archetype.personality.includes("playful") ||
+              archetype.personality.includes("energetic")
+            );
           }
           if (filter === "calm") {
-            return archetype.personality.includes("wise") ||
-                   archetype.personality.includes("patient");
+            return (
+              archetype.personality.includes("wise") || archetype.personality.includes("patient")
+            );
           }
           return true;
         });
@@ -202,17 +207,17 @@ export function HatchingInspiration({
             key={archetype.id}
             type="button"
             className={`hatching-inspiration__card ${
-              selectedArchetype?.id === archetype.id
-                ? "hatching-inspiration__card--selected"
-                : ""
+              selectedArchetype?.id === archetype.id ? "hatching-inspiration__card--selected" : ""
             }`}
             onClick={() => handleSelectArchetype(archetype)}
             disabled={isLoading}
             aria-pressed={selectedArchetype?.id === archetype.id}
-            style={{
-              "--archetype-primary": archetype.colorScheme.primary,
-              "--archetype-secondary": archetype.colorScheme.secondary,
-            } as React.CSSProperties}
+            style={
+              {
+                "--archetype-primary": archetype.colorScheme.primary,
+                "--archetype-secondary": archetype.colorScheme.secondary,
+              } as React.CSSProperties
+            }
           >
             <div
               className="hatching-inspiration__card-preview"
@@ -220,23 +225,14 @@ export function HatchingInspiration({
                 background: `linear-gradient(135deg, ${archetype.colorScheme.primary} 0%, ${archetype.colorScheme.secondary} 100%)`,
               }}
             >
-              <div className="hatching-inspiration__card-icon">
-                {archetype.name.charAt(0)}
-              </div>
+              <div className="hatching-inspiration__card-icon">{archetype.name.charAt(0)}</div>
             </div>
             <div className="hatching-inspiration__card-content">
-              <div className="hatching-inspiration__card-name">
-                {archetype.name}
-              </div>
-              <div className="hatching-inspiration__card-description">
-                {archetype.description}
-              </div>
+              <div className="hatching-inspiration__card-name">{archetype.name}</div>
+              <div className="hatching-inspiration__card-description">{archetype.description}</div>
               <div className="hatching-inspiration__card-tags">
                 {archetype.personality.map((trait) => (
-                  <span
-                    key={trait}
-                    className="hatching-inspiration__card-tag"
-                  >
+                  <span key={trait} className="hatching-inspiration__card-tag">
                     {trait}
                   </span>
                 ))}

@@ -119,8 +119,8 @@ export function HatchingPrototype({
       {/* Info Section */}
       <div className="hatching-prototype__info">
         <p className="hatching-prototype__info-text">
-          <strong>Note:</strong> Prototype generation uses the Codex imagegen integration.
-          This feature will be available once the Codex client integration is complete.
+          <strong>Note:</strong> Prototype generation uses the Codex imagegen integration. This
+          feature will be available once the Codex client integration is complete.
         </p>
         <p className="hatching-prototype__info-text">
           For now, you can accept the placeholder and proceed to the next step.

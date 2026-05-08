@@ -98,18 +98,9 @@ export function HatchingWizard({
   };
 
   return (
-    <div
-      className="hatching-wizard"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="wizard-title"
-    >
+    <div className="hatching-wizard" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
       {/* Step indicator */}
-      <nav
-        className="hatching-wizard__steps"
-        aria-label="Wizard progress"
-        role="tablist"
-      >
+      <nav className="hatching-wizard__steps" aria-label="Wizard progress" role="tablist">
         {steps.map((step, index) => {
           const isCurrent = index === currentStepIndex;
           const isPast = index < currentStepIndex;
@@ -143,21 +134,12 @@ export function HatchingWizard({
         role="tabpanel"
         aria-labelledby={`step-${currentStep.id}-title`}
       >
-        <h2
-          id="wizard-title"
-          ref={titleRef}
-          className="hatching-wizard__title"
-          tabIndex={-1}
-        >
+        <h2 id="wizard-title" ref={titleRef} className="hatching-wizard__title" tabIndex={-1}>
           {currentStep.title}
         </h2>
 
         {error && (
-          <div
-            className="hatching-wizard__error"
-            role="alert"
-            aria-live="assertive"
-          >
+          <div className="hatching-wizard__error" role="alert" aria-live="assertive">
             <strong>Error:</strong> {error}
           </div>
         )}
@@ -197,16 +179,10 @@ export function HatchingWizard({
             className="hatching-wizard__button hatching-wizard__button--primary"
             onClick={handleNext}
             disabled={!currentStep.canProceed || isLoading}
-            aria-label={
-              isLoading
-                ? "Processing, please wait"
-                : "Continue to next step"
-            }
+            aria-label={isLoading ? "Processing, please wait" : "Continue to next step"}
           >
             {isLoading ? (
-              <span className="hatching-wizard__button-text">
-                Processing...
-              </span>
+              <span className="hatching-wizard__button-text">Processing...</span>
             ) : (
               <span className="hatching-wizard__button-text">
                 {currentStepIndex === steps.length - 1 ? "Finish" : "Next"}
