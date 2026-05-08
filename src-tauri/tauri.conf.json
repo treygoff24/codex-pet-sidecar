@@ -23,6 +23,21 @@
         "resizable": false,
         "skipTaskbar": true,
         "shadow": false
+      },
+      {
+        "label": "hatching-wizard",
+        "title": "Hatch a pet",
+        "width": 960,
+        "height": 720,
+        "minWidth": 800,
+        "minHeight": 600,
+        "decorations": true,
+        "resizable": true,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "skipTaskbar": false,
+        "visible": false,
+        "url": "index.html?window=hatching-wizard"
       }
     ],
     "security": {
