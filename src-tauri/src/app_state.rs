@@ -1,3 +1,4 @@
+use crate::hatching::runtime::HatchingRuntimeManagerRegistry;
 use crate::hatching::session::HatchingSessionRegistry;
 use crate::proactive::AmbientEngine;
 use crate::runtime::{RuntimeEvent, RuntimeSessionManager};
@@ -14,6 +15,8 @@ pub struct AppState {
     pub observer_started: AtomicBool,
     #[allow(dead_code)]
     pub hatching_session_registry: Arc<HatchingSessionRegistry>,
+    #[allow(dead_code)]
+    pub hatching_runtime_registry: Arc<HatchingRuntimeManagerRegistry>,
 }
 
 impl AppState {
@@ -24,7 +27,8 @@ impl AppState {
             event_tx,
             ambient: Mutex::new(AmbientEngine::default()),
             observer_started: AtomicBool::new(false),
-            hatching_session_registry: Arc::new(HatchingSessionRegistry::new(paths)),
+            hatching_session_registry: Arc::new(HatchingSessionRegistry::new(paths.clone())),
+            hatching_runtime_registry: Arc::new(HatchingRuntimeManagerRegistry::new(paths)),
         }
     }
 }

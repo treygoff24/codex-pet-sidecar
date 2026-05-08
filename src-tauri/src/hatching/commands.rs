@@ -236,26 +236,64 @@ pub async fn list_orphan_hatching_sessions(
 pub async fn describe_reference_image(
     state: State<'_, AppState>,
     session_id: Uuid,
-    _reference_image_id: Uuid,
+    reference_image_id: Uuid,
 ) -> CommandResult<String> {
-    // TODO: Implement full integration with HatchingRuntimeManager
-    // This requires:
-    // 1. Adding HatchingRuntimeManager registry to AppState
-    // 2. Getting the runtime manager for the session
-    // 3. Getting the JsonRpcClient from the runtime manager
-    // 4. Getting the thread_id from the session
-    // 5. Getting the reference image path from the session
-    // 6. Calling vision::describe_reference_image with the correct parameters
-
-    let _session = std::sync::Arc::clone(&state.hatching_session_registry)
+    // Get session to extract reference image path and thread_id
+    let session = std::sync::Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
         .map_err(CommandError::from)?;
 
-    Err(CommandError {
-        message: "describe_reference_image requires HatchingRuntimeManager integration".to_string(),
-        recoverable: true,
-    })
+    // Get reference image path
+    let reference_image = session
+        .reference_image
+        .as_ref()
+        .ok_or_else(|| CommandError {
+            message: "No reference image found in session".to_string(),
+            recoverable: true,
+        })?;
+
+    if reference_image.id != reference_image_id {
+        return Err(CommandError {
+            message: "Reference image ID does not match session".to_string(),
+            recoverable: true,
+        });
+    }
+
+    // Get thread_id from session
+    let thread_id = session
+        .codex_thread_id
+        .as_ref()
+        .ok_or_else(|| CommandError {
+            message: "No Codex thread ID found in session".to_string(),
+            recoverable: true,
+        })?
+        .clone();
+
+    let image_path = reference_image.path.clone();
+
+    // Get runtime manager
+    let runtime_manager = std::sync::Arc::clone(&state.hatching_runtime_registry)
+        .get(session_id)
+        .await
+        .map_err(CommandError::from)?;
+
+    // Get JsonRpcClient
+    let client = {
+        let manager_guard = runtime_manager.lock().await;
+        manager_guard
+            .client()
+            .ok_or_else(|| CommandError {
+                message: "Runtime manager not started".to_string(),
+                recoverable: true,
+            })?
+            .clone()
+    };
+
+    // Call vision function
+    crate::hatching::vision::describe_reference_image(&client, &thread_id, &image_path)
+        .await
+        .map_err(CommandError::from)
 }
 
 #[allow(dead_code)]

@@ -5,9 +5,10 @@ use crate::runtime::json_rpc::JsonRpcClient;
 use crate::runtime::process::AppServerProcess;
 use crate::state::paths::AppPaths;
 use serde_json::json;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 /// Hatching runtime manager - independent of pet RuntimeSessionManager.
@@ -244,6 +245,65 @@ impl HatchingRuntimeManager {
             }
         }
         Ok(())
+    }
+}
+
+/// Registry for HatchingRuntimeManager instances.
+///
+/// Manages runtime managers for active hatching sessions, keyed by session_id.
+pub struct HatchingRuntimeManagerRegistry {
+    managers: RwLock<HashMap<Uuid, Arc<Mutex<HatchingRuntimeManager>>>>,
+    paths: AppPaths,
+}
+
+impl HatchingRuntimeManagerRegistry {
+    pub fn new(paths: AppPaths) -> Self {
+        Self {
+            managers: RwLock::new(HashMap::new()),
+            paths,
+        }
+    }
+
+    /// Get or create a runtime manager for the given session.
+    pub async fn get_or_create(&self, session_id: Uuid) -> Arc<Mutex<HatchingRuntimeManager>> {
+        let managers = self.managers.read().await;
+        if let Some(manager) = managers.get(&session_id) {
+            return manager.clone();
+        }
+        drop(managers);
+
+        // Create new manager
+        let manager = Arc::new(Mutex::new(HatchingRuntimeManager::new(session_id, &self.paths)));
+        let mut managers = self.managers.write().await;
+        managers.insert(session_id, manager.clone());
+        manager
+    }
+
+    /// Get an existing runtime manager for the given session.
+    pub async fn get(&self, session_id: Uuid) -> AppResult<Arc<Mutex<HatchingRuntimeManager>>> {
+        let managers = self.managers.read().await;
+        managers
+            .get(&session_id)
+            .cloned()
+            .ok_or_else(|| AppError::PetNotFound(session_id.to_string()))
+    }
+
+    /// Remove a runtime manager for the given session.
+    pub async fn remove(&self, session_id: Uuid) -> AppResult<()> {
+        let mut managers = self.managers.write().await;
+        managers
+            .remove(&session_id)
+            .ok_or_else(|| AppError::PetNotFound(session_id.to_string()))?;
+        Ok(())
+    }
+
+    /// Teardown and remove a runtime manager.
+    pub async fn teardown_and_remove(&self, session_id: Uuid) -> AppResult<()> {
+        let manager = self.get(session_id).await?;
+        let manager_guard = manager.lock().await;
+        manager_guard.teardown().await?;
+        drop(manager_guard);
+        self.remove(session_id).await
     }
 }
 
