@@ -67,7 +67,7 @@ export const genericDefaultPersona =
 
 export function isTuckActive(tuck: TuckState, now = new Date()): boolean {
   if (!tuck.tucked) return false;
-  if (!tuck.tuckedUntil) return true;
+  if (tuck.tuckedUntil == null) return true;
   const until = Date.parse(tuck.tuckedUntil);
   // Treat unparseable timestamps as expired so the user can wake the pet.
   // Mirrors the Rust-side fallback in commands::tuck_is_active.

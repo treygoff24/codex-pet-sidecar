@@ -272,6 +272,35 @@ describe("App pet animation state wiring", () => {
     expect(screen.queryByText("Allow once")).not.toBeInTheDocument();
   });
 
+  it("records backend ambient status and workspace observations in the transcript", async () => {
+    render(<App />);
+
+    await screen.findByLabelText("Olive pet sprite");
+    await waitFor(() => expect(petEventHandler).toBeDefined());
+
+    act(() => {
+      petEventHandler?.({
+        type: "ambient_status",
+        message: "Screenshot awareness is text-only right now: permission denied",
+      });
+      petEventHandler?.({
+        type: "observation",
+        digest: {
+          type: "workspace",
+          cwd: "/repo",
+          repoName: "codex-pet-sidecar",
+          dirtySummary: "2 modified",
+          observedAt: "2026-05-07T00:00:00Z",
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open transcript" }));
+
+    await screen.findByText("Screenshot awareness is text-only right now: permission denied");
+    await screen.findByText("Workspace: codex-pet-sidecar has 2 modified.");
+  });
+
   it("clears stale errors around approval requests and responses", async () => {
     render(<App />);
 
@@ -320,5 +349,48 @@ describe("App pet animation state wiring", () => {
     await waitFor(() => expect(runtimeBridgeMock.wakePet).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(runtimeBridgeMock.restorePetWindowFromTab).toHaveBeenCalledTimes(1));
     await screen.findByLabelText("Olive pet sprite");
+  });
+
+  it("shows the hatching skill prompt from the onboarding journey", async () => {
+    runtimeBridgeMock.loadPetConfig.mockResolvedValue(null);
+    runtimeBridgeMock.listInstalledPets.mockResolvedValue([]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Hatch my own pet with Codex" }));
+
+    await screen.findByText("hatch");
+    expect(runtimeBridgeMock.startHatchingFlow).toHaveBeenCalledTimes(1);
+  });
+
+  it("imports a staged pet from onboarding and refreshes into the pet window", async () => {
+    runtimeBridgeMock.loadPetConfig.mockResolvedValueOnce(null).mockResolvedValue(baseConfig);
+    runtimeBridgeMock.listInstalledPets
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([olivePet, deweyPet]);
+    runtimeBridgeMock.pickPetFolder.mockResolvedValue("/tmp/staged-dewey");
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Import existing Codex pet" }));
+
+    await waitFor(() => expect(runtimeBridgeMock.pickPetFolder).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(runtimeBridgeMock.importPet).toHaveBeenCalledWith("/tmp/staged-dewey"),
+    );
+    await screen.findByLabelText("Olive pet sprite");
+  });
+
+  it("lets the user choose an installed pet when no active config is present", async () => {
+    const deweyConfig = { ...baseConfig, petId: "dewey", displayName: "Dewey" };
+    runtimeBridgeMock.loadPetConfig.mockResolvedValueOnce(null).mockResolvedValue(deweyConfig);
+    runtimeBridgeMock.listInstalledPets.mockResolvedValue([olivePet, deweyPet]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Dewey" }));
+
+    await waitFor(() => expect(runtimeBridgeMock.setActivePet).toHaveBeenCalledWith("dewey"));
+    await screen.findByLabelText("Dewey pet sprite");
   });
 });

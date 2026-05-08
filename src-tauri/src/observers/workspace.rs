@@ -96,4 +96,30 @@ mod tests {
         );
         assert_eq!(dirty_summary(""), None);
     }
+
+    #[test]
+    fn missing_workspace_degrades_instead_of_panicking_or_shelling_forever() {
+        let missing = tempfile::tempdir()
+            .expect("tempdir")
+            .path()
+            .join("missing-repo");
+        let digest = observe_workspace(&missing);
+        match digest {
+            ObservationDigest::Workspace {
+                cwd,
+                repo_name,
+                branch,
+                dirty_summary,
+                degraded: Some(degraded),
+                ..
+            } => {
+                assert_eq!(cwd, missing.display().to_string());
+                assert!(repo_name.is_none());
+                assert!(branch.is_none());
+                assert!(dirty_summary.is_none());
+                assert!(degraded.contains("workspace cwd does not exist"));
+            }
+            other => panic!("expected degraded workspace digest, got {other:?}"),
+        }
+    }
 }

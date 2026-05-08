@@ -1,5 +1,5 @@
 use crate::app_state::AppState;
-use crate::state::{load_config, save_config};
+use crate::state::{load_config, save_config, PetConfig};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -51,8 +51,7 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 fn tuck_from_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let state = app.state::<AppState>();
     if let Ok(Some(mut config)) = load_config(&state.paths) {
-        config.tuck.tucked = true;
-        config.tuck.tucked_until = None;
+        apply_tray_tuck(&mut config);
         let _ = save_config(&state.paths, &config);
     }
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
@@ -64,8 +63,7 @@ fn tuck_from_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 fn wake_from_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let state = app.state::<AppState>();
     if let Ok(Some(mut config)) = load_config(&state.paths) {
-        config.tuck.tucked = false;
-        config.tuck.tucked_until = None;
+        apply_tray_wake(&mut config);
         let _ = save_config(&state.paths, &config);
     }
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
@@ -74,4 +72,57 @@ fn wake_from_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         let _ = window.set_focus();
     }
     Ok(())
+}
+
+fn apply_tray_tuck(config: &mut PetConfig) {
+    config.tuck.tucked = true;
+    config.tuck.tucked_until = None;
+}
+
+fn apply_tray_wake(config: &mut PetConfig) {
+    config.tuck.tucked = false;
+    config.tuck.tucked_until = None;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::config::{default_pet_config, TuckConfig};
+
+    fn config_with_tuck(tuck: TuckConfig) -> PetConfig {
+        let mut config = default_pet_config(
+            "olive".into(),
+            "Olive".into(),
+            "/tmp/spritesheet.webp".into(),
+            "persona".into(),
+        );
+        config.tuck = tuck;
+        config
+    }
+
+    #[test]
+    fn tray_tuck_makes_the_pet_indefinitely_tucked() {
+        let mut config = config_with_tuck(TuckConfig {
+            tucked: false,
+            tucked_until: Some("2099-01-01T00:00:00Z".into()),
+        });
+
+        apply_tray_tuck(&mut config);
+
+        assert!(config.tuck.tucked);
+        assert!(config.tuck.tucked_until.is_none());
+    }
+
+    #[test]
+    fn tray_wake_clears_any_timed_or_indefinite_tuck() {
+        let mut config = config_with_tuck(TuckConfig {
+            tucked: true,
+            tucked_until: Some("2099-01-01T00:00:00Z".into()),
+        });
+
+        apply_tray_wake(&mut config);
+
+        assert!(!config.tuck.tucked);
+        assert!(config.tuck.tucked_until.is_none());
+    }
 }

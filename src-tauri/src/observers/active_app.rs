@@ -18,22 +18,7 @@ end tell"#
             r#"tell application "System Events" to return name of first application process whose frontmost is true"#
         };
         match Command::new("osascript").arg("-e").arg(script).output() {
-            Ok(output) if output.status.success() => {
-                let text = String::from_utf8_lossy(&output.stdout);
-                let mut lines = text.lines();
-                let app_name = lines.next().unwrap_or("Unknown").trim().to_string();
-                let title = lines
-                    .next()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned);
-                ObservationDigest::ActiveApp {
-                    app_name,
-                    window_title: title,
-                    observed_at: now_timestamp(),
-                    degraded: None,
-                }
-            }
+            Ok(output) if output.status.success() => active_app_digest_from_stdout(&output.stdout),
             Ok(output) => ObservationDigest::ActiveApp {
                 app_name: "Unknown".into(),
                 window_title: None,
@@ -56,5 +41,53 @@ end tell"#
             observed_at: now_timestamp(),
             degraded: Some("active app observer is macOS-only".into()),
         }
+    }
+}
+
+fn active_app_digest_from_stdout(stdout: &[u8]) -> ObservationDigest {
+    let text = String::from_utf8_lossy(stdout);
+    let mut lines = text.lines();
+    let app_name = lines.next().unwrap_or("Unknown").trim().to_string();
+    let title = lines
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    ObservationDigest::ActiveApp {
+        app_name,
+        window_title: title,
+        observed_at: now_timestamp(),
+        degraded: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_frontmost_app_and_optional_window_title() {
+        assert!(matches!(
+            active_app_digest_from_stdout(b"Cursor\nmain.rs\n"),
+            ObservationDigest::ActiveApp {
+                app_name,
+                window_title: Some(title),
+                degraded: None,
+                ..
+            } if app_name == "Cursor" && title == "main.rs"
+        ));
+    }
+
+    #[test]
+    fn trims_empty_window_title_without_degrading() {
+        assert!(matches!(
+            active_app_digest_from_stdout(b"Safari\n  \n"),
+            ObservationDigest::ActiveApp {
+                app_name,
+                window_title: None,
+                degraded: None,
+                ..
+            } if app_name == "Safari"
+        ));
     }
 }

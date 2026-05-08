@@ -16,7 +16,14 @@ pub fn capture_ambient_screenshot(
     pet_id: &str,
     retain_screenshot: bool,
 ) -> ScreenshotCapture {
-    match capture_screen(paths, pet_id) {
+    screenshot_capture_from_result(capture_screen(paths, pet_id), retain_screenshot)
+}
+
+fn screenshot_capture_from_result(
+    result: AppResult<PathBuf>,
+    retain_screenshot: bool,
+) -> ScreenshotCapture {
+    match result {
         Ok(path) => ScreenshotCapture {
             path: Some(path),
             cleanup_after_turn: !retain_screenshot,
@@ -93,4 +100,45 @@ fn compress_screenshot(png_path: &std::path::Path, jpg_path: &std::path::Path) -
         "sips".into(),
         String::from_utf8_lossy(&output.stderr).trim().to_string(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn successful_ephemeral_screenshot_is_cleaned_after_the_ambient_turn() {
+        let capture = screenshot_capture_from_result(Ok(PathBuf::from("/tmp/ambient.jpg")), false);
+
+        assert_eq!(capture.path, Some(PathBuf::from("/tmp/ambient.jpg")));
+        assert!(capture.cleanup_after_turn);
+        assert!(capture.degraded.is_none());
+    }
+
+    #[test]
+    fn retained_screenshot_is_not_marked_for_cleanup() {
+        let capture = screenshot_capture_from_result(Ok(PathBuf::from("/tmp/ambient.jpg")), true);
+
+        assert_eq!(capture.path, Some(PathBuf::from("/tmp/ambient.jpg")));
+        assert!(!capture.cleanup_after_turn);
+        assert!(capture.degraded.is_none());
+    }
+
+    #[test]
+    fn failed_screenshot_capture_degrades_to_text_only_context() {
+        let capture = screenshot_capture_from_result(
+            Err(AppError::CommandFailed(
+                "screencapture".into(),
+                "permission denied".into(),
+            )),
+            false,
+        );
+
+        assert!(capture.path.is_none());
+        assert!(!capture.cleanup_after_turn);
+        assert_eq!(
+            capture.degraded,
+            Some("command `screencapture` failed: permission denied".into())
+        );
+    }
 }

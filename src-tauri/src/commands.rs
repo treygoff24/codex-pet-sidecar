@@ -547,6 +547,31 @@ mod tests {
     }
 
     #[test]
+    fn invalid_tuck_timestamp_is_expired_for_frontend_parity() {
+        let config = config_with_tuck(TuckConfig {
+            tucked: true,
+            tucked_until: Some(String::new()),
+        });
+        assert!(!tuck_is_active(&config));
+        assert!(visibility_state(&config).visible);
+    }
+
+    #[test]
+    fn ambient_prompt_records_screenshot_degradation_in_turn_input() {
+        assert_eq!(
+            ambient_prompt_with_screenshot_status(
+                "Ambient awareness snapshot.".into(),
+                Some("permission denied")
+            ),
+            "Ambient awareness snapshot.\nScreenshot unavailable: permission denied"
+        );
+        assert_eq!(
+            ambient_prompt_with_screenshot_status("Ambient awareness snapshot.".into(), None),
+            "Ambient awareness snapshot."
+        );
+    }
+
+    #[test]
     fn default_runtime_workspace_is_app_owned_scratch() {
         let root = tempfile::tempdir().expect("tempdir");
         let paths = crate::state::AppPaths::with_roots(root.path().join("support"));

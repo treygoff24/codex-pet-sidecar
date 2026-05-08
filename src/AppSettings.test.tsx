@@ -225,6 +225,46 @@ describe("App settings integration", () => {
     expect(within(dialog).queryByRole("alert")).toBeNull();
   });
 
+  it("persists observer and ambient settings from the actual settings dialog", async () => {
+    await renderLoadedApp();
+    const { user, dialog } = await openSettings();
+
+    await user.click(within(dialog).getByLabelText("Active app name"));
+    await waitFor(() =>
+      expect(runtimeBridgeMock.savePetConfig).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          observers: { activeApp: false, windowTitle: true, workspace: true, idle: true },
+        }),
+      ),
+    );
+
+    await user.click(
+      within(dialog).getByLabelText("Let the pet quietly check context every few minutes"),
+    );
+    await user.clear(within(dialog).getByLabelText("Check interval, minutes"));
+    await user.type(within(dialog).getByLabelText("Check interval, minutes"), "7");
+    await user.click(
+      within(dialog).getByLabelText("Include an opt-in screenshot with ambient checks"),
+    );
+    await user.click(
+      within(dialog).getByLabelText("Keep ambient screenshots on disk after checks"),
+    );
+
+    await waitFor(() =>
+      expect(runtimeBridgeMock.savePetConfig).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          ambient: {
+            enabled: false,
+            intervalMinutes: 10,
+            includeScreenshot: true,
+            retainScreenshots: true,
+          },
+          observers: { activeApp: false, windowTitle: true, workspace: true, idle: true },
+        }),
+      ),
+    );
+  });
+
   it("surfaces settings save failures instead of silently lying about persistence", async () => {
     await renderLoadedApp();
     runtimeBridgeMock.savePetConfig.mockRejectedValueOnce(new Error("disk is full"));

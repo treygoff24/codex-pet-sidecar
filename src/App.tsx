@@ -207,6 +207,7 @@ function App() {
         onUseOlive={() => void refreshState()}
         onHatch={() => void showSkillPrompt(runtimeBridge.startHatchingFlow)}
         onImport={() => void handleImportPet()}
+        skillPrompt={runtime.lastReply || undefined}
       />
     );
   }

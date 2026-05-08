@@ -262,4 +262,53 @@ mod tests {
         assert!(prompt.contains("codex-pet-sidecar"));
         assert!(prompt.contains("Idle state"));
     }
+
+    #[test]
+    fn repo_switch_trigger_survives_mute_and_uses_latest_context() {
+        let mut engine = AmbientEngine::default();
+        engine.record_observations(&[ObservationDigest::Workspace {
+            cwd: "/old".into(),
+            repo_name: Some("old-repo".into()),
+            branch: Some("main".into()),
+            dirty_summary: None,
+            observed_at: "before".into(),
+            degraded: None,
+        }]);
+        engine.record_observations(&[ObservationDigest::Workspace {
+            cwd: "/new".into(),
+            repo_name: Some("new-repo".into()),
+            branch: Some("feature/ambient".into()),
+            dirty_summary: Some("2 modified".into()),
+            observed_at: "after".into(),
+            degraded: None,
+        }]);
+
+        assert!(engine
+            .next_request(&ambient_config(), Some("2099-01-01T00:00:00Z"))
+            .is_none());
+
+        let request = engine
+            .next_request(&ambient_config(), None)
+            .expect("unmuted pending repo-change trigger should send");
+        assert!(request
+            .prompt
+            .contains("Trigger: The user switched to the new-repo repo."));
+        assert!(request.prompt.contains("branch=feature/ambient"));
+        assert!(request.prompt.contains("dirty=2 modified"));
+    }
+
+    #[test]
+    fn returned_from_idle_trigger_is_specific_not_periodic() {
+        let mut engine = AmbientEngine::default();
+        engine.record_observations(&[ObservationDigest::IdleState {
+            idle_since: None,
+            returned_at: Some("now".into()),
+            observed_at: "now".into(),
+        }]);
+
+        let prompt = engine.next_request(&ambient_config(), None).unwrap().prompt;
+        assert!(prompt
+            .contains("Trigger: The user returned after being idle for more than five minutes."));
+        assert!(!prompt.contains("Trigger: periodic ambient check."));
+    }
 }

@@ -28,3 +28,69 @@ pub fn personality_prompt(paths: &AppPaths) -> AppResult<SkillPrompt> {
         ),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::config::{default_pet_config, save_config};
+
+    #[test]
+    fn hatching_prompt_points_to_repo_local_workflow_and_staging_contract() {
+        let prompt = hatching_prompt();
+
+        assert_eq!(prompt.skill, "pet-hatching");
+        assert!(prompt.prompt.contains(".codex/skills/pet-hatching"));
+        assert!(prompt.prompt.contains("hatch-runs/<pet-slug>"));
+        assert!(prompt.prompt.contains("1536x1872 atlas"));
+        assert!(prompt.prompt.contains("stop for user review"));
+    }
+
+    #[test]
+    fn personality_prompt_targets_selected_pet_personality_file_when_config_exists() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+        let config = default_pet_config(
+            "olive".into(),
+            "Olive".into(),
+            root.path().join("sprite.webp"),
+            "warm".into(),
+        );
+        save_config(&paths, &config).expect("save config");
+
+        let prompt = personality_prompt(&paths).expect("prompt");
+
+        assert_eq!(prompt.skill, "pet-personality");
+        assert!(prompt.prompt.contains(
+            paths
+                .pet_personality_path("olive")
+                .to_string_lossy()
+                .as_ref()
+        ));
+        assert!(prompt.prompt.contains("preserve privacy boundaries"));
+        assert!(prompt.prompt.contains("only after the user approves"));
+    }
+
+    #[test]
+    fn personality_prompt_repairs_empty_library_to_bundled_olive_before_prompting() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+        crate::state::library::save_library(
+            &paths,
+            &crate::state::library::PetLibrary {
+                active_pet_id: None,
+                pets: Vec::new(),
+            },
+        )
+        .expect("empty library");
+
+        let prompt = personality_prompt(&paths).expect("prompt");
+
+        assert_eq!(prompt.skill, "pet-personality");
+        assert!(prompt.prompt.contains(
+            paths
+                .pet_personality_path("olive")
+                .to_string_lossy()
+                .as_ref()
+        ));
+    }
+}

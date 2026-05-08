@@ -2,10 +2,12 @@ export function OnboardingFlow({
   onUseOlive,
   onHatch,
   onImport,
+  skillPrompt,
 }: {
   onUseOlive: () => void;
   onHatch: () => void;
   onImport: () => void;
+  skillPrompt?: string;
 }) {
   return (
     <section className="onboarding-flow" aria-label="Welcome">
@@ -20,6 +22,12 @@ export function OnboardingFlow({
       <button type="button" onClick={onImport}>
         Import existing Codex pet
       </button>
+      {skillPrompt ? (
+        <div className="onboarding-flow__prompt" role="status">
+          <strong>Next step</strong>
+          <p>{skillPrompt}</p>
+        </div>
+      ) : null}
     </section>
   );
 }

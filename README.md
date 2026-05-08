@@ -12,6 +12,8 @@ Hobby project, not an OpenAI product. Built on Tauri 2 + React, talking to a sid
 
 ## Install the official app
 
+**Requirements:** An active ChatGPT/Codex subscription and the Codex CLI.
+
 Download the latest signed and notarized DMG from
 [GitHub Releases](https://github.com/treygoff24/codex-pet-sidecar/releases/latest),
 open it, and drag Codex Pet Sidecar into Applications.
