@@ -11,6 +11,8 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("image error: {0}")]
+    Image(#[from] image::ImageError),
     #[error("codex app-server did not report a websocket URL within {0} seconds")]
     AppServerTimeout(u64),
     #[error("codex app-server exited before it was ready: {0}")]

@@ -1,4 +1,5 @@
 use crate::error::{AppError, AppResult};
+use crate::hatching::atlas::derive_running_left;
 use crate::hatching::session::{GeneratedRowKey, RowKey, RowState};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -53,22 +54,42 @@ pub async fn generate_single_row(
 
 /// Regenerate a specific row (called from atlas review).
 ///
-/// This is a stub implementation.
-/// When implemented, this should:
-/// 1. Validate row_key is a generated row (not derived running-left)
-/// 2. If running-left, route to generate_single_row for running-right
-/// 3. Fire imagegen with updated prompt
-/// 4. Update session.rows with new result
-/// 5. If running-left was regenerated, re-derive it from new running-right
+/// For running-left, this re-derives from running-right using deterministic mirroring.
+/// For other rows, this requires Codex client integration (stubbed).
 pub async fn regenerate_row(
     _session_id: Uuid,
-    _row_key: RowKey,
-    _runtime_home: PathBuf,
+    row_key: RowKey,
+    runtime_home: PathBuf,
 ) -> AppResult<RowState> {
-    // TODO: Implement row regeneration logic
-    Err(AppError::NotImplemented {
-        command: "regenerate_row (requires Codex client integration)".to_string(),
-    })
+    match row_key {
+        RowKey::RunningLeft => {
+            // For running-left, re-derive from running-right
+            let running_right_path = runtime_home.join("decoded/running-right.png");
+            let running_left_path = runtime_home.join("decoded/running-left.png");
+            
+            let (artifact, mirror_decision) = derive_running_left(
+                &running_right_path,
+                &running_left_path,
+                "Re-generated from atlas review",
+            )?;
+            
+            Ok(RowState {
+                prompt: "Derived from running-right via deterministic mirror".to_string(),
+                image: Some(artifact),
+                derived_from: Some(RowKey::RunningRight),
+                mirror_decision: Some(mirror_decision),
+                attempts: 1,
+                last_error: None,
+                status: crate::hatching::session::RowStatus::Ready,
+            })
+        }
+        _ => {
+            // For other rows, still need Codex integration
+            Err(AppError::NotImplemented {
+                command: format!("regenerate_row for {:?} (requires Codex client integration)", row_key),
+            })
+        }
+    }
 }
 
 /// Draft a row prompt from the brief and row template.
@@ -118,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn regenerate_row_returns_not_implemented() {
+    fn regenerate_row_idle_returns_not_implemented() {
         let runtime_home = PathBuf::from("/tmp/runtime");
         let session_id = Uuid::new_v4();
         let row_key = RowKey::Idle;
@@ -127,6 +148,20 @@ mod tests {
         let result = rt.block_on(regenerate_row(session_id, row_key, runtime_home));
 
         assert!(matches!(result, Err(AppError::NotImplemented { .. })));
+    }
+
+    #[test]
+    fn regenerate_row_running_left_needs_source_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_home = temp_dir.path().to_path_buf();
+        let session_id = Uuid::new_v4();
+        let row_key = RowKey::RunningLeft;
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result = rt.block_on(regenerate_row(session_id, row_key, runtime_home));
+
+        // Should fail because running-right source doesn't exist
+        assert!(result.is_err());
     }
 
     #[test]

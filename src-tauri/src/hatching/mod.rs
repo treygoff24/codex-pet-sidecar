@@ -4,6 +4,7 @@
 
 pub mod commands;
 pub mod imagegen;
+pub mod atlas;
 pub mod imagegen_fixture;
 pub mod prototype;
 pub mod reference_image;
