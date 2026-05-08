@@ -231,6 +231,66 @@ impl HatchingRuntimeManager {
         ImagegenIngester::new(self.runtime_home.clone(), workspace_dir)
     }
 
+    /// Wait for any notification with timeout (for debugging).
+    ///
+    /// This method waits for any notification and returns it.
+    /// Useful for debugging to see what notifications are being sent.
+    pub async fn wait_for_any_notification(
+        &self,
+        timeout_ms: u64,
+    ) -> AppResult<(String, serde_json::Value)> {
+        let mut events_rx = {
+            let mut guard = self.events_rx.lock().await;
+            guard
+                .take()
+                .ok_or_else(|| AppError::JsonRpc {
+                    method: "wait_for_any_notification".to_string(),
+                    message: "events receiver not initialized".to_string(),
+                })?
+        };
+
+        let start = std::time::Instant::now();
+        loop {
+            let recv_result = tokio::time::timeout(
+                tokio::time::Duration::from_millis(100),
+                events_rx.recv(),
+            )
+            .await;
+
+            match recv_result {
+                Ok(Some(crate::runtime::json_rpc::WireEvent::Notification {
+                    method,
+                    params,
+                })) => {
+                    // Put the receiver back before returning
+                    self.events_rx.lock().await.replace(events_rx);
+                    return Ok((method, params));
+                }
+                Ok(Some(_)) => {
+                    // Ignore other events (shouldn't happen)
+                }
+                Ok(None) => {
+                    // Channel closed
+                    return Err(AppError::JsonRpc {
+                        method: "wait_for_any_notification".to_string(),
+                        message: "events channel closed".to_string(),
+                    });
+                }
+                Err(_) => {
+                    // Timeout check
+                    if start.elapsed().as_millis() > timeout_ms.into() {
+                        // Put the receiver back before returning
+                        self.events_rx.lock().await.replace(events_rx);
+                        return Err(AppError::JsonRpc {
+                            method: "wait_for_any_notification".to_string(),
+                            message: "timed out waiting for any notification".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     /// Wait for a thread response notification with timeout.
     ///
     /// This method waits for a specific notification method or times out.
