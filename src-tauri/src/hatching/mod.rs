@@ -8,3 +8,4 @@ pub mod imagegen_fixture;
 pub mod reference_image;
 pub mod runtime;
 pub mod session;
+pub mod vision;

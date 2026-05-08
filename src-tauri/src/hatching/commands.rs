@@ -6,6 +6,7 @@ use crate::hatching::runtime::HatchingRuntimeManager;
 use crate::hatching::session::{
     HatchingPhase, HatchingSession, OrphanSummary, PetBrief, ReferenceImage,
 };
+use crate::hatching::vision::describe_reference_image as vision_describe_reference_image;
 use std::path::PathBuf;
 use tauri::State;
 use uuid::Uuid;
@@ -191,13 +192,19 @@ pub async fn list_orphan_hatching_sessions(
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn describe_reference_image(
-    _session_id: Uuid,
-    _reference_image_id: Uuid,
-) -> CommandResult<()> {
-    Err(AppError::NotImplemented {
-        command: "describe_reference_image".to_string(),
-    }
-    .into())
+    state: State<'_, AppState>,
+    session_id: Uuid,
+    reference_image_id: Uuid,
+) -> CommandResult<String> {
+    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
+        .get(session_id)
+        .await
+        .map_err(CommandError::from)?
+        .runtime_home;
+
+    vision_describe_reference_image(session_id, reference_image_id, runtime_home)
+        .await
+        .map_err(CommandError::from)
 }
 
 #[allow(dead_code)]
