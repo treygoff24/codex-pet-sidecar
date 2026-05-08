@@ -35,6 +35,7 @@ export type PetDragAnimationState = Extract<PetAnimationState, "running-left" | 
 export const IDLE_SLOWDOWN = 6;
 export const TRANSIENT_REPETITIONS = 3;
 export const DRAG_ANIMATION_THRESHOLD_PX = 4;
+export const DRAG_DIRECTION_FLIP_THRESHOLD_PX = DRAG_ANIMATION_THRESHOLD_PX * 6;
 export const PET_WINDOW_BASE_ANIMATION_PRIORITY = [
   "waiting",
   "failed",
@@ -82,6 +83,10 @@ const SLOWED_IDLE_FRAMES = IDLE_FRAMES.map((frame) => ({
   frameDurationMs: frame.frameDurationMs * IDLE_SLOWDOWN,
 }));
 
+function loopsUntilStateChanges(state: PetAnimationState): boolean {
+  return state === "running-left" || state === "running-right";
+}
+
 export function resolvePetAnimationSequence(
   state: PetAnimationState,
   reducedMotion: boolean,
@@ -89,6 +94,7 @@ export function resolvePetAnimationSequence(
   const frames = PET_ANIMATION_FRAMES[state];
   if (reducedMotion) return { frames: [frames[0]], loopStartIndex: null };
   if (state === "idle") return { frames: SLOWED_IDLE_FRAMES, loopStartIndex: 0 };
+  if (loopsUntilStateChanges(state)) return { frames, loopStartIndex: 0 };
 
   const transientFrames = Array.from({ length: TRANSIENT_REPETITIONS }, () => frames).flat();
   return {

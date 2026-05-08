@@ -183,9 +183,6 @@ pub async fn tuck_pet(
     config.tuck.tucked = true;
     config.tuck.tucked_until = until;
     save_config(&state.paths, &config).map_err(CommandError::from)?;
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
     schedule_wake_if_needed(app, config.pet_id.clone(), config.tuck.tucked_until.clone());
     Ok(visibility_state(&config))
 }

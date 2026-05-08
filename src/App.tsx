@@ -1,11 +1,6 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { PetLibrary } from "./domain/petLibrary";
-import {
-  isTuckActive,
-  type InstalledPet,
-  type PetConfig,
-  type TuckUntilInput,
-} from "./domain/petConfig";
+import { isTuckActive, type InstalledPet, type PetConfig } from "./domain/petConfig";
 import type { ApprovalAction } from "./domain/runtimeEvents";
 import { INITIAL_RUNTIME_STATE, reduceRuntime } from "./domain/runtimeState";
 import { useOfficialUpdater } from "./hooks/useOfficialUpdater";
@@ -47,6 +42,8 @@ function App() {
   const [appliedConfig, setAppliedConfig] = useState<PetConfig | null>(null);
   const [runtime, dispatch] = useReducer(reduceRuntime, INITIAL_RUNTIME_STATE);
   const updater = useOfficialUpdater();
+  const previousTuckedRef = useRef<boolean | null>(null);
+  const configSaveRevisionRef = useRef(0);
 
   async function refreshState() {
     const [nextLibrary, nextConfig, installedPets] = await Promise.all([
@@ -69,6 +66,27 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    function handleFocus() {
+      void refreshState();
+    }
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, []);
+
+  useEffect(() => {
+    if (!config) return;
+    const tucked = isTuckActive(config.tuck);
+    const previous = previousTuckedRef.current;
+    previousTuckedRef.current = tucked;
+
+    if (tucked) {
+      void runtimeBridge.tuckWindowToTab();
+    } else if (previous === true) {
+      void runtimeBridge.restorePetWindowFromTab();
+    }
+  }, [config]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -106,9 +124,21 @@ function App() {
   }
 
   async function updateConfig(nextConfig: PetConfig) {
+    const previousConfig = config;
+    const saveRevision = configSaveRevisionRef.current + 1;
+    configSaveRevisionRef.current = saveRevision;
     setConfig(nextConfig); // optimistic UI
-    await runtimeBridge.savePetConfig(nextConfig); // wait for disk
-    setAppliedConfig(nextConfig); // restart-eligible only after save resolves
+    try {
+      await runtimeBridge.savePetConfig(nextConfig); // wait for disk
+      if (configSaveRevisionRef.current === saveRevision) {
+        setAppliedConfig(nextConfig); // restart-eligible only after latest save resolves
+      }
+    } catch (caught) {
+      if (configSaveRevisionRef.current === saveRevision) {
+        if (previousConfig) setConfig(previousConfig);
+        dispatch({ type: "EXTERNAL_ERROR", message: formatError(caught) });
+      }
+    }
   }
 
   async function mute(until: string) {
@@ -116,14 +146,23 @@ function App() {
     if (config) setConfig({ ...config, mute: { until } });
   }
 
-  async function tuck(until: TuckUntilInput) {
-    await runtimeBridge.tuckPet(until);
-    if (config) setConfig({ ...config, tuck: { tucked: true, tuckedUntil: until ?? undefined } });
+  async function tuck() {
+    await runtimeBridge.tuckPet(null);
+    dispatch({ type: "RESET" });
+    if (config) {
+      const nextConfig = { ...config, tuck: { tucked: true } };
+      setConfig(nextConfig);
+      setAppliedConfig(nextConfig);
+    }
   }
 
   async function wake() {
     await runtimeBridge.wakePet();
-    if (config) setConfig({ ...config, tuck: { tucked: false } });
+    if (config) {
+      const nextConfig = { ...config, tuck: { tucked: false } };
+      setConfig(nextConfig);
+      setAppliedConfig(nextConfig);
+    }
   }
 
   async function showSkillPrompt(loader: () => Promise<SkillPrompt>) {
@@ -146,10 +185,9 @@ function App() {
     }
   }
 
-  // Both the onboarding "Import existing Codex pet" button and the in-app
-  // toolbar "Import pet" button route here. The dialog plugin handles cancel
-  // (returns null), the import command itself rejects invalid packages with
-  // good error messages, so we just surface whatever comes back.
+  // The dialog plugin handles cancel (returns null), and the import command
+  // rejects invalid packages with good error messages, so we just surface
+  // whatever comes back.
   async function handleImportPet() {
     dispatch({ type: "ERROR_CLEARED" });
     try {
@@ -178,8 +216,6 @@ function App() {
       config={config}
       tucked={isTuckActive(config.tuck)}
       pet={selectedPet}
-      library={library}
-      pets={pets}
       streamingText={runtime.streamingText}
       lastReply={runtime.lastReply}
       awaitingReply={runtime.awaitingReply}
@@ -190,13 +226,9 @@ function App() {
       onSend={sendMessage}
       onSendStart={() => dispatch({ type: "SEND_START" })}
       onMute={mute}
-      onTuck={tuck}
-      onWake={wake}
+      onTuck={() => void tuck()}
+      onWake={() => void wake()}
       onConfigChange={updateConfig}
-      onSwitchPet={switchPet}
-      onHatchPet={() => void showSkillPrompt(runtimeBridge.startHatchingFlow)}
-      onImportPet={() => void handleImportPet()}
-      onImprovePersonality={() => void showSkillPrompt(runtimeBridge.startPersonalityFlow)}
       onApproval={respond}
       onStartDrag={runtimeBridge.startWindowDrag}
       updateState={updater.state}

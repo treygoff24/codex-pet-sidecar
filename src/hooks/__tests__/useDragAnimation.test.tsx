@@ -124,6 +124,40 @@ describe("useDragAnimation", () => {
     expect(result.current.dragAnimation).toBe("running-right");
   });
 
+  it("does not flip direction on brief opposite-sign jitter during native dragging", () => {
+    const { result } = setupHook();
+
+    down(result.current.handlers.onPointerDown, { x: 0, y: 0 });
+    move(result.current.handlers.onPointerMove, { x: 4, y: 0 });
+    expect(result.current.dragAnimation).toBe("running-right");
+
+    // Native window dragging can produce a few backward samples even while the
+    // user's visible movement is steadily rightward. These must not make Olive
+    // face left for a couple of frames.
+    move(result.current.handlers.onPointerMove, { x: -1, y: 0 });
+    expect(result.current.dragAnimation).toBe("running-right");
+    move(result.current.handlers.onPointerMove, { x: 4, y: 0 });
+    expect(result.current.dragAnimation).toBe("running-right");
+    move(result.current.handlers.onPointerMove, { x: -1, y: 0 });
+    expect(result.current.dragAnimation).toBe("running-right");
+  });
+
+  it("flips direction only after sustained opposite travel", () => {
+    const { result } = setupHook();
+
+    down(result.current.handlers.onPointerDown, { x: 0, y: 0 });
+    move(result.current.handlers.onPointerMove, { x: 4, y: 0 });
+    expect(result.current.dragAnimation).toBe("running-right");
+
+    for (const x of [0, -4, -8, -12, -16]) {
+      move(result.current.handlers.onPointerMove, { x, y: 0 });
+      expect(result.current.dragAnimation).toBe("running-right");
+    }
+
+    move(result.current.handlers.onPointerMove, { x: -20, y: 0 });
+    expect(result.current.dragAnimation).toBe("running-left");
+  });
+
   it("resets the baseline when only the vertical axis crosses threshold", () => {
     const { result } = setupHook();
 
@@ -229,7 +263,7 @@ describe("useDragAnimation", () => {
     expect(result.current.dragAnimation).toBeUndefined();
   });
 
-  it("clears direction on a window-level pointercancel", () => {
+  it("keeps direction through pointercancel because native window drags can emit it mid-drag", () => {
     const { result } = setupHook();
 
     down(result.current.handlers.onPointerDown, { x: 0, y: 0 });
@@ -239,7 +273,16 @@ describe("useDragAnimation", () => {
     act(() => {
       window.dispatchEvent(new Event("pointercancel"));
     });
+    expect(result.current.dragAnimation).toBe("running-left");
 
+    act(() => {
+      result.current.handlers.onPointerCancel(makePointerEvent({}));
+    });
+    expect(result.current.dragAnimation).toBe("running-left");
+
+    act(() => {
+      window.dispatchEvent(new Event("pointerup"));
+    });
     expect(result.current.dragAnimation).toBeUndefined();
   });
 

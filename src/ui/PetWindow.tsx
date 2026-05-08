@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { resolvePetWindowAnimation } from "../domain/petAnimation";
-import type { InstalledPet, PetConfig, TuckUntilInput } from "../domain/petConfig";
-import type { PetLibrary } from "../domain/petLibrary";
+import type { InstalledPet, PetConfig } from "../domain/petConfig";
 import type { ApprovalAction, ApprovalRequest } from "../domain/runtimeEvents";
 import type { OfficialUpdateState } from "../hooks/useOfficialUpdater";
 import { useBubbleFade } from "../hooks/useBubbleFade";
@@ -14,8 +14,6 @@ import { ChatInputBar } from "./ChatInputBar";
 import { MuteControl } from "./MuteControl";
 import { PetSprite } from "./PetSprite";
 import { PetToolbar } from "./PetToolbar";
-import { PetLibraryPanel } from "./PetLibraryPanel";
-import { TuckWakeControl } from "./TuckWakeControl";
 import { SettingsPanel } from "./SettingsPanel";
 import { SpeechBubble } from "./SpeechBubble";
 import { ThinkingBubble } from "./ThinkingBubble";
@@ -37,18 +35,12 @@ export function PetWindow({
   error,
   onSend,
   onMute,
+  onTuck,
+  onWake,
   onConfigChange,
   onApproval,
   onStartDrag,
   onSendStart,
-  library,
-  pets,
-  onSwitchPet,
-  onHatchPet,
-  onImportPet,
-  onTuck,
-  onWake,
-  onImprovePersonality,
   updateState,
   onCheckForUpdate,
   onInstallUpdate,
@@ -56,8 +48,6 @@ export function PetWindow({
   config: PetConfig;
   tucked: boolean;
   pet?: InstalledPet;
-  library?: PetLibrary;
-  pets: InstalledPet[];
   streamingText: string;
   lastReply: string;
   awaitingReply: boolean;
@@ -67,16 +57,12 @@ export function PetWindow({
   error?: string;
   onSend: (text: string) => Promise<void> | void;
   onMute: (until: string) => void;
+  onTuck: () => void;
+  onWake: () => void;
   onConfigChange: (config: PetConfig) => void;
   onApproval: (action: ApprovalAction) => void;
   onStartDrag: () => Promise<void> | void;
   onSendStart?: () => void;
-  onSwitchPet: (petId: string) => void;
-  onHatchPet: () => void;
-  onImportPet: () => void;
-  onTuck: (until: TuckUntilInput) => void;
-  onWake: () => void;
-  onImprovePersonality: () => void;
   updateState?: OfficialUpdateState;
   onCheckForUpdate?: () => void;
   onInstallUpdate?: () => void;
@@ -94,11 +80,13 @@ export function PetWindow({
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [muteOpen, setMuteOpen] = useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(false);
   const [seenTranscriptCount, setSeenTranscriptCount] = useState(transcript.length);
   const [seenCompletedOutputCount, setSeenCompletedOutputCount] = useState(completedOutputCount);
   const hasUnreadReply = completedOutputCount > seenCompletedOutputCount;
   const spriteRef = useRef<HTMLDivElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsSheetRef = useRef<HTMLElement>(null);
+  const settingsCloseButtonRef = useRef<HTMLButtonElement>(null);
   const [isSpriteHovered, setIsSpriteHovered] = useState(false);
   const { dragAnimation, handlers: dragHandlers } =
     useDragAnimation<HTMLButtonElement>(onStartDrag);
@@ -123,13 +111,39 @@ export function PetWindow({
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      if (settingsOpen) setSettingsOpen(false);
+      if (settingsOpen) closeSettings();
       else if (muteOpen) setMuteOpen(false);
       else if (transcriptOpen) setTranscriptOpen(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [settingsOpen, muteOpen, transcriptOpen]);
+
+  useEffect(() => {
+    if (settingsOpen) settingsCloseButtonRef.current?.focus();
+  }, [settingsOpen]);
+
+  function closeSettings() {
+    setSettingsOpen(false);
+    requestAnimationFrame(() => settingsButtonRef.current?.focus());
+  }
+
+  function trapSettingsFocus(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== "Tab") return;
+    const focusable = settingsSheetRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focusable?.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   function handleMute(until: string) {
     onMute(until);
@@ -145,6 +159,17 @@ export function PetWindow({
     await onSend(text);
   }
 
+  if (tucked) {
+    return (
+      <main className="pet-window pet-window--tucked">
+        <button type="button" className="wake-tab" onClick={onWake} aria-label="Wake pet">
+          <span aria-hidden>🐾</span>
+          <span>Wake</span>
+        </button>
+      </main>
+    );
+  }
+
   return (
     <main className="pet-window">
       <PetToolbar
@@ -156,29 +181,14 @@ export function PetWindow({
           setMuteOpen((v) => !v);
           setSettingsOpen(false);
         }}
+        onTuck={onTuck}
         onToggleSettings={() => {
           setSettingsOpen((v) => !v);
           setMuteOpen(false);
         }}
         onToggleTranscript={() => setTranscriptOpen((v) => !v)}
+        settingsButtonRef={settingsButtonRef}
       />
-
-      <div className="pet-quick-controls">
-        <button type="button" onClick={() => setLibraryOpen((value) => !value)}>
-          Pets
-        </button>
-        <TuckWakeControl tucked={tucked} onTuck={onTuck} onWake={onWake} />
-      </div>
-
-      {libraryOpen && library ? (
-        <PetLibraryPanel
-          library={library}
-          pets={pets}
-          onSwitch={onSwitchPet}
-          onHatch={onHatchPet}
-          onImport={onImportPet}
-        />
-      ) : null}
 
       <div className="pet-stage">
         {showThinking ? (
@@ -241,15 +251,23 @@ export function PetWindow({
           <button
             type="button"
             className="sheet-backdrop"
-            aria-label="Close settings"
-            onClick={() => setSettingsOpen(false)}
+            aria-label="Dismiss settings"
+            onClick={closeSettings}
           />
-          <section className="settings-sheet" role="dialog" aria-label="Pet settings">
+          <section
+            ref={settingsSheetRef}
+            className="settings-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Pet settings"
+            onKeyDown={trapSettingsFocus}
+          >
             <header className="sheet-header">
               <h2>Settings</h2>
               <button
+                ref={settingsCloseButtonRef}
                 type="button"
-                onClick={() => setSettingsOpen(false)}
+                onClick={closeSettings}
                 aria-label="Close settings"
               >
                 ×
@@ -258,7 +276,6 @@ export function PetWindow({
             <SettingsPanel
               config={config}
               onChange={onConfigChange}
-              onImprovePersonality={onImprovePersonality}
               updateState={updateState}
               onCheckForUpdate={onCheckForUpdate}
               onInstallUpdate={onInstallUpdate}

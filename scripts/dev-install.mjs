@@ -94,6 +94,11 @@ try {
 } catch {
   // No running dev install.
 }
+try {
+  run("pkill", ["-x", "codex-pet-sidecar"], { stdio: "ignore" });
+} catch {
+  // No running dev install executable.
+}
 
 run("npm", [
   "run",

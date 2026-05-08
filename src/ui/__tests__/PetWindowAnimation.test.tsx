@@ -1,7 +1,6 @@
 import { cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PetLibrary } from "../../domain/petLibrary";
 import type { InstalledPet, PetConfig } from "../../domain/petConfig";
 import type { ApprovalRequest } from "../../domain/runtimeEvents";
 import { PetWindow } from "../PetWindow";
@@ -37,19 +36,6 @@ const olivePet: InstalledPet = {
   diagnostics: [],
 };
 
-const library: PetLibrary = {
-  activePetId: "olive",
-  pets: [
-    {
-      petId: "olive",
-      displayName: "Olive",
-      source: { type: "bundled", bundledId: "olive" },
-      createdAt: "2026-05-05T00:00:00.000Z",
-      updatedAt: "2026-05-05T00:00:00.000Z",
-    },
-  ],
-};
-
 const approval: ApprovalRequest = {
   requestId: "approval-1",
   toolName: "exec",
@@ -64,8 +50,6 @@ function renderPetWindow(overrides: Partial<ComponentProps<typeof PetWindow>> = 
       config={baseConfig}
       tucked={false}
       pet={olivePet}
-      library={library}
-      pets={[olivePet]}
       streamingText=""
       lastReply=""
       awaitingReply={false}
@@ -73,15 +57,11 @@ function renderPetWindow(overrides: Partial<ComponentProps<typeof PetWindow>> = 
       completedOutputCount={0}
       onSend={vi.fn()}
       onMute={vi.fn()}
+      onTuck={vi.fn()}
+      onWake={vi.fn()}
       onConfigChange={vi.fn()}
       onApproval={vi.fn()}
       onStartDrag={vi.fn()}
-      onSwitchPet={vi.fn()}
-      onHatchPet={vi.fn()}
-      onImportPet={vi.fn()}
-      onTuck={vi.fn()}
-      onWake={vi.fn()}
-      onImprovePersonality={vi.fn()}
       {...overrides}
     />,
   );
@@ -127,6 +107,25 @@ describe("PetWindow animation activation", () => {
     cleanup();
   });
 
+  it("renders a wake tab instead of the full pet surface while tucked", () => {
+    const onWake = vi.fn();
+    renderPetWindow({ tucked: true, onWake });
+
+    expect(screen.queryByLabelText("Olive pet sprite")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Message your pet")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Wake pet" }));
+    expect(onWake).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes a tuck action in the hover toolbar", () => {
+    const onTuck = vi.fn();
+    renderPetWindow({ onTuck });
+
+    fireEvent.click(screen.getByRole("button", { name: "Tuck pet away" }));
+    expect(onTuck).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ["awaiting runtime reply", { awaitingReply: true }, "0% 87.5%"],
     ["streaming text", { streamingText: "Hello" }, "0% 87.5%"],
@@ -134,8 +133,6 @@ describe("PetWindow animation activation", () => {
     ["approval request over runtime error", { approval, error: "Codex is unavailable" }, "0% 75%"],
     ["visible runtime error", { error: "Codex is unavailable" }, "0% 62.5%"],
     ["completed visible reply", { lastReply: "Done." }, "0% 100%"],
-    ["tucked pet", { tucked: true }, "0% 75%"],
-    ["tucked pet over runtime reply", { tucked: true, awaitingReply: true }, "0% 75%"],
   ])("selects the Codex %s row", async (_label, props, backgroundPosition) => {
     renderPetWindow(props);
 
@@ -151,8 +148,6 @@ describe("PetWindow animation activation", () => {
         config={baseConfig}
         tucked={false}
         pet={olivePet}
-        library={library}
-        pets={[olivePet]}
         streamingText=""
         lastReply=""
         awaitingReply={false}
@@ -160,15 +155,11 @@ describe("PetWindow animation activation", () => {
         completedOutputCount={1}
         onSend={vi.fn()}
         onMute={vi.fn()}
+        onTuck={vi.fn()}
+        onWake={vi.fn()}
         onConfigChange={vi.fn()}
         onApproval={vi.fn()}
         onStartDrag={vi.fn()}
-        onSwitchPet={vi.fn()}
-        onHatchPet={vi.fn()}
-        onImportPet={vi.fn()}
-        onTuck={vi.fn()}
-        onWake={vi.fn()}
-        onImprovePersonality={vi.fn()}
       />,
     );
 
@@ -184,6 +175,18 @@ describe("PetWindow animation activation", () => {
     await expectSpritePosition("0% 0%");
   });
 
+  it("caps long speech output to a transcript preview instead of expanding the pet layout", async () => {
+    renderPetWindow({
+      streamingText:
+        "Olive has completed an unusually long imperial proclamation about the state of the desktop court, the pending tribute of clean tests, the alarming border dispute in the stylesheet, and the many procedural questions that must be preserved in the transcript drawer rather than shoving Olive into the chat input bar.",
+    });
+
+    const previewText = await screen.findByText(/Olive has completed/);
+    expect(previewText).toHaveClass("speech-bubble__text");
+    expect(previewText.closest("button")).toHaveClass("speech-bubble");
+    await expectSpritePosition("0% 87.5%");
+  });
+
   it("prioritizes unread completed output over running status like the Codex tray", async () => {
     const { rerender } = renderPetWindow({
       awaitingReply: true,
@@ -195,8 +198,6 @@ describe("PetWindow animation activation", () => {
         config={baseConfig}
         tucked={false}
         pet={olivePet}
-        library={library}
-        pets={[olivePet]}
         streamingText=""
         lastReply=""
         awaitingReply={true}
@@ -204,15 +205,11 @@ describe("PetWindow animation activation", () => {
         completedOutputCount={1}
         onSend={vi.fn()}
         onMute={vi.fn()}
+        onTuck={vi.fn()}
+        onWake={vi.fn()}
         onConfigChange={vi.fn()}
         onApproval={vi.fn()}
         onStartDrag={vi.fn()}
-        onSwitchPet={vi.fn()}
-        onHatchPet={vi.fn()}
-        onImportPet={vi.fn()}
-        onTuck={vi.fn()}
-        onWake={vi.fn()}
-        onImprovePersonality={vi.fn()}
       />,
     );
 
@@ -230,7 +227,12 @@ describe("PetWindow animation activation", () => {
     firePointerEvent(handle, "pointerMove", 10);
     await expectSpritePosition("0% 12.5%");
 
-    firePointerEvent(handle, "pointerMove", 0);
+    for (const x of [6, 2, -2, -6, -10]) {
+      firePointerEvent(handle, "pointerMove", x);
+      await expectSpritePosition("0% 12.5%");
+    }
+
+    firePointerEvent(handle, "pointerMove", -14);
     await expectSpritePosition("0% 25%");
   });
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RUNTIME_SAFETY_MODE, SESSION_PERSISTENCE, type PetConfig } from "../domain/petConfig";
 import type { OfficialUpdateState } from "../hooks/useOfficialUpdater";
 import { runtimeBridge } from "../runtimeBridge";
@@ -8,7 +8,6 @@ type PickDirectory = typeof runtimeBridge.pickDirectory;
 export function SettingsPanel({
   config,
   onChange,
-  onImprovePersonality,
   onResetPersonality,
   pickDirectory = runtimeBridge.pickDirectory,
   updateState,
@@ -17,7 +16,6 @@ export function SettingsPanel({
 }: {
   config: PetConfig;
   onChange: (config: PetConfig) => void;
-  onImprovePersonality?: () => void;
   onResetPersonality?: () => void;
   /** Injectable for tests; defaults to the real Tauri dialog primitive. */
   pickDirectory?: PickDirectory;
@@ -26,14 +24,34 @@ export function SettingsPanel({
   onInstallUpdate?: () => void;
 }) {
   const [powerArmed, setPowerArmed] = useState(false);
+  const [intervalDraft, setIntervalDraft] = useState(String(config.ambient.intervalMinutes));
+  const intervalFocusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!intervalFocusedRef.current) {
+      setIntervalDraft(String(config.ambient.intervalMinutes));
+    }
+  }, [config.ambient.intervalMinutes]);
+
   const updateAmbient = (ambient: Partial<PetConfig["ambient"]>) =>
     onChange({ ...config, ambient: { ...config.ambient, ...ambient } });
   const updateObservers = (observers: Partial<PetConfig["observers"]>) =>
     onChange({ ...config, observers: { ...config.observers, ...observers } });
   const updateRuntime = (runtime: Partial<PetConfig["runtime"]>) =>
     onChange({ ...config, runtime: { ...config.runtime, ...runtime } });
-  const updateInterval = (value: number) =>
-    updateAmbient({ intervalMinutes: Number.isFinite(value) ? Math.max(10, value) : 10 });
+  const updateInterval = (value: string) => {
+    setIntervalDraft(value);
+    const parsed = Number(value);
+    updateAmbient({
+      intervalMinutes: Number.isFinite(parsed) ? Math.max(10, Math.floor(parsed)) : 10,
+    });
+  };
+  const commitIntervalDraft = () => {
+    intervalFocusedRef.current = false;
+    const parsed = Number(intervalDraft);
+    setIntervalDraft(String(Number.isFinite(parsed) ? Math.max(10, Math.floor(parsed)) : 10));
+  };
+  const canResetBundledOlive = config.petId === "olive" && Boolean(onResetPersonality);
 
   return (
     <section className="settings-panel" aria-label="Pet settings">
@@ -44,16 +62,13 @@ export function SettingsPanel({
           onChange={(event) => onChange({ ...config, persona: event.currentTarget.value })}
         />
       </label>
-      <div className="settings-actions">
-        <button type="button" onClick={onImprovePersonality}>
-          Improve with Codex
-        </button>
-        {config.petId === "olive" && onResetPersonality ? (
+      {canResetBundledOlive ? (
+        <div className="settings-actions">
           <button type="button" onClick={onResetPersonality}>
             Reset to bundled Olive
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {updateState ? (
         <SoftwareUpdatePanel
           updateState={updateState}
@@ -88,6 +103,7 @@ export function SettingsPanel({
         <label>
           <input
             type="radio"
+            name="session-persistence"
             checked={config.runtime.sessionPersistence === SESSION_PERSISTENCE.ephemeral}
             onChange={() => updateRuntime({ sessionPersistence: SESSION_PERSISTENCE.ephemeral })}
           />
@@ -96,6 +112,7 @@ export function SettingsPanel({
         <label>
           <input
             type="radio"
+            name="session-persistence"
             checked={config.runtime.sessionPersistence === SESSION_PERSISTENCE.savedHistory}
             onChange={() => updateRuntime({ sessionPersistence: SESSION_PERSISTENCE.savedHistory })}
           />
@@ -104,14 +121,19 @@ export function SettingsPanel({
         <label>
           <input
             type="radio"
+            name="runtime-safety-mode"
             checked={config.runtime.safetyMode === RUNTIME_SAFETY_MODE.safe}
-            onChange={() => updateRuntime({ safetyMode: RUNTIME_SAFETY_MODE.safe })}
+            onChange={() => {
+              setPowerArmed(false);
+              updateRuntime({ safetyMode: RUNTIME_SAFETY_MODE.safe });
+            }}
           />
           Safe mode (recommended)
         </label>
         <label>
           <input
             type="radio"
+            name="runtime-safety-mode"
             checked={config.runtime.safetyMode === RUNTIME_SAFETY_MODE.power}
             onChange={() => setPowerArmed(true)}
           />
@@ -125,7 +147,10 @@ export function SettingsPanel({
             </p>
             <button
               type="button"
-              onClick={() => updateRuntime({ safetyMode: RUNTIME_SAFETY_MODE.power })}
+              onClick={() => {
+                setPowerArmed(false);
+                updateRuntime({ safetyMode: RUNTIME_SAFETY_MODE.power });
+              }}
             >
               Enable Power mode
             </button>
@@ -185,8 +210,13 @@ export function SettingsPanel({
           <input
             type="number"
             min={10}
-            value={config.ambient.intervalMinutes}
-            onChange={(event) => updateInterval(event.currentTarget.valueAsNumber)}
+            step={1}
+            value={intervalDraft}
+            onFocus={() => {
+              intervalFocusedRef.current = true;
+            }}
+            onBlur={commitIntervalDraft}
+            onChange={(event) => updateInterval(event.currentTarget.value)}
           />
         </label>
         <label>

@@ -21,7 +21,9 @@ const runtimeBridgeMock = vi.hoisted(() => ({
   startPersonalityFlow: vi.fn(),
   startPetRuntime: vi.fn(),
   startWindowDrag: vi.fn(),
+  tuckWindowToTab: vi.fn(),
   tuckPet: vi.fn(),
+  restorePetWindowFromTab: vi.fn(),
   wakePet: vi.fn(),
 }));
 
@@ -91,9 +93,6 @@ const library: PetLibrary = {
   ],
 };
 
-const deweyLibrary: PetLibrary = { ...library, activePetId: "dewey" };
-const deweyConfig: PetConfig = { ...baseConfig, petId: "dewey", displayName: "Dewey" };
-
 const approval: ApprovalRequest = {
   requestId: "approval-1",
   toolName: "exec",
@@ -121,7 +120,7 @@ describe("App pet animation state wiring", () => {
     runtimeBridgeMock.respondToApproval.mockResolvedValue(undefined);
     runtimeBridgeMock.savePetConfig.mockResolvedValue(undefined);
     runtimeBridgeMock.sendUserMessage.mockResolvedValue(undefined);
-    runtimeBridgeMock.setActivePet.mockResolvedValue(deweyLibrary);
+    runtimeBridgeMock.setActivePet.mockResolvedValue(library);
     runtimeBridgeMock.setMuteUntil.mockResolvedValue(undefined);
     runtimeBridgeMock.startHatchingFlow.mockResolvedValue({
       skill: "pet-hatching",
@@ -133,7 +132,9 @@ describe("App pet animation state wiring", () => {
     });
     runtimeBridgeMock.startPetRuntime.mockResolvedValue({ sessionId: "session-1" });
     runtimeBridgeMock.startWindowDrag.mockResolvedValue(undefined);
+    runtimeBridgeMock.tuckWindowToTab.mockResolvedValue(undefined);
     runtimeBridgeMock.tuckPet.mockResolvedValue({ tucked: true, visible: false });
+    runtimeBridgeMock.restorePetWindowFromTab.mockResolvedValue(undefined);
     runtimeBridgeMock.wakePet.mockResolvedValue({ tucked: false, visible: true });
   });
 
@@ -292,26 +293,32 @@ describe("App pet animation state wiring", () => {
     await waitFor(() => expect(sprite.style.backgroundPosition).toBe("0% 87.5%"));
   });
 
-  it("clears in-flight animation state when switching pets", async () => {
+  it("keeps pet management chrome off the default pet window", async () => {
     render(<App />);
 
-    const sprite = await screen.findByLabelText("Olive pet sprite");
-    await waitFor(() => expect(petEventHandler).toBeDefined());
+    await screen.findByLabelText("Olive pet sprite");
 
-    act(() => {
-      petEventHandler?.({ type: "approval_request", request: approval });
-    });
-    await waitFor(() => expect(sprite.style.backgroundPosition).toBe("0% 75%"));
+    expect(screen.queryByRole("button", { name: "Pets" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tuck" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Pet library")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hatch pet" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import pet" })).not.toBeInTheDocument();
+  });
 
-    runtimeBridgeMock.loadPetLibrary.mockResolvedValueOnce(deweyLibrary);
-    runtimeBridgeMock.loadPetConfig.mockResolvedValueOnce(deweyConfig);
-    runtimeBridgeMock.listInstalledPets.mockResolvedValueOnce([olivePet, deweyPet]);
+  it("tucks into an edge wake tab and wakes from it", async () => {
+    render(<App />);
 
-    fireEvent.click(screen.getByText("Pets"));
-    fireEvent.click(screen.getByText("Dewey"));
+    await screen.findByLabelText("Olive pet sprite");
+    fireEvent.click(screen.getByRole("button", { name: "Tuck pet away" }));
 
-    await waitFor(() => expect(runtimeBridgeMock.setActivePet).toHaveBeenCalledWith("dewey"));
-    const deweySprite = await screen.findByLabelText("Dewey pet sprite");
-    await waitFor(() => expect(deweySprite.style.backgroundPosition).toBe("0% 0%"));
+    await waitFor(() => expect(runtimeBridgeMock.tuckPet).toHaveBeenCalledWith(null));
+    await waitFor(() => expect(runtimeBridgeMock.tuckWindowToTab).toHaveBeenCalledTimes(1));
+    expect(screen.queryByLabelText("Olive pet sprite")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Wake pet" }));
+
+    await waitFor(() => expect(runtimeBridgeMock.wakePet).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(runtimeBridgeMock.restorePetWindowFromTab).toHaveBeenCalledTimes(1));
+    await screen.findByLabelText("Olive pet sprite");
   });
 });

@@ -5,8 +5,14 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
+vi.mock("@tauri-apps/api/dpi", () => ({
+  LogicalPosition: vi.fn(),
+  LogicalSize: vi.fn(),
+}));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: vi.fn(() => ({ startDragging: vi.fn() })),
+  currentMonitor: vi.fn(),
+  primaryMonitor: vi.fn(),
 }));
 
 import { invoke } from "@tauri-apps/api/core";

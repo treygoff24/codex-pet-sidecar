@@ -17,7 +17,7 @@ export function SpeechBubble({
       onClick={onOpenDrawer}
       aria-label="Open transcript"
     >
-      <span>{text}</span>
+      <span className="speech-bubble__text">{text}</span>
       {overflow ? <span className="bubble-overflow">Read more →</span> : null}
     </button>
   );

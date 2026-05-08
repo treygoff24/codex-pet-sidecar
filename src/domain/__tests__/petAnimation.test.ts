@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DRAG_DIRECTION_FLIP_THRESHOLD_PX,
   DRAG_ANIMATION_THRESHOLD_PX,
   PET_ANIMATION_FRAMES,
   PET_WINDOW_BASE_ANIMATION_PRIORITY,
@@ -42,6 +43,7 @@ describe("Codex pet animation contract", () => {
     expect(IDLE_SLOWDOWN).toBe(6);
     expect(TRANSIENT_REPETITIONS).toBe(3);
     expect(DRAG_ANIMATION_THRESHOLD_PX).toBe(4);
+    expect(DRAG_DIRECTION_FLIP_THRESHOLD_PX).toBe(24);
   });
 
   it("uses Codex-style idle settling after transient animations", () => {
@@ -55,6 +57,17 @@ describe("Codex pet animation contract", () => {
     expect(running.frames.slice(18).map((frame) => frame.frameDurationMs)).toEqual([
       1680, 660, 660, 840, 840, 1920,
     ]);
+  });
+
+  it("keeps directional drag animations looping until drag state changes", () => {
+    expect(resolvePetAnimationSequence("running-right", false)).toEqual({
+      frames: PET_ANIMATION_FRAMES["running-right"],
+      loopStartIndex: 0,
+    });
+    expect(resolvePetAnimationSequence("running-left", false)).toEqual({
+      frames: PET_ANIMATION_FRAMES["running-left"],
+      loopStartIndex: 0,
+    });
   });
 
   it("freezes on the first state frame for reduced motion", () => {
