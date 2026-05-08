@@ -35,7 +35,7 @@ try {
   // Step 1: Check if pyinstaller is available
   console.log("Step 1: Checking pyinstaller availability...");
   try {
-    run("./.venv/bin/pyinstaller --version");
+    run("./.venv/bin/python -m PyInstaller --version");
   } catch {
     console.error("pyinstaller not found. Run: npm run setup:python");
     process.exit(1);
@@ -44,11 +44,11 @@ try {
   // Step 2: Build the binary
   console.log("\nStep 2: Building PyInstaller bundle...");
   const buildDir = join(repoRoot, "tools/pet-hatching/build");
-  run(`./build-bundle.sh`, { cwd: buildDir });
+  run(`${join(buildDir, "build-bundle.sh")}`, { cwd: repoRoot });
 
   // Step 3: Verify binary exists
   console.log("\nStep 3: Verifying binary exists...");
-  const binaryPath = join(buildDir, "dist", "pet-hatching");
+  const binaryPath = join(repoRoot, "dist", "pet-hatching");
   assertFileExists(binaryPath);
 
   // Step 4: Test --help command

@@ -7,6 +7,7 @@ dist/
 *.tmp
 .claude/
 src-tauri/target/
+build/
 
 # Local pet generation and QA artifacts
 hatch-runs/

@@ -8,9 +8,11 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add scripts directory to path
+# Try to add scripts directory to path (for dev mode)
+# In bundled mode, scripts are available via the PyInstaller datas mechanism
 scripts_dir = Path(__file__).parent.parent / "scripts"
-sys.path.insert(0, str(scripts_dir))
+if scripts_dir.exists():
+    sys.path.insert(0, str(scripts_dir))
 
 
 def main() -> None:
@@ -22,19 +24,19 @@ def main() -> None:
     args, remaining = parser.parse_known_args()
 
     if args.cmd == "compose":
-        from scripts.compose_atlas import main as compose_main
+        from compose_atlas import main as compose_main
         sys.argv = ["compose_atlas.py"] + remaining
         compose_main()
     elif args.cmd == "validate":
-        from scripts.validate_atlas import main as validate_main
+        from validate_atlas import main as validate_main
         sys.argv = ["validate_atlas.py"] + remaining
         validate_main()
     elif args.cmd == "mirror":
-        from scripts.derive_running_left_from_running_right import main as mirror_main
+        from derive_running_left_from_running_right import main as mirror_main
         sys.argv = ["derive_running_left_from_running_right.py"] + remaining
         mirror_main()
     elif args.cmd == "package":
-        from scripts.package_custom_pet import main as package_main
+        from package_custom_pet import main as package_main
         sys.argv = ["package_custom_pet.py"] + remaining
         package_main()
 

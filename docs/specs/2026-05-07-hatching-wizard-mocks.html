@@ -1,0 +1,1755 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hatching wizard — visual mocks</title>
+    <meta name="viewport" content="width=1280" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,400..800,30..100;1,9..144,400..800,30..100&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f1ead6;
+        --paper-edge: #e6dec5;
+        --paper-deep: #d9d0b3;
+        --paper-card: #fbf6e8;
+        --ink: #18181b;
+        --ink-soft: #3a3833;
+        --ink-faint: #7a7468;
+        --olive: #7a8765;
+        --olive-deep: #4f5a3d;
+        --olive-pale: #cbd5b8;
+        --olive-glow: #e6ecd5;
+        --sage-cream: #e8eadb;
+        --terracotta: #b85a3c;
+        --terracotta-pale: #f0d9cc;
+        --amber: #c98a2b;
+        --amber-pale: #f1e0b8;
+        --cream-glow: #fff9ed;
+        --mono-bg: #1c1a17;
+        --mono-ink: #e8e2cf;
+        --shadow-soft: 0 1px 2px rgba(24, 24, 27, 0.06), 0 12px 28px rgba(24, 24, 27, 0.08);
+        --shadow-lift: 0 2px 4px rgba(24, 24, 27, 0.08), 0 24px 56px rgba(24, 24, 27, 0.12);
+        --hairline: 1px solid rgba(24, 24, 27, 0.1);
+        --hairline-soft: 1px solid rgba(24, 24, 27, 0.06);
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        background: var(--paper);
+      }
+      body {
+        font-family: "General Sans", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(
+            ellipse 800px 600px at 90% -10%,
+            rgba(122, 135, 101, 0.12),
+            transparent 60%
+          ),
+          radial-gradient(
+            ellipse 700px 500px at -10% 110%,
+            rgba(184, 90, 60, 0.08),
+            transparent 65%
+          ),
+          var(--paper);
+        background-attachment: fixed;
+        min-height: 100vh;
+        padding: 80px 48px 160px;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image: radial-gradient(
+          circle at 1px 1px,
+          rgba(24, 24, 27, 0.04) 1px,
+          transparent 0
+        );
+        background-size: 4px 4px;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+        position: relative;
+        z-index: 1;
+      }
+
+      /* ---------------- Header ---------------- */
+      .doc-header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 32px;
+        align-items: end;
+        padding-bottom: 32px;
+        margin-bottom: 64px;
+        border-bottom: var(--hairline);
+      }
+      .doc-header h1 {
+        font-family: "Fraunces", serif;
+        font-variation-settings:
+          "opsz" 96,
+          "SOFT" 50,
+          "wght" 500;
+        font-size: 60px;
+        line-height: 0.95;
+        letter-spacing: -0.025em;
+      }
+      .doc-header h1 em {
+        font-style: italic;
+        font-variation-settings:
+          "opsz" 96,
+          "SOFT" 80,
+          "wght" 400;
+        color: var(--olive-deep);
+      }
+      .doc-header .meta {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--ink-faint);
+        text-align: right;
+        line-height: 1.7;
+      }
+      .doc-header .lede {
+        grid-column: 1 / 2;
+        margin-top: 20px;
+        font-size: 17px;
+        line-height: 1.55;
+        max-width: 640px;
+        color: var(--ink-soft);
+      }
+      .doc-header .lede strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      /* ---------------- Screen rows ---------------- */
+      .screen-row {
+        display: grid;
+        grid-template-columns: 580px 1fr;
+        gap: 64px;
+        align-items: start;
+        margin-bottom: 96px;
+      }
+      .screen-row:nth-child(even) {
+        grid-template-columns: 1fr 580px;
+      }
+      .screen-row:nth-child(even) .device {
+        grid-column: 2;
+      }
+      .screen-row:nth-child(even) .annotations {
+        grid-column: 1;
+        grid-row: 1;
+        text-align: right;
+      }
+      .screen-row:nth-child(even) .annotations .anno-num {
+        margin-left: auto;
+      }
+      .screen-row:nth-child(even) .annotations ul {
+        padding-left: 0;
+        padding-right: 18px;
+      }
+      .screen-row:nth-child(even) .annotations li::before {
+        left: auto;
+        right: 0;
+      }
+
+      /* ---------------- Device frame (wizard window) ---------------- */
+      .device {
+        width: 580px;
+        background: var(--paper-card);
+        border: var(--hairline);
+        border-radius: 18px;
+        box-shadow: var(--shadow-lift);
+        overflow: hidden;
+        position: relative;
+      }
+      .device-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background: var(--paper-edge);
+        border-bottom: var(--hairline-soft);
+      }
+      .device-bar .dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: var(--paper-deep);
+      }
+      .device-bar .title {
+        margin-left: 8px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        color: var(--ink-faint);
+        letter-spacing: 0.05em;
+      }
+      .device-body {
+        padding: 36px 40px 32px;
+        min-height: 540px;
+        position: relative;
+      }
+
+      /* ---------------- Step ribbon ---------------- */
+      .step-ribbon {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--ink-faint);
+        margin-bottom: 22px;
+      }
+      .step-ribbon .pill {
+        padding: 3px 9px;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        color: var(--olive-deep);
+      }
+      .step-ribbon .crumbs {
+        color: var(--ink-faint);
+      }
+
+      /* ---------------- Headlines ---------------- */
+      .h-display {
+        font-family: "Fraunces", serif;
+        font-variation-settings:
+          "opsz" 72,
+          "SOFT" 60,
+          "wght" 480;
+        font-size: 38px;
+        line-height: 1.05;
+        letter-spacing: -0.018em;
+        color: var(--ink);
+      }
+      .h-display em {
+        font-style: italic;
+        font-variation-settings:
+          "opsz" 72,
+          "SOFT" 90,
+          "wght" 420;
+        color: var(--olive-deep);
+      }
+      .h-sub {
+        margin-top: 14px;
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: var(--ink-soft);
+        max-width: 460px;
+      }
+
+      /* ---------------- Choice cards (screen 1) ---------------- */
+      .choice-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: 32px;
+      }
+      .choice {
+        border: var(--hairline);
+        background: var(--cream-glow);
+        border-radius: 12px;
+        padding: 20px 18px 18px;
+        cursor: pointer;
+        position: relative;
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+      .choice:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-soft);
+      }
+      .choice.selected {
+        border-color: var(--olive-deep);
+        box-shadow:
+          0 0 0 3px var(--olive-glow),
+          var(--shadow-soft);
+      }
+      .choice-art {
+        height: 100px;
+        border-radius: 8px;
+        margin-bottom: 14px;
+        background: radial-gradient(
+          circle at 50% 65%,
+          var(--olive-pale) 0%,
+          var(--olive) 60%,
+          var(--olive-deep) 100%
+        );
+        position: relative;
+        overflow: hidden;
+      }
+      .choice-art.empty {
+        background: repeating-linear-gradient(
+          45deg,
+          var(--paper-edge) 0 8px,
+          var(--paper-card) 8px 16px
+        );
+        border: 1px dashed var(--ink-faint);
+      }
+      .choice-art .question {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Fraunces", serif;
+        font-variation-settings:
+          "opsz" 96,
+          "SOFT" 100,
+          "wght" 300;
+        font-size: 56px;
+        color: var(--ink-faint);
+      }
+      .choice h3 {
+        font-family: "Fraunces", serif;
+        font-variation-settings:
+          "opsz" 36,
+          "SOFT" 50,
+          "wght" 500;
+        font-size: 19px;
+        margin-bottom: 4px;
+      }
+      .choice p {
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        line-height: 1.5;
+      }
+      .choice .tag {
+        margin-top: 12px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10px;
+        color: var(--ink-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .footnote {
+        margin-top: 28px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        color: var(--ink-faint);
+      }
+
+      /* ---------------- Form (screen 2) ---------------- */
+      .field {
+        margin-top: 22px;
+      }
+      .field label {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--ink-soft);
+        margin-bottom: 6px;
+      }
+      .field label .opt {
+        color: var(--ink-faint);
+        font-weight: 400;
+      }
+      .field input[type="text"],
+      .field textarea {
+        width: 100%;
+        border: var(--hairline);
+        background: var(--cream-glow);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-family: "General Sans", sans-serif;
+        font-size: 14px;
+        color: var(--ink);
+        resize: none;
+      }
+      .field textarea {
+        height: 64px;
+        line-height: 1.45;
+      }
+      .field input:focus,
+      .field textarea:focus {
+        outline: 2px solid var(--olive);
+        outline-offset: -1px;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .chip {
+        padding: 5px 12px;
+        border: var(--hairline);
+        border-radius: 999px;
+        background: var(--paper-card);
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        cursor: pointer;
+      }
+      .chip.on {
+        background: var(--olive-deep);
+        color: var(--cream-glow);
+        border-color: var(--olive-deep);
+      }
+      .swatches {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .swatch {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 2px solid var(--paper-card);
+        box-shadow: 0 0 0 1px rgba(24, 24, 27, 0.15);
+        cursor: pointer;
+      }
+      .swatch.on {
+        box-shadow: 0 0 0 2px var(--ink);
+      }
+
+      /* ---------------- Footer / actions ---------------- */
+      .actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 32px;
+        padding-top: 20px;
+        border-top: var(--hairline-soft);
+      }
+      .btn {
+        font-family: "General Sans", sans-serif;
+        font-size: 13.5px;
+        font-weight: 500;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: var(--hairline);
+        background: var(--paper-card);
+        color: var(--ink);
+      }
+      .btn.primary {
+        background: var(--olive-deep);
+        color: var(--cream-glow);
+        border-color: var(--olive-deep);
+      }
+      .btn.ghost {
+        border: none;
+        background: transparent;
+        color: var(--ink-soft);
+      }
+      .btn.danger {
+        color: var(--terracotta);
+        border-color: var(--terracotta-pale);
+      }
+
+      /* ---------------- Prompt list (screen 3) ---------------- */
+      .prompt-row {
+        display: grid;
+        grid-template-columns: 22px 1fr;
+        gap: 14px;
+        align-items: start;
+        padding: 14px 0;
+        border-bottom: var(--hairline-soft);
+      }
+      .prompt-row:last-child {
+        border-bottom: none;
+      }
+      .prompt-row .glyph {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        color: var(--ink-faint);
+        margin-top: 3px;
+      }
+      .prompt-row .label {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--olive-deep);
+        margin-bottom: 4px;
+      }
+      .prompt-row .text {
+        font-size: 13.5px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        font-family: "Fraunces", serif;
+        font-variation-settings:
+          "opsz" 14,
+          "SOFT" 30,
+          "wght" 400;
+        font-style: italic;
+      }
+      .prompt-row.derived {
+        background: repeating-linear-gradient(
+          -45deg,
+          transparent 0 6px,
+          rgba(24, 24, 27, 0.025) 6px 12px
+        );
+        padding-left: 8px;
+        padding-right: 8px;
+        margin: 0 -8px;
+        border-radius: 6px;
+      }
+      .prompt-row.derived .text {
+        color: var(--ink-faint);
+        font-style: normal;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11.5px;
+      }
+      .prompt-list-cap {
+        margin-top: 8px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10px;
+        color: var(--ink-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      /* scrollable prompt list */
+      .prompt-scroll {
+        max-height: 320px;
+        overflow-y: auto;
+        margin-top: 18px;
+        padding-right: 4px;
+        border-top: var(--hairline-soft);
+      }
+
+      /* ---------------- Pipeline (screen 4) ---------------- */
+      .pipeline-grid {
+        display: grid;
+        grid-template-columns: 1fr 220px;
+        gap: 20px;
+        margin-top: 24px;
+      }
+      .pipeline {
+        list-style: none;
+        position: relative;
+      }
+      .pipeline::before {
+        content: "";
+        position: absolute;
+        left: 13px;
+        top: 16px;
+        bottom: 16px;
+        width: 2px;
+        background: linear-gradient(
+          to bottom,
+          var(--olive-deep) 0%,
+          var(--olive-deep) var(--prog, 35%),
+          var(--paper-deep) var(--prog, 35%),
+          var(--paper-deep) 100%
+        );
+      }
+      .pipeline li {
+        position: relative;
+        padding: 10px 10px 10px 38px;
+        margin-bottom: 6px;
+        border-radius: 8px;
+      }
+      .pipeline li .node {
+        position: absolute;
+        left: 6px;
+        top: 14px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--paper-card);
+        border: 2px solid var(--paper-deep);
+        z-index: 1;
+      }
+      .pipeline li.done .node {
+        background: var(--olive-deep);
+        border-color: var(--olive-deep);
+      }
+      .pipeline li.done .node::after {
+        content: "";
+        position: absolute;
+        inset: 3px;
+        border-left: 2px solid var(--cream-glow);
+        border-bottom: 2px solid var(--cream-glow);
+        transform: rotate(-45deg) translate(1px, -1px);
+      }
+      .pipeline li.live .node {
+        background: var(--cream-glow);
+        border-color: var(--olive-deep);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      .pipeline li.live {
+        background: var(--olive-glow);
+      }
+      .pipeline li.queued {
+        color: var(--ink-faint);
+      }
+      .pipeline li.derived {
+        background: repeating-linear-gradient(
+          -45deg,
+          transparent 0 6px,
+          rgba(24, 24, 27, 0.025) 6px 12px
+        );
+      }
+      .pipeline li.derived .node {
+        background: var(--paper-card);
+        border-style: dashed;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(122, 135, 101, 0.5);
+        }
+        50% {
+          box-shadow: 0 0 0 6px rgba(122, 135, 101, 0);
+        }
+      }
+      .pipeline .row-name {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ink-soft);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .pipeline li.done .row-name {
+        color: var(--ink);
+      }
+      .pipeline .row-meta {
+        font-size: 11.5px;
+        color: var(--ink-faint);
+        margin-top: 2px;
+      }
+      .pipeline .row-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .pipeline .row-actions .mini {
+        font-family: "General Sans", sans-serif;
+        font-size: 11px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: var(--hairline-soft);
+        background: var(--paper-card);
+        color: var(--ink-soft);
+        cursor: pointer;
+      }
+      .pipeline .row-actions .mini.go {
+        background: var(--olive-deep);
+        color: var(--cream-glow);
+        border-color: var(--olive-deep);
+      }
+      .pipeline .thumb {
+        display: inline-block;
+        width: 36px;
+        height: 36px;
+        border-radius: 4px;
+        background: linear-gradient(135deg, var(--olive-pale), var(--olive));
+        margin-top: 8px;
+        margin-right: 8px;
+        vertical-align: middle;
+        border: 1px solid rgba(24, 24, 27, 0.1);
+      }
+      .pipeline .thumb.alt {
+        background: linear-gradient(135deg, var(--amber-pale), var(--amber));
+      }
+
+      /* status feed */
+      .feed {
+        background: var(--mono-bg);
+        color: var(--mono-ink);
+        border-radius: 10px;
+        padding: 14px 14px 16px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10.5px;
+        line-height: 1.65;
+        height: fit-content;
+        align-self: start;
+        position: sticky;
+        top: 16px;
+      }
+      .feed h4 {
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(232, 226, 207, 0.5);
+        margin-bottom: 10px;
+      }
+      .feed .line {
+        display: flex;
+        gap: 8px;
+      }
+      .feed .ts {
+        color: rgba(232, 226, 207, 0.4);
+        flex-shrink: 0;
+      }
+      .feed .ok {
+        color: #b8d099;
+      }
+      .feed .work {
+        color: #e6c685;
+      }
+      .feed .info {
+        color: var(--mono-ink);
+      }
+
+      .gen-progress {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 16px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10.5px;
+        color: var(--ink-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .gen-progress .count {
+        color: var(--olive-deep);
+        font-size: 14px;
+      }
+
+      /* ---------------- Atlas grid (screen 5) ---------------- */
+      .atlas-shell {
+        margin-top: 24px;
+        border: var(--hairline);
+        border-radius: 10px;
+        background: var(--cream-glow);
+        padding: 12px;
+        overflow: hidden;
+      }
+      .atlas {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 2px;
+        background: rgba(24, 24, 27, 0.08);
+        padding: 2px;
+        border-radius: 4px;
+      }
+      .atlas .cell {
+        aspect-ratio: 192/208;
+        background: linear-gradient(135deg, var(--olive-pale), var(--olive));
+        border-radius: 1px;
+      }
+      .atlas .cell.empty {
+        background:
+          repeating-linear-gradient(45deg, var(--paper-edge) 0 4px, transparent 4px 8px),
+          var(--paper-card);
+      }
+      .atlas .cell.bad {
+        background: linear-gradient(135deg, var(--terracotta-pale), var(--terracotta));
+        box-shadow: inset 0 0 0 2px var(--terracotta);
+      }
+      .atlas .cell.alt {
+        background: linear-gradient(135deg, var(--amber-pale), var(--amber));
+      }
+      .atlas-row-key {
+        display: grid;
+        grid-template-columns: repeat(9, 1fr);
+        gap: 4px;
+        margin-top: 12px;
+      }
+      .row-chip {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        text-align: center;
+        padding: 4px 2px;
+        border-radius: 4px;
+        background: var(--olive-glow);
+        color: var(--olive-deep);
+      }
+      .row-chip.warn {
+        background: var(--terracotta-pale);
+        color: var(--terracotta);
+      }
+
+      .check-list {
+        list-style: none;
+        margin-top: 18px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 16px;
+      }
+      .check-list li {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        color: var(--ink-soft);
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .check-list li::before {
+        content: "✓";
+        color: var(--olive-deep);
+        font-weight: 600;
+      }
+      .check-list li.warn::before {
+        content: "!";
+        color: var(--terracotta);
+      }
+
+      /* ---------------- Welcome (screen 6) ---------------- */
+      .welcome {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 28px;
+        margin-top: 22px;
+        align-items: center;
+      }
+      .welcome-portrait {
+        width: 180px;
+        height: 200px;
+        border-radius: 16px;
+        background: radial-gradient(
+          circle at 50% 60%,
+          var(--olive-pale) 0%,
+          var(--olive) 50%,
+          var(--olive-deep) 100%
+        );
+        position: relative;
+        overflow: hidden;
+        box-shadow: var(--shadow-soft);
+      }
+      .welcome-portrait::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at 30% 30%, rgba(255, 249, 237, 0.4), transparent 50%);
+      }
+      .welcome-summary {
+        display: grid;
+        gap: 10px;
+      }
+      .welcome-summary dt {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--ink-faint);
+      }
+      .welcome-summary dd {
+        font-size: 14px;
+        color: var(--ink-soft);
+        line-height: 1.5;
+        margin-bottom: 4px;
+      }
+      .welcome-summary .name {
+        font-family: "Fraunces", serif;
+        font-variation-settings:
+          "opsz" 48,
+          "SOFT" 70,
+          "wght" 500;
+        font-size: 26px;
+        color: var(--ink);
+        line-height: 1;
+        margin-top: 2px;
+      }
+
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 22px;
+        padding: 12px 14px;
+        background: var(--olive-glow);
+        border-radius: 8px;
+        border: 1px solid var(--olive-pale);
+      }
+      .toggle-row .switch {
+        width: 32px;
+        height: 18px;
+        border-radius: 999px;
+        background: var(--olive-deep);
+        position: relative;
+      }
+      .toggle-row .switch::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--cream-glow);
+      }
+      .toggle-row .label {
+        font-size: 13.5px;
+        color: var(--ink-soft);
+      }
+      .toggle-row .label strong {
+        color: var(--ink);
+      }
+
+      /* ---------------- Annotations ---------------- */
+      .annotations {
+        padding-top: 32px;
+      }
+      .anno-num {
+        font-family: "Fraunces", serif;
+        font-variation-settings:
+          "opsz" 144,
+          "SOFT" 90,
+          "wght" 300;
+        font-size: 92px;
+        line-height: 1;
+        color: var(--olive-deep);
+        margin-bottom: 8px;
+        width: fit-content;
+      }
+      .annotations h2 {
+        font-family: "Fraunces", serif;
+        font-variation-settings:
+          "opsz" 36,
+          "SOFT" 60,
+          "wght" 500;
+        font-size: 26px;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+        color: var(--ink);
+        margin-bottom: 14px;
+      }
+      .annotations h2 em {
+        font-style: italic;
+        color: var(--olive-deep);
+        font-variation-settings:
+          "opsz" 36,
+          "SOFT" 90,
+          "wght" 420;
+      }
+      .annotations p {
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+        margin-bottom: 14px;
+      }
+      .annotations ul {
+        margin-top: 8px;
+        padding-left: 18px;
+        list-style: none;
+      }
+      .annotations li {
+        position: relative;
+        font-size: 13.5px;
+        line-height: 1.55;
+        color: var(--ink-soft);
+        margin-bottom: 7px;
+        padding-left: 4px;
+      }
+      .annotations li::before {
+        content: "·";
+        position: absolute;
+        left: -10px;
+        top: -2px;
+        font-size: 24px;
+        color: var(--olive-deep);
+      }
+      .annotations li strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .annotations .key {
+        margin-top: 18px;
+        padding: 14px 16px;
+        background: var(--cream-glow);
+        border-left: 2px solid var(--olive-deep);
+        border-radius: 0 6px 6px 0;
+        font-size: 13.5px;
+        line-height: 1.55;
+        color: var(--ink-soft);
+      }
+      .annotations .key strong {
+        color: var(--ink);
+      }
+
+      /* ---------------- Footer ---------------- */
+      .doc-footer {
+        margin-top: 80px;
+        padding-top: 28px;
+        border-top: var(--hairline);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        color: var(--ink-faint);
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="doc-header">
+        <h1>Hatching <em>wizard</em><br />visual mocks</h1>
+        <div class="meta">
+          version&nbsp;0.1<br />
+          2026-05-07<br />
+          6 screens · discussion only
+        </div>
+        <p class="lede">
+          Six screens covering the full hatching flow, framed for the new product position:
+          <strong>this is part of onboarding, not a settings-deep extra.</strong>
+          No chat surface during hatching — Codex output is translated into structured UI, and the
+          wizard owns the orchestration as a deterministic image-gen pipeline.
+        </p>
+      </header>
+
+      <!-- ============================================================ SCREEN 1 -->
+      <section class="screen-row">
+        <div class="device">
+          <div class="device-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="title">codex pet · welcome</span>
+          </div>
+          <div class="device-body">
+            <div class="step-ribbon">
+              <span class="pill">Welcome</span>
+              <span class="crumbs">First launch</span>
+            </div>
+
+            <h1 class="h-display">Pick your <em>starter</em>.</h1>
+            <p class="h-sub">
+              Your pet runs on your existing Codex subscription and watches your terminal/editor
+              activity quietly. You can hatch a custom one any time — but the bundled one gets you
+              started in two clicks.
+            </p>
+
+            <div class="choice-grid">
+              <div class="choice selected">
+                <div class="choice-art"></div>
+                <h3>Olive</h3>
+                <p>The bundled sample. Ready right now.</p>
+                <div class="tag">~ 2 sec</div>
+              </div>
+              <div class="choice">
+                <div class="choice-art empty"><span class="question">?</span></div>
+                <h3>Hatch your own</h3>
+                <p>Codex generates a custom pet from a short brief.</p>
+                <div class="tag">~ 8 min · 8 image gens</div>
+              </div>
+            </div>
+
+            <div class="footnote">// you can hatch additional pets later from the library</div>
+
+            <div class="actions">
+              <button class="btn ghost">Skip</button>
+              <button class="btn primary">Continue with Olive →</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="annotations">
+          <div class="anno-num">01</div>
+          <h2>Choice <em>gate</em></h2>
+          <p>
+            First decision the user makes. The bundled pet is pre-selected so the lazy path is one
+            click; the custom path is given equal visual weight but with honest cost/time framing.
+          </p>
+          <ul>
+            <li>
+              <strong>"~8 min · 8 image gens"</strong> sets expectations up-front. The current
+              spec's "5-min target" is a lie; this one isn't.
+            </li>
+            <li>
+              "You can hatch additional pets later" defuses the FOMO of having to commit at first
+              launch.
+            </li>
+            <li>
+              No mention of Codex auth here — it's already required to launch the app, so it's
+              solved by the time we get here.
+            </li>
+          </ul>
+          <div class="key">
+            <strong>UX bet:</strong> framing this as a normal product onboarding choice, not a
+            power-user feature buried in settings, is the difference between "people use it" and
+            "people don't know it exists."
+          </div>
+        </aside>
+      </section>
+
+      <!-- ============================================================ SCREEN 2 -->
+      <section class="screen-row">
+        <div class="device">
+          <div class="device-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="title">codex pet · hatching</span>
+          </div>
+          <div class="device-body">
+            <div class="step-ribbon">
+              <span class="pill">Step 1 / 4</span>
+              <span class="crumbs">Identity → Prompts → Generate → Review</span>
+            </div>
+
+            <h1 class="h-display">Tell us about <em>your pet.</em></h1>
+            <p class="h-sub">
+              A short brief is enough — Codex will use this to draft the per-animation prompts in
+              the next step.
+            </p>
+
+            <div class="field">
+              <label>Name <span class="opt">required · unique</span></label>
+              <input type="text" value="Mochi" />
+            </div>
+
+            <div class="field">
+              <label>Description <span class="opt">1–2 sentences</span></label>
+              <textarea>
+A small round dumpling-creature with two tiny legs and a single sleepy eye. Cozy, slow-moving, occasionally wobbles.</textarea
+              >
+            </div>
+
+            <div class="field">
+              <label>Personality <span class="opt">pick up to 3</span></label>
+              <div class="chips">
+                <span class="chip on">cozy</span>
+                <span class="chip on">slow</span>
+                <span class="chip">curious</span>
+                <span class="chip">grumpy</span>
+                <span class="chip">earnest</span>
+                <span class="chip on">sleepy</span>
+                <span class="chip">mischievous</span>
+                <span class="chip">tidy</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Palette <span class="opt">optional · let Codex decide if blank</span></label>
+              <div class="swatches">
+                <span class="swatch" style="background: #e8c79a"></span>
+                <span class="swatch on" style="background: #d8a878"></span>
+                <span class="swatch" style="background: #c47558"></span>
+                <span class="swatch" style="background: #7a8765"></span>
+                <span class="swatch" style="background: #4a5066"></span>
+                <span class="swatch" style="background: linear-gradient(135deg, #eee, #aaa)"></span>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="btn ghost">← Back</button>
+              <button class="btn primary">Draft prompts →</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="annotations">
+          <div class="anno-num">02</div>
+          <h2>Identity <em>brief</em></h2>
+          <p>
+            A plain form. No Codex chat surface yet — the wizard collects structured input before
+            any model call happens.
+          </p>
+          <ul>
+            <li>
+              <strong>Personality chips, not prose.</strong> Constrains the shape of the brief and
+              makes per-row prompts easier to template.
+            </li>
+            <li>
+              <strong>Palette is optional.</strong> Letting Codex pick is the lower-friction path;
+              "let Codex decide" is the absent-state, not a separate question.
+            </li>
+            <li>
+              <strong>Name uniqueness validated client-side</strong> against the existing pet
+              library — we already have that machinery in the library state module.
+            </li>
+          </ul>
+          <div class="key">
+            <strong>What's not here:</strong> no Codex auth check, no quota warning, no "are you
+            sure" dialog. Those belong at gates, not on the form.
+          </div>
+        </aside>
+      </section>
+
+      <!-- ============================================================ SCREEN 3 -->
+      <section class="screen-row">
+        <div class="device">
+          <div class="device-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="title">codex pet · hatching</span>
+          </div>
+          <div class="device-body">
+            <div class="step-ribbon">
+              <span class="pill">Step 2 / 4</span>
+              <span class="crumbs"
+                >Identity → <strong style="color: var(--olive-deep)">Prompts</strong> → Generate →
+                Review</span
+              >
+            </div>
+
+            <h1 class="h-display">Codex drafted your <em>animation prompts.</em></h1>
+            <p class="h-sub">
+              One per animation row. Edit any of them before generation — they'll all share
+              <em>Mochi</em>'s identity from the base image.
+            </p>
+
+            <div class="prompt-scroll">
+              <div class="prompt-row">
+                <span class="glyph">01</span>
+                <div>
+                  <div class="label">base · idle</div>
+                  <div class="text">
+                    A small round dumpling-creature, single sleepy eye half-closed, soft cream body,
+                    gently breathing on a transparent background, 16-bit pixel-adjacent style…
+                  </div>
+                </div>
+              </div>
+              <div class="prompt-row">
+                <span class="glyph">02</span>
+                <div>
+                  <div class="label">running-right</div>
+                  <div class="text">
+                    Same dumpling-creature, two tiny legs in a brisk waddle to the right, eye open
+                    and alert, identity grounded on the base image…
+                  </div>
+                </div>
+              </div>
+              <div class="prompt-row derived">
+                <span class="glyph">03</span>
+                <div>
+                  <div class="label">running-left · derived</div>
+                  <div class="text">auto-mirrored from running-right · no separate generation</div>
+                </div>
+              </div>
+              <div class="prompt-row">
+                <span class="glyph">04</span>
+                <div>
+                  <div class="label">waving</div>
+                  <div class="text">
+                    Mochi raising one stubby leg in a slow greeting wave, body tilted slightly,
+                    sleepy expression…
+                  </div>
+                </div>
+              </div>
+              <div class="prompt-row">
+                <span class="glyph">05</span>
+                <div>
+                  <div class="label">jumping</div>
+                  <div class="text">
+                    Mochi mid-hop, body squished slightly upward, brief surprised expression with
+                    eye fully open…
+                  </div>
+                </div>
+              </div>
+              <div class="prompt-row">
+                <span class="glyph">06</span>
+                <div>
+                  <div class="label">failed</div>
+                  <div class="text">
+                    Mochi sat down with a small dejected slump, eye fully closed, tiny puff of steam
+                    above head…
+                  </div>
+                </div>
+              </div>
+              <div class="prompt-row">
+                <span class="glyph">07</span>
+                <div>
+                  <div class="label">waiting</div>
+                  <div class="text">
+                    Mochi gently swaying from side to side, looking slightly bored, eye drifting…
+                  </div>
+                </div>
+              </div>
+              <div class="prompt-row">
+                <span class="glyph">08</span>
+                <div>
+                  <div class="label">running · focused work loop</div>
+                  <div class="text">
+                    Mochi bobbing in place with a small focused expression, indicating concentrated
+                    work — not literal locomotion…
+                  </div>
+                </div>
+              </div>
+              <div class="prompt-row">
+                <span class="glyph">09</span>
+                <div>
+                  <div class="label">review</div>
+                  <div class="text">
+                    Mochi standing alert with eye fully open, head tilted slightly as if reading
+                    something, attentive…
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="prompt-list-cap">8 prompts to generate · 1 derived</div>
+
+            <div class="actions">
+              <button class="btn ghost">← Back</button>
+              <button class="btn primary">Looks good — generate →</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="annotations">
+          <div class="anno-num">03</div>
+          <h2>The only <em>conversational</em> moment.</h2>
+          <p>
+            This is the one place Codex output is user-facing — and it's framed as
+            <strong>review the prompts we wrote</strong>, not <em>chat with Codex.</em>
+            Each row is a discrete editable text field, not a streaming chat bubble.
+          </p>
+          <ul>
+            <li>
+              <strong>Italic Fraunces for prompt text</strong> reads as "draft, work-in-progress
+              copy" — invites editing rather than feeling final.
+            </li>
+            <li>
+              <strong>Row 03 (running-left)</strong> visibly marked as <em>derived</em>, mirrored
+              from row 02. No separate generation, no separate prompt — matches what
+              <code>derive_running_left_from_running_right.py</code> already does.
+            </li>
+            <li>
+              <strong>9 rows shown · 8 prompts to generate</strong> — and the canonical row names
+              (idle, running-right…review) come straight from the existing Python contract.
+            </li>
+          </ul>
+          <div class="key">
+            <strong>Why this step exists:</strong> the per-row prompts are the entire creative
+            quality of the output. The original spec hand-waved them; making them
+            visible-and-editable is what lets advanced users tune the result and gives novice users
+            a sense of agency.
+          </div>
+        </aside>
+      </section>
+
+      <!-- ============================================================ SCREEN 4 -->
+      <section class="screen-row">
+        <div class="device">
+          <div class="device-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="title">codex pet · hatching</span>
+          </div>
+          <div class="device-body">
+            <div class="step-ribbon">
+              <span class="pill">Step 3 / 4</span>
+              <span class="crumbs"
+                >Identity → Prompts → <strong style="color: var(--olive-deep)">Generate</strong> →
+                Review</span
+              >
+            </div>
+
+            <h1 class="h-display">Generating <em>Mochi</em>.</h1>
+            <p class="h-sub">
+              Each row generates in sequence, grounded on the base. You can replace any candidate
+              before moving on.
+            </p>
+
+            <div class="pipeline-grid">
+              <ol class="pipeline" style="--prog: 35%">
+                <li class="done">
+                  <span class="node"></span>
+                  <div class="row-name">
+                    01 · base / idle <span style="color: var(--ink-faint)">anchor</span>
+                  </div>
+                  <div class="row-meta">candidate accepted · canonical identity reference</div>
+                  <span class="thumb"></span>
+                  <span class="thumb alt"></span>
+                  <div class="row-actions">
+                    <button class="mini">Replace</button>
+                  </div>
+                </li>
+                <li class="done">
+                  <span class="node"></span>
+                  <div class="row-name">02 · running-right</div>
+                  <div class="row-meta">candidate accepted · grounded on base</div>
+                  <span class="thumb"></span>
+                  <span class="thumb alt"></span>
+                </li>
+                <li class="live">
+                  <span class="node"></span>
+                  <div class="row-name">
+                    03 · waving <span style="color: var(--olive-deep)">generating…</span>
+                  </div>
+                  <div class="row-meta">
+                    attempt 1 · expecting <code>ig_*.png</code> in runtime workspace
+                  </div>
+                </li>
+                <li class="queued">
+                  <span class="node"></span>
+                  <div class="row-name">04 · jumping</div>
+                  <div class="row-meta">queued · grounded on base</div>
+                </li>
+                <li class="queued">
+                  <span class="node"></span>
+                  <div class="row-name">05 · failed</div>
+                  <div class="row-meta">queued · grounded on base</div>
+                </li>
+                <li class="queued">
+                  <span class="node"></span>
+                  <div class="row-name">06 · waiting · 07 · running · 08 · review</div>
+                  <div class="row-meta">queued · grounded on base</div>
+                </li>
+                <li class="derived">
+                  <span class="node"></span>
+                  <div class="row-name">— · running-left</div>
+                  <div class="row-meta">auto-mirror from running-right (no generation)</div>
+                </li>
+              </ol>
+
+              <div class="feed">
+                <h4>Runtime feed</h4>
+                <div class="line">
+                  <span class="ts">14:02:11</span><span class="ok">✓ ig_8a2e.png landed</span>
+                </div>
+                <div class="line">
+                  <span class="ts">14:02:11</span><span class="info">row 02 candidate ready</span>
+                </div>
+                <div class="line">
+                  <span class="ts">14:02:14</span><span class="ok">✓ user accepted</span>
+                </div>
+                <div class="line">
+                  <span class="ts">14:02:14</span><span class="info">queued row 03 (waving)</span>
+                </div>
+                <div class="line">
+                  <span class="ts">14:02:15</span><span class="work">▸ $imagegen waving</span>
+                </div>
+                <div class="line">
+                  <span class="ts">14:02:18</span><span class="info">grounding: base.png</span>
+                </div>
+                <div class="line">
+                  <span class="ts">14:02:21</span><span class="work">▸ awaiting result…</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="gen-progress">
+              <span
+                ><span class="count">2</span> / 8 generated · <span class="count">12</span> total
+                imagegen calls so far</span
+              >
+              <span style="color: var(--olive-deep)">~ 6 min remaining</span>
+            </div>
+
+            <div class="actions">
+              <button class="btn danger">Cancel run</button>
+              <button class="btn ghost" disabled style="opacity: 0.4">Continue (4/8 left) →</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="annotations">
+          <div class="anno-num">04</div>
+          <h2>Pipeline view, <em>not chat.</em></h2>
+          <p>
+            This is the screen the original chat-bubble UX would have ruined. Codex output never
+            appears as a chat message — it manifests as state changes on the pipeline nodes and
+            terse log lines in the runtime feed.
+          </p>
+          <ul>
+            <li>
+              <strong>Sequential dependency rendering.</strong> Base anchors first; downstream rows
+              show "grounded on base" so the user can see <em>why</em> identity stays consistent.
+            </li>
+            <li>
+              <strong>Mirror node is visually distinct</strong> (dashed, hatched) to signal "this
+              isn't a generation step."
+            </li>
+            <li>
+              <strong>Per-row "Replace" lets users regenerate</strong> without restarting the run.
+              Re-running an upstream node invalidates downstream ones — the UI handles this, not the
+              user.
+            </li>
+            <li>
+              <strong>The runtime feed is technical, not conversational.</strong> Mono font, terse,
+              log-shaped. Power users can read it; everyone else can ignore it.
+            </li>
+            <li>
+              <strong>Generation count is honest.</strong> "12 total imagegen calls" includes
+              regens. Surfaces cost reality.
+            </li>
+          </ul>
+          <div class="key">
+            <strong>The structural insight:</strong> Codex's app-server protocol gives us
+            <code>image_generation_call</code> events, file paths, and statuses. The wizard reads
+            those events and updates pipeline state — there is literally no place a "chat bubble"
+            would attach.
+          </div>
+        </aside>
+      </section>
+
+      <!-- ============================================================ SCREEN 5 -->
+      <section class="screen-row">
+        <div class="device">
+          <div class="device-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="title">codex pet · hatching</span>
+          </div>
+          <div class="device-body">
+            <div class="step-ribbon">
+              <span class="pill">Step 4 / 4</span>
+              <span class="crumbs"
+                >Identity → Prompts → Generate →
+                <strong style="color: var(--olive-deep)">Review</strong></span
+              >
+            </div>
+
+            <h1 class="h-display">The <em>atlas.</em></h1>
+            <p class="h-sub">
+              What the renderer actually sees: 8 columns × 9 rows, 192×208 per cell. Hover any row
+              to inspect its frames.
+            </p>
+
+            <div class="atlas-shell">
+              <div class="atlas">
+                <!-- 9 rows × 8 columns = 72 cells. Most filled, a couple bad, a few empty -->
+                <!-- row 1 idle -->
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <!-- row 2 running-right -->
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <!-- row 3 running-left (mirrored) -->
+                <div class="cell alt"></div>
+                <div class="cell alt"></div>
+                <div class="cell alt"></div>
+                <div class="cell alt"></div>
+                <div class="cell alt"></div>
+                <div class="cell alt"></div>
+                <div class="cell alt"></div>
+                <div class="cell alt"></div>
+                <!-- row 4 waving -->
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <!-- row 5 jumping -->
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <!-- row 6 failed (with one bad cell to show validation) -->
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell bad"></div>
+                <div class="cell"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <!-- row 7 waiting -->
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <!-- row 8 running -->
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <!-- row 9 review -->
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+                <div class="cell empty"></div>
+              </div>
+              <div class="atlas-row-key">
+                <span class="row-chip">idle</span>
+                <span class="row-chip">run-r</span>
+                <span class="row-chip">run-l</span>
+                <span class="row-chip">wave</span>
+                <span class="row-chip">jump</span>
+                <span class="row-chip warn">fail</span>
+                <span class="row-chip">wait</span>
+                <span class="row-chip">run</span>
+                <span class="row-chip">review</span>
+              </div>
+            </div>
+
+            <ul class="check-list">
+              <li>1536×1872 dimensions</li>
+              <li>192×208 cell geometry</li>
+              <li>Transparency clean on unused cells</li>
+              <li class="warn">Row 6 frame 3 has alpha noise — regenerate?</li>
+              <li>Pet manifest paths relative</li>
+              <li>WebP encoding valid</li>
+            </ul>
+
+            <div class="actions">
+              <button class="btn danger">Regenerate row 6</button>
+              <button class="btn primary">Looks good — name it →</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="annotations">
+          <div class="anno-num">05</div>
+          <h2>Validation is <em>visual.</em></h2>
+          <p>
+            The atlas grid is the validation surface. Bad cells are marked in terracotta directly on
+            the grid; good cells are olive; transparent unused cells render as a hatch pattern. No
+            wall of text.
+          </p>
+          <ul>
+            <li>
+              <strong>Row chip palette mirrors the cell colors.</strong> A failed row's chip turns
+              terracotta — the eye can't miss which row to look at.
+            </li>
+            <li>
+              <strong>The mirrored row is visibly amber</strong> to signal "this came from row 02,
+              not from a separate generation." Helps users understand what they're looking at.
+            </li>
+            <li>
+              <strong>Validation messages are specific and actionable</strong> — "Row 6 frame 3 has
+              alpha noise" with a single-row regenerate button, not a generic "validation failed."
+            </li>
+            <li>
+              <strong>The technical specs (1536×1872 etc.)</strong> are mono-font checklist items,
+              not a buried tooltip. Aimed at people who want to see them; ignorable for those who
+              don't.
+            </li>
+          </ul>
+          <div class="key">
+            <strong>The atlas <em>is</em> the contract.</strong> Showing it directly, with the grid,
+            makes the contract visible to the user instead of hidden inside a Rust validator. If we
+            ever change what a valid atlas looks like, this screen is where we'd see the
+            implications first.
+          </div>
+        </aside>
+      </section>
+
+      <!-- ============================================================ SCREEN 6 -->
+      <section class="screen-row">
+        <div class="device">
+          <div class="device-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="title">codex pet · welcome mochi</span>
+          </div>
+          <div class="device-body">
+            <div class="step-ribbon">
+              <span class="pill">Done</span>
+              <span class="crumbs">Welcome home.</span>
+            </div>
+
+            <h1 class="h-display">Meet <em>Mochi.</em></h1>
+            <p class="h-sub">
+              Hatched in 7 minutes 42 seconds. 12 image generations, 8 accepted, 1 derived. Ready to
+              live in your menu bar.
+            </p>
+
+            <div class="welcome">
+              <div class="welcome-portrait"></div>
+              <dl class="welcome-summary">
+                <div>
+                  <dt>name</dt>
+                  <dd class="name">Mochi</dd>
+                </div>
+                <div>
+                  <dt>brief</dt>
+                  <dd>
+                    A small round dumpling-creature with two tiny legs and a single sleepy eye.
+                  </dd>
+                </div>
+                <div>
+                  <dt>personality</dt>
+                  <dd>cozy · slow · sleepy</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="toggle-row">
+              <span class="switch"></span>
+              <span class="label"
+                ><strong>Make Mochi your active pet.</strong> Olive will move to your library.</span
+              >
+            </div>
+
+            <div class="footnote">
+              // pet package saved to ~/Library/Application Support/codex-pet/library/mochi/
+            </div>
+
+            <div class="actions">
+              <button class="btn ghost">Save and stay here</button>
+              <button class="btn primary">Start with Mochi →</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="annotations">
+          <div class="anno-num">06</div>
+          <h2>Land back in the <em>regular app.</em></h2>
+          <p>
+            The wizard ends with a single decision: activate now, or save for later. Either choice
+            resolves into the normal app surface — pet window appears, library updated, wizard
+            window closes.
+          </p>
+          <ul>
+            <li>
+              <strong>Real timing data</strong> ("7 minutes 42 seconds, 12 generations") makes the
+              cost of hatching legible after the fact. Sets honest expectations for the next pet.
+            </li>
+            <li>
+              <strong>Active-pet toggle is a soft default.</strong> Most people who just hatched a
+              pet want to use it; the alternative is "save for the library and stick with what was
+              active."
+            </li>
+            <li>
+              <strong>The package path footnote</strong> is for power users who want to know where
+              the bytes live. Ignorable.
+            </li>
+          </ul>
+          <div class="key">
+            <strong>What's deliberately not here:</strong> no "share your pet" button, no community
+            gallery, no rating prompt. The first hatching experience ends in
+            <em>using your pet</em>, not in another decision.
+          </div>
+        </aside>
+      </section>
+
+      <footer class="doc-footer">
+        <span>codex-pet-sidecar · hatching wizard mocks · v0.1</span>
+        <span>not for implementation · discussion only</span>
+      </footer>
+    </div>
+  </body>
+</html>
