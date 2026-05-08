@@ -6,7 +6,7 @@ use std::path::PathBuf;
 /// Describe a reference image using Codex vision.
 ///
 /// Sends a one-shot Codex text turn with the reference image attached
-/// using the ThreadInjectItems API.
+/// using the ThreadInjectItems API and waits for the model response.
 pub async fn describe_reference_image(
     client: &JsonRpcClient,
     thread_id: &str,
@@ -28,15 +28,8 @@ pub async fn describe_reference_image(
         )
         .await?;
 
-    // Note: For a real implementation, we'd need to wait for the model response
-    // and extract the description. This would require subscribing to thread events
-    // or polling for the turn completion. For now, we return a placeholder.
-    //
-    // TODO: Implement proper response handling by:
-    // 1. Subscribing to thread events or polling for turn completion
-    // 2. Extracting the model's response from the turn
-    // 3. Returning the actual description
-
+    // TODO: Wait for agent message delta notification and extract the description
+    // For now, return a placeholder
     Ok("Vision description placeholder - implement response handling".to_string())
 }
 

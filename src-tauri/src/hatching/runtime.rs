@@ -8,7 +8,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use uuid::Uuid;
 
 /// Hatching runtime manager - independent of pet RuntimeSessionManager.
@@ -22,6 +22,7 @@ pub struct HatchingRuntimeManager {
     process: Option<AppServerProcess>,
     client: Option<JsonRpcClient>,
     thread_id: Arc<Mutex<Option<String>>>,
+    events_rx: Arc<Mutex<Option<mpsc::UnboundedReceiver<crate::runtime::json_rpc::WireEvent>>>>,
 }
 
 #[allow(dead_code)]
@@ -35,6 +36,7 @@ impl HatchingRuntimeManager {
             process: None,
             client: None,
             thread_id: Arc::new(Mutex::new(None)),
+            events_rx: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -60,8 +62,11 @@ impl HatchingRuntimeManager {
 
         // Open JSON-RPC thread with experimentalRawEvents: true
         let websocket_url = process.websocket_url.clone();
-        let (wire_tx, _wire_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (wire_tx, wire_rx) = tokio::sync::mpsc::unbounded_channel();
         let client = JsonRpcClient::connect(&websocket_url, wire_tx).await?;
+
+        // Store the events receiver
+        *self.events_rx.lock().await = Some(wire_rx);
 
         // Initialize the client
         client.call("initialize", json!({
@@ -124,8 +129,11 @@ impl HatchingRuntimeManager {
 
         // Open JSON-RPC connection
         let websocket_url = process.websocket_url.clone();
-        let (wire_tx, _wire_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (wire_tx, wire_rx) = tokio::sync::mpsc::unbounded_channel();
         let client = JsonRpcClient::connect(&websocket_url, wire_tx).await?;
+
+        // Store the events receiver
+        *self.events_rx.lock().await = Some(wire_rx);
 
         // Initialize the client
         client.call("initialize", json!({
@@ -192,6 +200,9 @@ impl HatchingRuntimeManager {
         // Clear the thread ID
         *self.thread_id.lock().await = None;
 
+        // Clear the events receiver
+        *self.events_rx.lock().await = None;
+
         Ok(())
     }
 
@@ -218,6 +229,67 @@ impl HatchingRuntimeManager {
     /// watching for generated images in the runtime home.
     pub fn create_imagegen_ingester(&self, workspace_dir: PathBuf) -> ImagegenIngester {
         ImagegenIngester::new(self.runtime_home.clone(), workspace_dir)
+    }
+
+    /// Wait for a thread response notification with timeout.
+    ///
+    /// This method waits for a specific notification method or times out.
+    /// Returns the notification params if found, or an error if timeout occurs.
+    pub async fn wait_for_notification(
+        &self,
+        method: &str,
+        timeout_ms: u64,
+    ) -> AppResult<serde_json::Value> {
+        let mut events_rx = {
+            let mut guard = self.events_rx.lock().await;
+            guard
+                .take()
+                .ok_or_else(|| AppError::JsonRpc {
+                    method: "wait_for_notification".to_string(),
+                    message: "events receiver not initialized".to_string(),
+                })?
+        };
+
+        let start = std::time::Instant::now();
+        loop {
+            let recv_result = tokio::time::timeout(
+                tokio::time::Duration::from_millis(100),
+                events_rx.recv(),
+            )
+            .await;
+
+            match recv_result {
+                Ok(Some(crate::runtime::json_rpc::WireEvent::Notification {
+                    method: event_method,
+                    params,
+                })) if event_method == method => {
+                    // Put the receiver back before returning
+                    self.events_rx.lock().await.replace(events_rx);
+                    return Ok(params);
+                }
+                Ok(Some(_)) => {
+                    // Ignore other notifications
+                }
+                Ok(None) => {
+                    // Channel closed
+                    return Err(AppError::JsonRpc {
+                        method: "wait_for_notification".to_string(),
+                        message: "events channel closed".to_string(),
+                    });
+                }
+                Err(_) => {
+                    // Timeout check
+                    if start.elapsed().as_millis() > timeout_ms.into() {
+                        // Put the receiver back before returning
+                        self.events_rx.lock().await.replace(events_rx);
+                        return Err(AppError::JsonRpc {
+                            method: "wait_for_notification".to_string(),
+                            message: format!("timed out waiting for {}", method),
+                        });
+                    }
+                }
+            }
+        }
     }
 
     /// Teardown: recursively delete the runtime home directory.
