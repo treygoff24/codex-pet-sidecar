@@ -1,3 +1,4 @@
+use crate::hatching::session::HatchingSessionRegistry;
 use crate::proactive::AmbientEngine;
 use crate::runtime::{RuntimeEvent, RuntimeSessionManager};
 use crate::state::AppPaths;
@@ -10,16 +11,19 @@ pub struct AppState {
     pub event_tx: mpsc::UnboundedSender<RuntimeEvent>,
     pub ambient: Mutex<AmbientEngine>,
     pub observer_started: AtomicBool,
+    #[allow(dead_code)]
+    pub hatching: HatchingSessionRegistry,
 }
 
 impl AppState {
     pub fn new(paths: AppPaths, event_tx: mpsc::UnboundedSender<RuntimeEvent>) -> Self {
         Self {
-            paths,
+            paths: paths.clone(),
             runtime: RuntimeSessionManager::default(),
             event_tx,
             ambient: Mutex::new(AmbientEngine::default()),
             observer_started: AtomicBool::new(false),
+            hatching: HatchingSessionRegistry::new(paths),
         }
     }
 }
