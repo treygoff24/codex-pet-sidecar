@@ -1,11 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-
-// Placeholder for hatching wizard - Wave 3 will implement the full UI
-function HatchingWizardApp() {
-  return null;
-}
+import { HatchingWizardApp } from "./ui/hatching/HatchingWizardApp";
 
 const windowLabel = new URLSearchParams(location.search).get("window");
 

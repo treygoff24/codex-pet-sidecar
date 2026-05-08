@@ -2103,6 +2103,206 @@ button:disabled {
   font-weight: 600;
 }
 
+/* Hatching Atlas Review */
+
+.hatching-atlas-review {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-height: 0;
+}
+
+.hatching-atlas-review__header {
+  display: grid;
+  gap: 8px;
+}
+
+.hatching-atlas-review__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hatching-atlas-review__description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-atlas-review__preview {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  border: 2px dashed var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.3);
+  padding: 24px;
+}
+
+.hatching-atlas-review__placeholder {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  text-align: center;
+}
+
+.hatching-atlas-review__placeholder-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.hatching-atlas-review__placeholder-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.hatching-atlas-review__placeholder-hint {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+  max-width: 300px;
+}
+
+.hatching-atlas-review__rows {
+  display: grid;
+  gap: 12px;
+}
+
+.hatching-atlas-review__rows-title {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hatching-atlas-review__rows-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.hatching-atlas-review__row {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    transform 140ms var(--ease-snappy),
+    border-color 140ms var(--ease-snappy),
+    background 140ms var(--ease-snappy);
+  min-height: 44px;
+}
+
+.hatching-atlas-review__row:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(167, 107, 46, 0.5);
+  background: var(--paper-strong);
+}
+
+.hatching-atlas-review__row--selected {
+  border-color: var(--accent);
+  background: var(--paper-strong);
+}
+
+.hatching-atlas-review__row:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-atlas-review__row-label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.hatching-atlas-review__row-description {
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-atlas-review__error {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(180, 60, 40, 0.35);
+  background: rgba(255, 240, 232, 0.95);
+  color: #6d291f;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.hatching-atlas-review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.hatching-atlas-review__button {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    transform 140ms var(--ease-snappy),
+    background 140ms var(--ease-snappy),
+    opacity 140ms var(--ease-snappy);
+}
+
+.hatching-atlas-review__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.hatching-atlas-review__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-atlas-review__button--primary {
+  background: var(--ink);
+  color: #fff8ea;
+}
+
+.hatching-atlas-review__button--secondary {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.hatching-atlas-review__info {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(167, 107, 46, 0.1);
+  border: 1px solid rgba(167, 107, 46, 0.2);
+}
+
+.hatching-atlas-review__info-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-atlas-review__info-text strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 /* Respect reduced motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   *,
