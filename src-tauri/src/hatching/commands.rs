@@ -6,9 +6,10 @@ use crate::hatching::prototype::{
     revert_to_iteration as prototype_revert_to_iteration,
 };
 use crate::hatching::reference_image::validate_and_copy_reference;
+use crate::hatching::rows::regenerate_row as rows_regenerate_row;
 use crate::hatching::runtime::HatchingRuntimeManager;
 use crate::hatching::session::{
-    HatchingPhase, HatchingSession, OrphanSummary, PetBrief, ReferenceImage,
+    HatchingPhase, HatchingSession, OrphanSummary, PetBrief, ReferenceImage, RowKey,
 };
 use crate::hatching::vision::describe_reference_image as vision_describe_reference_image;
 use std::path::PathBuf;
@@ -302,11 +303,40 @@ pub async fn accept_prototype(
 
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn regenerate_row(_session_id: Uuid, _row_key: String) -> CommandResult<()> {
-    Err(AppError::NotImplemented {
-        command: "regenerate_row".to_string(),
-    }
-    .into())
+pub async fn regenerate_row(
+    state: State<'_, AppState>,
+    session_id: Uuid,
+    row_key: String,
+) -> CommandResult<crate::hatching::session::RowState> {
+    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
+        .get(session_id)
+        .await
+        .map_err(CommandError::from)?
+        .runtime_home;
+
+    // Parse row_key string to RowKey enum
+    let parsed_row_key = match row_key.as_str() {
+        "idle" => RowKey::Idle,
+        "running-right" => RowKey::RunningRight,
+        "running-left" => RowKey::RunningLeft,
+        "waving" => RowKey::Waving,
+        "jumping" => RowKey::Jumping,
+        "failed" => RowKey::Failed,
+        "waiting" => RowKey::Waiting,
+        "running" => RowKey::Running,
+        "review" => RowKey::Review,
+        _ => {
+            return Err(AppError::InvalidPetMetadata {
+                path: PathBuf::from("<row_key>"),
+                reason: format!("Invalid row_key: {}", row_key),
+            }
+            .into())
+        }
+    };
+
+    rows_regenerate_row(session_id, parsed_row_key, runtime_home)
+        .await
+        .map_err(CommandError::from)
 }
 
 #[allow(dead_code)]

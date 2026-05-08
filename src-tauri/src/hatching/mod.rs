@@ -7,6 +7,7 @@ pub mod imagegen;
 pub mod imagegen_fixture;
 pub mod prototype;
 pub mod reference_image;
+pub mod rows;
 pub mod runtime;
 pub mod session;
 pub mod vision;
