@@ -1765,6 +1765,212 @@ button:disabled {
   border-top: 1px solid var(--line);
 }
 
+/* Hatching Prototype */
+
+.hatching-prototype {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-height: 0;
+}
+
+.hatching-prototype__header {
+  display: grid;
+  gap: 8px;
+}
+
+.hatching-prototype__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hatching-prototype__description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-prototype__preview {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  border: 2px dashed var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.3);
+  padding: 24px;
+}
+
+.hatching-prototype__placeholder {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  text-align: center;
+}
+
+.hatching-prototype__placeholder-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.hatching-prototype__placeholder-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.hatching-prototype__placeholder-hint {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+  max-width: 300px;
+}
+
+.hatching-prototype__feedback {
+  display: grid;
+  gap: 8px;
+}
+
+.hatching-prototype__toggle {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 140ms var(--ease-snappy),
+    border-color 140ms var(--ease-snappy);
+  justify-self: start;
+  min-height: 36px;
+}
+
+.hatching-prototype__toggle:hover:not(:disabled) {
+  background: var(--paper-strong);
+  border-color: rgba(167, 107, 46, 0.35);
+}
+
+.hatching-prototype__toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-prototype__feedback-content {
+  display: grid;
+  gap: 6px;
+}
+
+.hatching-prototype__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hatching-prototype__textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 140ms var(--ease-snappy);
+  resize: vertical;
+  min-height: 80px;
+}
+
+.hatching-prototype__textarea:focus {
+  border-color: rgba(167, 107, 46, 0.5);
+}
+
+.hatching-prototype__textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-prototype__error {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(180, 60, 40, 0.35);
+  background: rgba(255, 240, 232, 0.95);
+  color: #6d291f;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.hatching-prototype__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.hatching-prototype__button {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    transform 140ms var(--ease-snappy),
+    background 140ms var(--ease-snappy),
+    opacity 140ms var(--ease-snappy);
+}
+
+.hatching-prototype__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.hatching-prototype__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-prototype__button--primary {
+  background: var(--ink);
+  color: #fff8ea;
+}
+
+.hatching-prototype__button--secondary {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.hatching-prototype__info {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(167, 107, 46, 0.1);
+  border: 1px solid rgba(167, 107, 46, 0.2);
+}
+
+.hatching-prototype__info-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-prototype__info-text strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 /* Respect reduced motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   *,
