@@ -1356,6 +1356,223 @@ button:disabled {
   font-weight: 600;
 }
 
+/* Hatching Inspiration */
+
+.hatching-inspiration {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-height: 0;
+}
+
+.hatching-inspiration__header {
+  display: grid;
+  gap: 8px;
+}
+
+.hatching-inspiration__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hatching-inspiration__description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-inspiration__filters {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--line);
+}
+
+.hatching-inspiration__filter {
+  flex: 1;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 140ms var(--ease-snappy),
+    color 140ms var(--ease-snappy);
+  min-height: 36px;
+}
+
+.hatching-inspiration__filter:hover:not(:disabled) {
+  background: rgba(167, 107, 46, 0.1);
+  color: var(--accent);
+}
+
+.hatching-inspiration__filter--active {
+  background: var(--ink);
+  color: #fff8ea;
+}
+
+.hatching-inspiration__filter:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-inspiration__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(90, 70, 51, 0.3) transparent;
+}
+
+.hatching-inspiration__grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.hatching-inspiration__grid::-webkit-scrollbar-thumb {
+  background: rgba(90, 70, 51, 0.3);
+  border-radius: 3px;
+}
+
+.hatching-inspiration__card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    transform 140ms var(--ease-snappy),
+    border-color 140ms var(--ease-snappy),
+    box-shadow 140ms var(--ease-snappy);
+  min-height: 44px;
+}
+
+.hatching-inspiration__card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(167, 107, 46, 0.5);
+  box-shadow: 0 8px 20px rgba(42, 25, 10, 0.12);
+}
+
+.hatching-inspiration__card--selected {
+  border-color: var(--accent);
+  background: var(--paper-strong);
+}
+
+.hatching-inspiration__card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-inspiration__card-preview {
+  width: 100%;
+  height: 80px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+}
+
+.hatching-inspiration__card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+}
+
+.hatching-inspiration__card-content {
+  display: grid;
+  gap: 6px;
+}
+
+.hatching-inspiration__card-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.hatching-inspiration__card-description {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.hatching-inspiration__card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hatching-inspiration__card-tag {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(90, 70, 51, 0.1);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.hatching-inspiration__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.hatching-inspiration__button {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    transform 140ms var(--ease-snappy),
+    background 140ms var(--ease-snappy),
+    opacity 140ms var(--ease-snappy);
+}
+
+.hatching-inspiration__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.hatching-inspiration__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hatching-inspiration__button--primary {
+  background: var(--ink);
+  color: #fff8ea;
+}
+
+.hatching-inspiration__button--secondary {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 /* Respect reduced motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   *,
