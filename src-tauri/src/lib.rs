@@ -1,6 +1,7 @@
 mod app_state;
 mod commands;
 mod error;
+mod hatching;
 mod memory;
 mod observers;
 mod pets;
@@ -27,6 +28,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             let paths = state::AppPaths::discover(app.handle()).expect("resolve application paths");
