@@ -1,7 +1,13 @@
 use crate::error::{AppError, AppResult};
+use crate::hatching::imagegen::ImagegenIngester;
 use crate::runtime::auth::link_or_copy_user_auth;
+use crate::runtime::json_rpc::JsonRpcClient;
+use crate::runtime::process::AppServerProcess;
 use crate::state::paths::AppPaths;
+use serde_json::json;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 /// Hatching runtime manager - independent of pet RuntimeSessionManager.
@@ -12,6 +18,9 @@ use uuid::Uuid;
 pub struct HatchingRuntimeManager {
     session_id: Uuid,
     runtime_home: PathBuf,
+    process: Option<AppServerProcess>,
+    client: Option<JsonRpcClient>,
+    thread_id: Arc<Mutex<Option<String>>>,
 }
 
 #[allow(dead_code)]
@@ -22,6 +31,9 @@ impl HatchingRuntimeManager {
         Self {
             session_id,
             runtime_home,
+            process: None,
+            client: None,
+            thread_id: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -29,7 +41,7 @@ impl HatchingRuntimeManager {
     ///
     /// Creates the runtime home directory, links/copies user auth,
     /// writes a minimal config.toml, and spawns the Codex app-server.
-    pub async fn start(&self) -> AppResult<()> {
+    pub async fn start(&mut self) -> AppResult<()> {
         // Create runtime home directory
         std::fs::create_dir_all(&self.runtime_home)?;
 
@@ -42,9 +54,44 @@ impl HatchingRuntimeManager {
             "[analytics]\nenabled = false\n",
         )?;
 
-        // TODO: Spawn Codex app-server process scoped to CODEX_HOME=<runtime_home>
-        // TODO: Open JSON-RPC thread with experimentalRawEvents: true
-        // This will be implemented in Wave 2 when we need actual model calls
+        // Spawn Codex app-server process scoped to CODEX_HOME=<runtime_home>
+        let process = AppServerProcess::spawn(&self.runtime_home).await?;
+
+        // Open JSON-RPC thread with experimentalRawEvents: true
+        let websocket_url = process.websocket_url.clone();
+        let (wire_tx, _wire_rx) = tokio::sync::mpsc::unbounded_channel();
+        let client = JsonRpcClient::connect(&websocket_url, wire_tx).await?;
+
+        // Initialize the client
+        client.call("initialize", json!({
+            "clientInfo": {"name":"codex-pet-sidecar","title":"Codex Pet Sidecar","version": env!("CARGO_PKG_VERSION")},
+            "capabilities": {"experimentalApi": true}
+        })).await?;
+
+        // Start thread with experimentalRawEvents: true
+        let thread = client
+            .call("thread/start", json!({
+                "reason": "hatching",
+                "experimentalRawEvents": true
+            }))
+            .await?;
+
+        // Extract thread ID
+        let thread_id = thread
+            .pointer("/thread/id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| AppError::JsonRpc {
+                method: "thread/start".into(),
+                message: "response missing /thread/id".into(),
+            })?
+            .to_string();
+
+        // Store thread ID
+        *self.thread_id.lock().await = Some(thread_id);
+
+        // Store process and client
+        self.process = Some(process);
+        self.client = Some(client);
 
         Ok(())
     }
@@ -55,7 +102,7 @@ impl HatchingRuntimeManager {
     /// from a previous run), spawns a fresh Codex app-server process pointed at it.
     ///
     /// Returns AppError::HatchingRuntimeMissing if the runtime home is missing or corrupt.
-    pub async fn reattach(&self) -> AppResult<()> {
+    pub async fn reattach(&mut self) -> AppResult<()> {
         // Check if runtime home exists
         if !self.runtime_home.exists() {
             return Err(AppError::HatchingRuntimeMissing(
@@ -71,8 +118,44 @@ impl HatchingRuntimeManager {
             ));
         }
 
-        // TODO: Spawn fresh Codex app-server process pointed at existing runtime home
-        // This will be implemented in Wave 2
+        // Spawn fresh Codex app-server process pointed at existing runtime home
+        let process = AppServerProcess::spawn(&self.runtime_home).await?;
+
+        // Open JSON-RPC connection
+        let websocket_url = process.websocket_url.clone();
+        let (wire_tx, _wire_rx) = tokio::sync::mpsc::unbounded_channel();
+        let client = JsonRpcClient::connect(&websocket_url, wire_tx).await?;
+
+        // Initialize the client
+        client.call("initialize", json!({
+            "clientInfo": {"name":"codex-pet-sidecar","title":"Codex Pet Sidecar","version": env!("CARGO_PKG_VERSION")},
+            "capabilities": {"experimentalApi": true}
+        })).await?;
+
+        // Start thread with experimentalRawEvents: true
+        let thread = client
+            .call("thread/start", json!({
+                "reason": "hatching",
+                "experimentalRawEvents": true
+            }))
+            .await?;
+
+        // Extract thread ID
+        let thread_id = thread
+            .pointer("/thread/id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| AppError::JsonRpc {
+                method: "thread/start".into(),
+                message: "response missing /thread/id".into(),
+            })?
+            .to_string();
+
+        // Store thread ID
+        *self.thread_id.lock().await = Some(thread_id);
+
+        // Store process and client
+        self.process = Some(process);
+        self.client = Some(client);
 
         Ok(())
     }
@@ -80,24 +163,41 @@ impl HatchingRuntimeManager {
     /// Get the current thread ID.
     ///
     /// Returns None until the first model call opens a thread.
-    pub fn current_thread_id(&self) -> Option<String> {
-        // TODO: Return actual thread ID when JSON-RPC is implemented
-        None
+    pub async fn current_thread_id(&self) -> Option<String> {
+        self.thread_id.lock().await.clone()
+    }
+
+    /// Get the JSON-RPC client.
+    ///
+    /// Returns None until the runtime is started.
+    pub fn client(&self) -> Option<&JsonRpcClient> {
+        self.client.as_ref()
     }
 
     /// Cancel the hatching runtime.
     ///
     /// Shuts down the Codex process and cleans up the runtime home.
-    pub async fn cancel(&self) -> AppResult<()> {
-        // TODO: Shutdown Codex process
-        // TODO: Clean up runtime home directory
+    pub async fn cancel(&mut self) -> AppResult<()> {
+        // Shutdown the Codex process if it exists
+        if let Some(process) = self.process.take() {
+            // The AppServerProcess should handle shutdown when dropped
+            // For now, we just let it drop
+            drop(process);
+        }
+
+        // Clear the client
+        self.client = None;
+
+        // Clear the thread ID
+        *self.thread_id.lock().await = None;
+
         Ok(())
     }
 
     /// Shutdown the hatching runtime.
     ///
     /// Alias for cancel - both shut down the process and clean up.
-    pub async fn shutdown(&self) -> AppResult<()> {
+    pub async fn shutdown(&mut self) -> AppResult<()> {
         self.cancel().await
     }
 
@@ -109,6 +209,14 @@ impl HatchingRuntimeManager {
     /// Get the session ID.
     pub fn session_id(&self) -> &Uuid {
         &self.session_id
+    }
+
+    /// Create an imagegen ingester for watching ig_*.png files.
+    ///
+    /// Returns an ImagegenIngester instance that can be used to start
+    /// watching for generated images in the runtime home.
+    pub fn create_imagegen_ingester(&self, workspace_dir: PathBuf) -> ImagegenIngester {
+        ImagegenIngester::new(self.runtime_home.clone(), workspace_dir)
     }
 
     /// Teardown: recursively delete the runtime home directory.
@@ -157,6 +265,7 @@ mod tests {
         // Start should create it (in a real scenario with auth)
         // For now, we just test the structure
         assert_eq!(manager.session_id(), &session_id);
+        assert!(manager.client().is_none());
     }
 
     #[test]
@@ -164,7 +273,7 @@ mod tests {
         let root = tempdir().expect("tempdir");
         let paths = AppPaths::with_roots(root.path().join("support"));
         let session_id = Uuid::new_v4();
-        let manager = HatchingRuntimeManager::new(session_id, &paths);
+        let mut manager = HatchingRuntimeManager::new(session_id, &paths);
 
         // Reattach should fail if runtime home doesn't exist
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -177,7 +286,7 @@ mod tests {
         let root = tempdir().expect("tempdir");
         let paths = AppPaths::with_roots(root.path().join("support"));
         let session_id = Uuid::new_v4();
-        let manager = HatchingRuntimeManager::new(session_id, &paths);
+        let mut manager = HatchingRuntimeManager::new(session_id, &paths);
 
         // Create runtime home but not auth
         std::fs::create_dir_all(manager.runtime_home()).unwrap();

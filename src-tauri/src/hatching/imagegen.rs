@@ -12,13 +12,11 @@ use tokio::time::sleep;
 ///
 /// Watches `<runtime_home>/generated_images/` for new `ig_*.png` files,
 /// validates provenance, hashes, and copies to workspace.
-#[allow(dead_code)]
 pub struct ImagegenIngester {
     runtime_home: PathBuf,
     workspace_dir: PathBuf,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum ImagegenEvent {
     ArtifactIngested(ImageArtifact),
@@ -27,7 +25,6 @@ pub enum ImagegenEvent {
 
 impl ImagegenIngester {
     /// Create a new imagegen ingester for the given session.
-    #[allow(dead_code)]
     pub fn new(runtime_home: PathBuf, workspace_dir: PathBuf) -> Self {
         Self {
             runtime_home,
@@ -38,7 +35,6 @@ impl ImagegenIngester {
     /// Start watching for imagegen artifacts.
     ///
     /// Returns a receiver for ingestion events.
-    #[allow(dead_code)]
     pub fn start_watching(&mut self) -> AppResult<mpsc::UnboundedReceiver<ImagegenEvent>> {
         let generated_images_dir = self.runtime_home.join("generated_images");
         std::fs::create_dir_all(&generated_images_dir).map_err(|e| AppError::IoWithPath {

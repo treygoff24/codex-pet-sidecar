@@ -13,7 +13,6 @@ use crate::hatching::runtime::HatchingRuntimeManager;
 use crate::hatching::session::{
     HatchingPhase, HatchingSession, OrphanSummary, PetBrief, ReferenceImage, RowKey,
 };
-use crate::hatching::vision::describe_reference_image as vision_describe_reference_image;
 use std::path::PathBuf;
 use tauri::State;
 use uuid::Uuid;
@@ -237,17 +236,26 @@ pub async fn list_orphan_hatching_sessions(
 pub async fn describe_reference_image(
     state: State<'_, AppState>,
     session_id: Uuid,
-    reference_image_id: Uuid,
+    _reference_image_id: Uuid,
 ) -> CommandResult<String> {
-    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
+    // TODO: Implement full integration with HatchingRuntimeManager
+    // This requires:
+    // 1. Adding HatchingRuntimeManager registry to AppState
+    // 2. Getting the runtime manager for the session
+    // 3. Getting the JsonRpcClient from the runtime manager
+    // 4. Getting the thread_id from the session
+    // 5. Getting the reference image path from the session
+    // 6. Calling vision::describe_reference_image with the correct parameters
+
+    let _session = std::sync::Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
-        .map_err(CommandError::from)?
-        .runtime_home;
+        .map_err(CommandError::from)?;
 
-    vision_describe_reference_image(session_id, reference_image_id, runtime_home)
-        .await
-        .map_err(CommandError::from)
+    Err(CommandError {
+        message: "describe_reference_image requires HatchingRuntimeManager integration".to_string(),
+        recoverable: true,
+    })
 }
 
 #[allow(dead_code)]
