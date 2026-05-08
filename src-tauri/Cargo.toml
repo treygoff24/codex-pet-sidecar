@@ -33,6 +33,7 @@ dirs = "6"
 time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 sha2 = "0.10"
+notify = "6"
 uuid = { version = "1", features = ["v4", "serde"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
