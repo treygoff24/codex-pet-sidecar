@@ -23,11 +23,15 @@ const generatedProtocol = (file) => file.startsWith("protocol/app-server/");
 // Files allowlisted to mention the local-Codex residue token: the runtime
 // that has to read it, the smoke harness that exercises that runtime, and
 // this auditor itself (which has to spell the pattern out to detect it).
+// Also allowlist the hatching spec and runtime which legitimately reference
+// Codex paths and environment variables for technical documentation.
 const isCodexResidueAllowlisted = (file) =>
   [
     "src-tauri/src/runtime/process.rs",
+    "src-tauri/src/hatching/runtime.rs",
     "scripts/smoke-codex-runtime.mjs",
     "scripts/audit-public.mjs",
+    "docs/specs/2026-05-07-hatching-wizard-design-v2.md",
   ].includes(file);
 
 // String fragments that must not appear in any tracked source content.
