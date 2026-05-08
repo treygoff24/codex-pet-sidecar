@@ -2,11 +2,6 @@ use crate::app_state::AppState;
 use crate::commands::{CommandError, CommandResult};
 use crate::error::AppError;
 use crate::hatching::pipeline::import_hatched_pet as pipeline_import_hatched_pet;
-use crate::hatching::prototype::{
-    accept_prototype as prototype_accept_prototype,
-    generate_prototype as prototype_generate_prototype,
-    revert_to_iteration as prototype_revert_to_iteration,
-};
 use crate::hatching::reference_image::validate_and_copy_reference;
 use crate::hatching::rows::regenerate_row as rows_regenerate_row;
 use crate::hatching::runtime::HatchingRuntimeManager;
@@ -303,47 +298,116 @@ pub async fn generate_prototype(
     session_id: Uuid,
     feedback: Option<String>,
 ) -> CommandResult<crate::hatching::session::PrototypeIteration> {
-    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
+    // Get session
+    let mut session = std::sync::Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
-        .map_err(CommandError::from)?
-        .runtime_home;
+        .map_err(CommandError::from)?;
 
-    prototype_generate_prototype(session_id, feedback, runtime_home)
+    // Get thread_id from session
+    let thread_id = session
+        .codex_thread_id
+        .as_ref()
+        .ok_or_else(|| CommandError {
+            message: "No Codex thread ID found in session".to_string(),
+            recoverable: true,
+        })?
+        .clone();
+
+    // Get prompt from brief (placeholder - in real implementation this would come from draft_prototype_prompt)
+    let prompt = session
+        .brief
+        .as_ref()
+        .map(|b| format!("A pet named {} with personality: {:?}", b.display_name, b.personality))
+        .unwrap_or_else(|| "A cute pixel art pet".to_string());
+
+    // Get reference image path
+    let reference_image_path = session.reference_image.as_ref().map(|ri| ri.path.clone());
+
+    // Get runtime manager
+    let runtime_manager = std::sync::Arc::clone(&state.hatching_runtime_registry)
+        .get(session_id)
         .await
-        .map_err(CommandError::from)
+        .map_err(CommandError::from)?;
+
+    // Get JsonRpcClient
+    let client = {
+        let manager_guard = runtime_manager.lock().await;
+        manager_guard
+            .client()
+            .ok_or_else(|| CommandError {
+                message: "Runtime manager not started".to_string(),
+                recoverable: true,
+            })?
+            .clone()
+    };
+
+    // Determine iteration number
+    let iteration_n = session
+        .prototype
+        .as_ref()
+        .map(|p| p.iterations.len() as u32 + 1)
+        .unwrap_or(1);
+
+    // Call prototype generation
+    let iteration = crate::hatching::prototype::generate_prototype(
+        &client,
+        &thread_id,
+        &prompt,
+        reference_image_path.as_ref(),
+        feedback.as_deref(),
+        iteration_n,
+    )
+    .await
+    .map_err(CommandError::from)?;
+
+    // Update session with new iteration
+    if session.prototype.is_none() {
+        session.prototype = Some(crate::hatching::session::PrototypeState {
+            iterations: vec![],
+            current: 0,
+        });
+    }
+
+    if let Some(prototype) = &mut session.prototype {
+        prototype.iterations.push(iteration.clone());
+        prototype.current = prototype.iterations.len() - 1;
+    }
+
+    // Persist updated session
+    std::sync::Arc::clone(&state.hatching_session_registry)
+        .update(session)
+        .await
+        .map_err(CommandError::from)?;
+
+    Ok(iteration)
 }
 
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn revert_to_iteration(
-    state: State<'_, AppState>,
-    session_id: Uuid,
-    iteration_n: u32,
+    _state: State<'_, AppState>,
+    _session_id: Uuid,
+    _iteration_n: u32,
 ) -> CommandResult<()> {
-    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
-        .get(session_id)
-        .await
-        .map_err(CommandError::from)?
-        .runtime_home;
-
-    prototype_revert_to_iteration(session_id, iteration_n, runtime_home)
-        .await
-        .map_err(CommandError::from)
+    // TODO: Implement revert logic
+    // This should update session.prototype.current to iteration_n - 1
+    Err(CommandError {
+        message: "revert_to_iteration not yet implemented".to_string(),
+        recoverable: true,
+    })
 }
 
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn accept_prototype(state: State<'_, AppState>, session_id: Uuid) -> CommandResult<()> {
-    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
-        .get(session_id)
-        .await
-        .map_err(CommandError::from)?
-        .runtime_home;
-
-    prototype_accept_prototype(session_id, runtime_home)
-        .await
-        .map_err(CommandError::from)
+pub async fn accept_prototype(_state: State<'_, AppState>, _session_id: Uuid) -> CommandResult<()> {
+    // TODO: Implement accept logic
+    // This should copy current prototype to workspace/decoded/base.png
+    // and transition phase to Generating
+    Err(CommandError {
+        message: "accept_prototype not yet implemented".to_string(),
+        recoverable: true,
+    })
 }
 
 #[allow(dead_code)]
