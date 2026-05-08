@@ -28,7 +28,7 @@ pub struct HatchingSession {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum HatchingPhase {
     Inspiration,
     Brief,
@@ -74,7 +74,7 @@ pub struct ReferenceImage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum ReferenceDescriptionStatus {
     Pending,
     Ready,
@@ -101,7 +101,7 @@ pub struct PrototypeIteration {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum RowKey {
     Idle,
     RunningRight,
@@ -115,7 +115,7 @@ pub enum RowKey {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 #[allow(dead_code)]
 pub enum GeneratedRowKey {
     Idle,
@@ -141,7 +141,7 @@ pub struct RowState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum RowStatus {
     Pending,
     Generating,
@@ -161,7 +161,7 @@ pub struct ImageArtifact {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum SourceProvenance {
     BuiltInImagegen,
     DeterministicMirror,
@@ -227,16 +227,7 @@ impl HatchingSessionRegistry {
         sessions
             .get(&id)
             .cloned()
-            .ok_or_else(|| AppError::PetNotFound(id.to_string()))
-    }
-
-    #[allow(dead_code)]
-    pub async fn get_mut(&self, id: Uuid) -> AppResult<HatchingSession> {
-        let sessions = self.sessions.read().await;
-        sessions
-            .get(&id)
-            .cloned()
-            .ok_or_else(|| AppError::PetNotFound(id.to_string()))
+            .ok_or_else(|| AppError::HatchingSessionNotFound(id.to_string()))
     }
 
     #[allow(dead_code)]
@@ -274,8 +265,8 @@ impl HatchingSessionRegistry {
             .paths
             .hatching_workspace_dir(&session.id.to_string())
             .join("session.json");
-        std::fs::create_dir_all(session_path.parent().unwrap())?;
-        std::fs::write(&session_path, serde_json::to_string_pretty(session)?)?;
+        tokio::fs::create_dir_all(session_path.parent().unwrap()).await?;
+        tokio::fs::write(&session_path, serde_json::to_string_pretty(session)?).await?;
         Ok(())
     }
 

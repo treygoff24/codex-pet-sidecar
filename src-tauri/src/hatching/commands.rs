@@ -233,7 +233,7 @@ pub async fn describe_reference_image(
     reference_image_id: Uuid,
 ) -> CommandResult<String> {
     // Get session to extract reference image path and thread_id
-    let session = std::sync::Arc::clone(&state.hatching_session_registry)
+    let mut session = std::sync::Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
         .map_err(CommandError::from)?;
@@ -254,25 +254,29 @@ pub async fn describe_reference_image(
         });
     }
 
-    // Get thread_id from session
-    let thread_id = session
-        .codex_thread_id
-        .as_ref()
-        .ok_or_else(|| CommandError {
-            message: "No Codex thread ID found in session".to_string(),
-            recoverable: true,
-        })?
-        .clone();
-
     let image_path = reference_image.path.clone();
 
-    // Get runtime manager
     let runtime_manager = std::sync::Arc::clone(&state.hatching_runtime_registry)
-        .get(session_id)
+        .get_or_create(session_id)
+        .await;
+
+    // Call vision function with runtime manager
+    let thread_id = {
+        let mut manager_guard = runtime_manager.lock().await;
+        if manager_guard.client().is_none() {
+            manager_guard.start().await.map_err(CommandError::from)?;
+        }
+        manager_guard
+            .current_or_open_thread()
+            .await
+            .map_err(CommandError::from)?
+    };
+    session.codex_thread_id = Some(thread_id.clone());
+    std::sync::Arc::clone(&state.hatching_session_registry)
+        .update(session)
         .await
         .map_err(CommandError::from)?;
 
-    // Call vision function with runtime manager
     let manager_guard = runtime_manager.lock().await;
     crate::hatching::vision::describe_reference_image(&manager_guard, &thread_id, &image_path)
         .await
@@ -292,16 +296,6 @@ pub async fn generate_prototype(
         .await
         .map_err(CommandError::from)?;
 
-    // Get thread_id from session
-    let thread_id = session
-        .codex_thread_id
-        .as_ref()
-        .ok_or_else(|| CommandError {
-            message: "No Codex thread ID found in session".to_string(),
-            recoverable: true,
-        })?
-        .clone();
-
     // Get prompt from brief (placeholder - in real implementation this would come from draft_prototype_prompt)
     let prompt = session
         .brief
@@ -317,23 +311,29 @@ pub async fn generate_prototype(
     // Get reference image path
     let reference_image_path = session.reference_image.as_ref().map(|ri| ri.path.clone());
 
-    // Get runtime manager
     let runtime_manager = std::sync::Arc::clone(&state.hatching_runtime_registry)
-        .get(session_id)
-        .await
-        .map_err(CommandError::from)?;
+        .get_or_create(session_id)
+        .await;
 
-    // Get JsonRpcClient
-    let client = {
-        let manager_guard = runtime_manager.lock().await;
-        manager_guard
+    let (client, thread_id) = {
+        let mut manager_guard = runtime_manager.lock().await;
+        if manager_guard.client().is_none() {
+            manager_guard.start().await.map_err(CommandError::from)?;
+        }
+        let thread_id = manager_guard
+            .current_or_open_thread()
+            .await
+            .map_err(CommandError::from)?;
+        let client = manager_guard
             .client()
             .ok_or_else(|| CommandError {
                 message: "Runtime manager not started".to_string(),
                 recoverable: true,
             })?
-            .clone()
+            .clone();
+        (client, thread_id)
     };
+    session.codex_thread_id = Some(thread_id.clone());
 
     // Determine iteration number
     let iteration_n = session
@@ -411,7 +411,7 @@ pub async fn regenerate_row(
     row_key: String,
 ) -> CommandResult<crate::hatching::session::RowState> {
     // Get session
-    let session = std::sync::Arc::clone(&state.hatching_session_registry)
+    let mut session = std::sync::Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
         .map_err(CommandError::from)?;
@@ -437,35 +437,41 @@ pub async fn regenerate_row(
 
     // Get runtime manager and client if not running-left
     let (client_opt, thread_id_opt) = if parsed_row_key != RowKey::RunningLeft {
-        let thread_id = session
-            .codex_thread_id
-            .as_ref()
-            .ok_or_else(|| CommandError {
-                message: "No Codex thread ID found in session".to_string(),
-                recoverable: true,
-            })?
-            .clone();
-
         let runtime_manager = std::sync::Arc::clone(&state.hatching_runtime_registry)
-            .get(session_id)
-            .await
-            .map_err(CommandError::from)?;
+            .get_or_create(session_id)
+            .await;
 
-        let client = {
-            let manager_guard = runtime_manager.lock().await;
-            manager_guard
+        let (client, thread_id) = {
+            let mut manager_guard = runtime_manager.lock().await;
+            if manager_guard.client().is_none() {
+                manager_guard.start().await.map_err(CommandError::from)?;
+            }
+            let thread_id = manager_guard
+                .current_or_open_thread()
+                .await
+                .map_err(CommandError::from)?;
+            let client = manager_guard
                 .client()
                 .ok_or_else(|| CommandError {
                     message: "Runtime manager not started".to_string(),
                     recoverable: true,
                 })?
-                .clone()
+                .clone();
+            (client, thread_id)
         };
 
         (Some(client), Some(thread_id))
     } else {
         (None, None)
     };
+
+    if let Some(thread_id) = &thread_id_opt {
+        session.codex_thread_id = Some(thread_id.clone());
+        std::sync::Arc::clone(&state.hatching_session_registry)
+            .update(session.clone())
+            .await
+            .map_err(CommandError::from)?;
+    }
 
     // Get prompt from brief (placeholder)
     let prompt = session

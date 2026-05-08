@@ -46,16 +46,17 @@ impl HatchingRuntimeManager {
     /// writes a minimal config.toml, and spawns the Codex app-server.
     pub async fn start(&mut self) -> AppResult<()> {
         // Create runtime home directory
-        std::fs::create_dir_all(&self.runtime_home)?;
+        tokio::fs::create_dir_all(&self.runtime_home).await?;
 
         // Link or copy user auth
         link_or_copy_user_auth(&self.runtime_home)?;
 
         // Write minimal config.toml (auth + zero MCP plugins + zero skill bundles)
-        std::fs::write(
+        tokio::fs::write(
             self.runtime_home.join("config.toml"),
             "[analytics]\nenabled = false\n",
-        )?;
+        )
+        .await?;
 
         // Spawn Codex app-server process scoped to CODEX_HOME=<runtime_home>
         let process = AppServerProcess::spawn(&self.runtime_home).await?;
@@ -73,30 +74,6 @@ impl HatchingRuntimeManager {
             "clientInfo": {"name":"codex-pet-sidecar","title":"Codex Pet Sidecar","version": env!("CARGO_PKG_VERSION")},
             "capabilities": {"experimentalApi": true}
         })).await?;
-
-        // Start thread with experimentalRawEvents: true
-        let thread = client
-            .call(
-                "thread/start",
-                json!({
-                    "reason": "hatching",
-                    "experimentalRawEvents": true
-                }),
-            )
-            .await?;
-
-        // Extract thread ID
-        let thread_id = thread
-            .pointer("/thread/id")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| AppError::JsonRpc {
-                method: "thread/start".into(),
-                message: "response missing /thread/id".into(),
-            })?
-            .to_string();
-
-        // Store thread ID
-        *self.thread_id.lock().await = Some(thread_id);
 
         // Store process and client
         self.process = Some(process);
@@ -144,30 +121,6 @@ impl HatchingRuntimeManager {
             "capabilities": {"experimentalApi": true}
         })).await?;
 
-        // Start thread with experimentalRawEvents: true
-        let thread = client
-            .call(
-                "thread/start",
-                json!({
-                    "reason": "hatching",
-                    "experimentalRawEvents": true
-                }),
-            )
-            .await?;
-
-        // Extract thread ID
-        let thread_id = thread
-            .pointer("/thread/id")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| AppError::JsonRpc {
-                method: "thread/start".into(),
-                message: "response missing /thread/id".into(),
-            })?
-            .to_string();
-
-        // Store thread ID
-        *self.thread_id.lock().await = Some(thread_id);
-
         // Store process and client
         self.process = Some(process);
         self.client = Some(client);
@@ -180,6 +133,43 @@ impl HatchingRuntimeManager {
     /// Returns None until the first model call opens a thread.
     pub async fn current_thread_id(&self) -> Option<String> {
         self.thread_id.lock().await.clone()
+    }
+
+    /// Return the current hatching thread, opening it on the first model call.
+    pub async fn current_or_open_thread(&self) -> AppResult<String> {
+        if let Some(thread_id) = self.current_thread_id().await {
+            return Ok(thread_id);
+        }
+
+        let client = self.client.as_ref().ok_or(AppError::RuntimeNotStarted)?;
+        let thread = client
+            .call(
+                "thread/start",
+                json!({
+                    "cwd": self.runtime_home,
+                    "approvalPolicy": "never",
+                    "approvalsReviewer": "auto_review",
+                    "sandbox": "read-only",
+                    "config": {},
+                    "baseInstructions": "You are running a Codex Pet Sidecar hatching thread.",
+                    "developerInstructions": "Use raw image_generation_call events for hatching orchestration. Keep user-visible output minimal.",
+                    "ephemeral": true,
+                    "experimentalRawEvents": true,
+                    "persistExtendedHistory": false
+                }),
+            )
+            .await?;
+
+        let thread_id = thread
+            .pointer("/thread/id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| AppError::JsonRpc {
+                method: "thread/start".into(),
+                message: "response missing /thread/id".into(),
+            })?
+            .to_string();
+        *self.thread_id.lock().await = Some(thread_id.clone());
+        Ok(thread_id)
     }
 
     /// Get the JSON-RPC client.
@@ -245,13 +235,11 @@ impl HatchingRuntimeManager {
         &self,
         timeout_ms: u64,
     ) -> AppResult<(String, serde_json::Value)> {
-        let mut events_rx = {
-            let mut guard = self.events_rx.lock().await;
-            guard.take().ok_or_else(|| AppError::JsonRpc {
-                method: "wait_for_any_notification".to_string(),
-                message: "events receiver not initialized".to_string(),
-            })?
-        };
+        let mut guard = self.events_rx.lock().await;
+        let events_rx = guard.as_mut().ok_or_else(|| AppError::JsonRpc {
+            method: "wait_for_any_notification".to_string(),
+            message: "events receiver not initialized".to_string(),
+        })?;
 
         let start = std::time::Instant::now();
         loop {
@@ -261,8 +249,6 @@ impl HatchingRuntimeManager {
 
             match recv_result {
                 Ok(Some(crate::runtime::json_rpc::WireEvent::Notification { method, params })) => {
-                    // Put the receiver back before returning
-                    self.events_rx.lock().await.replace(events_rx);
                     return Ok((method, params));
                 }
                 Ok(Some(_)) => {
@@ -278,8 +264,6 @@ impl HatchingRuntimeManager {
                 Err(_) => {
                     // Timeout check
                     if start.elapsed().as_millis() > timeout_ms.into() {
-                        // Put the receiver back before returning
-                        self.events_rx.lock().await.replace(events_rx);
                         return Err(AppError::JsonRpc {
                             method: "wait_for_any_notification".to_string(),
                             message: "timed out waiting for any notification".to_string(),
@@ -299,13 +283,11 @@ impl HatchingRuntimeManager {
         method: &str,
         timeout_ms: u64,
     ) -> AppResult<serde_json::Value> {
-        let mut events_rx = {
-            let mut guard = self.events_rx.lock().await;
-            guard.take().ok_or_else(|| AppError::JsonRpc {
-                method: "wait_for_notification".to_string(),
-                message: "events receiver not initialized".to_string(),
-            })?
-        };
+        let mut guard = self.events_rx.lock().await;
+        let events_rx = guard.as_mut().ok_or_else(|| AppError::JsonRpc {
+            method: "wait_for_notification".to_string(),
+            message: "events receiver not initialized".to_string(),
+        })?;
 
         let start = std::time::Instant::now();
         loop {
@@ -318,8 +300,6 @@ impl HatchingRuntimeManager {
                     method: event_method,
                     params,
                 })) if event_method == method => {
-                    // Put the receiver back before returning
-                    self.events_rx.lock().await.replace(events_rx);
                     return Ok(params);
                 }
                 Ok(Some(_)) => {
@@ -335,8 +315,6 @@ impl HatchingRuntimeManager {
                 Err(_) => {
                     // Timeout check
                     if start.elapsed().as_millis() > timeout_ms.into() {
-                        // Put the receiver back before returning
-                        self.events_rx.lock().await.replace(events_rx);
                         return Err(AppError::JsonRpc {
                             method: "wait_for_notification".to_string(),
                             message: format!("timed out waiting for {}", method),
@@ -351,22 +329,21 @@ impl HatchingRuntimeManager {
     ///
     /// Called on accept/cancel/crash-recovery-discard.
     pub async fn teardown(&self) -> AppResult<()> {
-        if self.runtime_home.exists() {
-            // Use tokio::fs::remove_dir_all with retry-on-EBUSY
-            // For now, use std::fs for simplicity
-            let mut retries = 0;
-            while retries < 3 {
-                match std::fs::remove_dir_all(&self.runtime_home) {
+        if tokio::fs::try_exists(&self.runtime_home).await? {
+            let mut delay = tokio::time::Duration::from_millis(100);
+            for attempt in 1..=3 {
+                match tokio::fs::remove_dir_all(&self.runtime_home).await {
                     Ok(_) => return Ok(()),
-                    Err(_e) if retries < 2 => {
-                        retries += 1;
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                    Err(error) if attempt == 3 => {
+                        return Err(AppError::IoWithPath {
+                            path: self.runtime_home.clone(),
+                            source: error,
+                        });
                     }
-                    Err(e) => {
-                        return Err(AppError::CommandFailed(
-                            "teardown runtime".to_string(),
-                            e.to_string(),
-                        ))
+                    Err(_) => {
+                        tokio::time::sleep(delay).await;
+                        delay *= 2;
                     }
                 }
             }
@@ -417,7 +394,7 @@ impl HatchingRuntimeManagerRegistry {
         managers
             .get(&session_id)
             .cloned()
-            .ok_or_else(|| AppError::PetNotFound(session_id.to_string()))
+            .ok_or_else(|| AppError::HatchingSessionNotFound(session_id.to_string()))
     }
 
     /// Remove a runtime manager for the given session.
@@ -425,7 +402,7 @@ impl HatchingRuntimeManagerRegistry {
         let mut managers = self.managers.write().await;
         managers
             .remove(&session_id)
-            .ok_or_else(|| AppError::PetNotFound(session_id.to_string()))?;
+            .ok_or_else(|| AppError::HatchingSessionNotFound(session_id.to_string()))?;
         Ok(())
     }
 
@@ -442,7 +419,20 @@ impl HatchingRuntimeManagerRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::json_rpc::WireEvent;
     use tempfile::tempdir;
+
+    #[derive(Default)]
+    struct MockPetRuntimeManager {
+        started_count: usize,
+        shutdown_count: usize,
+    }
+
+    impl MockPetRuntimeManager {
+        fn start(&mut self) {
+            self.started_count += 1;
+        }
+    }
 
     #[test]
     fn runtime_manager_creates_runtime_home_on_start() {
@@ -458,6 +448,71 @@ mod tests {
         // For now, we just test the structure
         assert_eq!(manager.session_id(), &session_id);
         assert!(manager.client().is_none());
+        assert!(tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(manager.current_thread_id())
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn hatching_runtime_does_not_disturb_pet_runtime() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+        let session_id = Uuid::new_v4();
+        let mut pet_manager = MockPetRuntimeManager::default();
+        pet_manager.start();
+
+        let mut hatching_manager = HatchingRuntimeManager::new(session_id, &paths);
+        hatching_manager.cancel().await.expect("cancel hatching");
+
+        assert_eq!(pet_manager.started_count, 1);
+        assert_eq!(pet_manager.shutdown_count, 0);
+    }
+
+    #[tokio::test]
+    async fn pet_runtime_does_not_disturb_hatching_runtime() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+        let session_id = Uuid::new_v4();
+        let mut hatching_manager = HatchingRuntimeManager::new(session_id, &paths);
+        let mut pet_manager = MockPetRuntimeManager::default();
+
+        pet_manager.start();
+
+        assert_eq!(pet_manager.started_count, 1);
+        assert!(hatching_manager.client().is_none());
+        hatching_manager.cancel().await.expect("cancel hatching");
+        assert_eq!(pet_manager.shutdown_count, 0);
+    }
+
+    #[tokio::test]
+    async fn cancelled_event_waiter_does_not_steal_receiver() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+        let session_id = Uuid::new_v4();
+        let manager = HatchingRuntimeManager::new(session_id, &paths);
+        let (tx, rx) = mpsc::unbounded_channel();
+        manager.events_rx.lock().await.replace(rx);
+
+        let cancelled = tokio::time::timeout(
+            tokio::time::Duration::from_millis(10),
+            manager.wait_for_notification("never", 10_000),
+        )
+        .await;
+        assert!(cancelled.is_err());
+
+        tx.send(WireEvent::Notification {
+            method: "after-cancel".to_string(),
+            params: serde_json::json!({"ok": true}),
+        })
+        .expect("send notification");
+
+        let (method, params) = manager
+            .wait_for_any_notification(1_000)
+            .await
+            .expect("receiver survives cancellation");
+        assert_eq!(method, "after-cancel");
+        assert_eq!(params["ok"], true);
     }
 
     #[test]

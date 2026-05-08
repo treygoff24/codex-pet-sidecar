@@ -8,10 +8,12 @@ use crate::state::paths::{AppPaths, RESERVED_PET_IDS};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub const MAX_PETS: usize = 20;
 pub const BUNDLED_DEFAULT_PET_ID: &str = "olive";
+static DASH_RUNS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-+").expect("valid regex"));
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -460,7 +462,7 @@ fn now_string() -> AppResult<String> {
 /// - Replace non-alphanumeric characters with dashes
 /// - Collapse repeated dashes into single dashes
 /// - Trim leading/trailing dashes
-/// - Validate against regex: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+/// - Validate with the canonical pet-id validator
 /// - Reject reserved IDs
 ///
 /// Returns an error if the normalized ID is invalid or reserved.
@@ -476,22 +478,12 @@ pub fn normalize_display_name_to_pet_id(display_name: &str) -> AppResult<String>
         .collect();
 
     // Collapse repeated dashes into single dashes
-    let normalized = Regex::new(r"-+").unwrap().replace_all(&normalized, "-");
+    let normalized = DASH_RUNS.replace_all(&normalized, "-");
 
     // Trim leading/trailing dashes
     let normalized = normalized.trim_matches('-').to_string();
 
-    // Validate against regex: ^[a-z0-9]+(?:-[a-z0-9]+)*$
-    let id_regex = Regex::new(r"^[a-z0-9]+(?:-[a-z0-9]+)*$").unwrap();
-    if !id_regex.is_match(&normalized) {
-        return Err(AppError::InvalidPetMetadata {
-            path: PathBuf::from(display_name),
-            reason: format!(
-                "normalized pet_id '{}' does not match required pattern",
-                normalized
-            ),
-        });
-    }
+    validate_pet_id(&normalized)?;
 
     // Reject reserved IDs
     if RESERVED_PET_IDS.contains(&normalized.as_str()) {
@@ -522,7 +514,10 @@ pub fn resolve_pet_id_collision(paths: &AppPaths, base_pet_id: &str) -> AppResul
     };
 
     // Check if base ID is available
-    if !library.pets.iter().any(|pet| pet.pet_id == base_pet_id)
+    if !library
+        .pets
+        .iter()
+        .any(|pet| pet.pet_id.eq_ignore_ascii_case(base_pet_id))
         && !paths.pet_support_dir(base_pet_id).exists()
     {
         return Ok(base_pet_id.to_string());
@@ -531,7 +526,10 @@ pub fn resolve_pet_id_collision(paths: &AppPaths, base_pet_id: &str) -> AppResul
     // Try numbered variants: base-2, base-3, etc.
     for i in 2..=100 {
         let candidate = format!("{}-{}", base_pet_id, i);
-        if !library.pets.iter().any(|pet| pet.pet_id == candidate)
+        if !library
+            .pets
+            .iter()
+            .any(|pet| pet.pet_id.eq_ignore_ascii_case(&candidate))
             && !paths.pet_support_dir(&candidate).exists()
         {
             return Ok(candidate);

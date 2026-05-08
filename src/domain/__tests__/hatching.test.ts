@@ -15,9 +15,9 @@ import {
 
 describe("hatching domain types", () => {
   describe("HatchingPhase type guards", () => {
-    it("should identify Generating phase", () => {
+    it("should identify generating phase", () => {
       const phase: HatchingPhase = {
-        Generating: {
+        generating: {
           rowsCompleted: 5,
           rowsTotal: 8,
           estimatedRemaining: 30000,
@@ -28,16 +28,16 @@ describe("hatching domain types", () => {
       expect(isPhaseDone(phase)).toBe(false);
     });
 
-    it("should identify Done phase", () => {
+    it("should identify done phase", () => {
       const phase: HatchingPhase = {
-        Done: { petId: "test-pet" },
+        done: { petId: "test-pet" },
       };
       expect(isPhaseGenerating(phase)).toBe(false);
       expect(isPhaseDone(phase)).toBe(true);
     });
 
     it("should identify simple string phases", () => {
-      const phase: HatchingPhase = "Inspiration";
+      const phase: HatchingPhase = "inspiration";
       expect(isPhaseGenerating(phase)).toBe(false);
       expect(isPhaseDone(phase)).toBe(false);
     });
@@ -45,13 +45,13 @@ describe("hatching domain types", () => {
 
   describe("getPhaseDisplayName", () => {
     it("should return display name for string phases", () => {
-      expect(getPhaseDisplayName("Inspiration")).toBe("Inspiration");
-      expect(getPhaseDisplayName("Brief")).toBe("Brief");
+      expect(getPhaseDisplayName("inspiration")).toBe("inspiration");
+      expect(getPhaseDisplayName("brief")).toBe("brief");
     });
 
-    it("should return display name for Generating phase", () => {
+    it("should return display name for generating phase", () => {
       const phase: HatchingPhase = {
-        Generating: {
+        generating: {
           rowsCompleted: 5,
           rowsTotal: 8,
           estimatedRemaining: 30000,
@@ -61,9 +61,9 @@ describe("hatching domain types", () => {
       expect(getPhaseDisplayName(phase)).toBe("Generating");
     });
 
-    it("should return display name for Done phase", () => {
+    it("should return display name for done phase", () => {
       const phase: HatchingPhase = {
-        Done: { petId: "test-pet" },
+        done: { petId: "test-pet" },
       };
       expect(getPhaseDisplayName(phase)).toBe("Done");
     });
@@ -81,12 +81,12 @@ describe("hatching domain types", () => {
         referenceImage: null,
         prototype: null,
         rows: {} as Record<string, RowState>,
-        phase: "Inspiration",
+        phase: "inspiration",
         createdAt: "2024-01-01T00:00:00Z",
       };
 
       expect(session.id).toBeDefined();
-      expect(session.phase).toBe("Inspiration");
+      expect(session.phase).toBe("inspiration");
       expect(session.brief).toBeNull();
     });
 
@@ -113,7 +113,7 @@ describe("hatching domain types", () => {
         referenceImage: null,
         prototype: null,
         rows: {} as Record<string, RowState>,
-        phase: "Brief",
+        phase: "brief",
         createdAt: "2024-01-01T00:00:00Z",
       };
 
@@ -129,12 +129,12 @@ describe("hatching domain types", () => {
         path: "/path/to/image.png",
         sha256: "abc123",
         description: null,
-        descriptionStatus: "Pending",
+        descriptionStatus: "pending",
         describedAt: null,
       };
 
       expect(image.id).toBeDefined();
-      expect(image.descriptionStatus).toBe("Pending");
+      expect(image.descriptionStatus).toBe("pending");
     });
   });
 
@@ -147,11 +147,11 @@ describe("hatching domain types", () => {
         mirrorDecision: null,
         attempts: 0,
         lastError: null,
-        status: "Pending",
+        status: "pending",
       };
 
       expect(row.prompt).toBe("A test prompt");
-      expect(row.status).toBe("Pending");
+      expect(row.status).toBe("pending");
     });
   });
 });

@@ -44,7 +44,7 @@ export function HatchingWizardApp() {
     {
       id: "choice-gate",
       title: "Welcome",
-      phase: "Inspiration",
+      phase: "inspiration",
       content: (
         <HatchingChoiceGate
           onStartNew={() => handleNext()}
@@ -64,7 +64,7 @@ export function HatchingWizardApp() {
     {
       id: "inspiration",
       title: "Inspiration",
-      phase: "Inspiration",
+      phase: "inspiration",
       content: (
         <HatchingInspiration
           onSkip={() => {
@@ -86,7 +86,7 @@ export function HatchingWizardApp() {
     {
       id: "brief",
       title: "Pet Brief",
-      phase: "Brief",
+      phase: "brief",
       content: (
         <HatchingBrief
           onSubmit={(brief) => {
@@ -104,7 +104,7 @@ export function HatchingWizardApp() {
     {
       id: "prototype",
       title: "Prototype",
-      phase: "Prototype",
+      phase: "prototype",
       content: (
         <HatchingPrototype
           onGeneratePrototype={(feedback) => {
@@ -127,7 +127,7 @@ export function HatchingWizardApp() {
       id: "generation",
       title: "Generation",
       phase: {
-        Generating: {
+        generating: {
           rowsCompleted: 0,
           rowsTotal: 8,
           estimatedRemaining: 0,
@@ -142,7 +142,7 @@ export function HatchingWizardApp() {
     {
       id: "atlas-review",
       title: "Atlas Review",
-      phase: "Review",
+      phase: "review",
       content: (
         <HatchingAtlasReview
           onImport={(activate) => {

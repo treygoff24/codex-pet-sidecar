@@ -52,6 +52,8 @@ pub enum AppError {
     #[error("hatching runtime for session {0} is missing or corrupt")]
     #[allow(dead_code)]
     HatchingRuntimeMissing(String),
+    #[error("hatching session {0} was not found")]
+    HatchingSessionNotFound(String),
     #[error("command '{command}' is not yet implemented")]
     NotImplemented { command: String },
 }

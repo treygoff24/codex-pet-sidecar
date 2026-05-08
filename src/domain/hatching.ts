@@ -26,13 +26,13 @@ export interface HatchingSession {
  * Current phase of the hatching wizard.
  */
 export type HatchingPhase =
-  | "Inspiration"
-  | "Brief"
-  | "Prototype"
-  | { Generating: GenerationProgress }
-  | "Review"
-  | "Importing"
-  | { Done: { petId: string } };
+  | "inspiration"
+  | "brief"
+  | "prototype"
+  | { generating: GenerationProgress }
+  | "review"
+  | "importing"
+  | { done: { petId: string } };
 
 /**
  * Pet brief containing user-provided metadata.
@@ -73,7 +73,7 @@ export interface ReferenceImage {
 /**
  * Status of reference image description generation.
  */
-export type ReferenceDescriptionStatus = "Pending" | "Ready" | "Failed";
+export type ReferenceDescriptionStatus = "pending" | "ready" | "failed";
 
 /**
  * Prototype state with iteration history.
@@ -99,15 +99,15 @@ export interface PrototypeIteration {
  * Animation row keys for the pet spritesheet.
  */
 export type RowKey =
-  | "Idle"
-  | "RunningRight"
-  | "RunningLeft"
-  | "Waving"
-  | "Jumping"
-  | "Failed"
-  | "Waiting"
-  | "Running"
-  | "Review";
+  | "idle"
+  | "running-right"
+  | "running-left"
+  | "waving"
+  | "jumping"
+  | "failed"
+  | "waiting"
+  | "running"
+  | "review";
 
 /**
  * State of a single animation row.
@@ -125,7 +125,7 @@ export interface RowState {
 /**
  * Status of row generation.
  */
-export type RowStatus = "Pending" | "Generating" | "Ready" | "Failed";
+export type RowStatus = "pending" | "generating" | "ready" | "failed";
 
 /**
  * Image artifact with provenance tracking.
@@ -142,7 +142,7 @@ export interface ImageArtifact {
 /**
  * Provenance of the image source.
  */
-export type SourceProvenance = "BuiltInImagegen" | "DeterministicMirror" | "SyntheticTest";
+export type SourceProvenance = "built-in-imagegen" | "deterministic-mirror" | "synthetic-test";
 
 /**
  * Image metadata.
@@ -188,12 +188,12 @@ export interface OrphanSummary {
  */
 export function isPhaseGenerating(
   phase: HatchingPhase,
-): phase is { Generating: GenerationProgress } {
-  return typeof phase === "object" && "Generating" in phase;
+): phase is { generating: GenerationProgress } {
+  return typeof phase === "object" && "generating" in phase;
 }
 
-export function isPhaseDone(phase: HatchingPhase): phase is { Done: { petId: string } } {
-  return typeof phase === "object" && "Done" in phase;
+export function isPhaseDone(phase: HatchingPhase): phase is { done: { petId: string } } {
+  return typeof phase === "object" && "done" in phase;
 }
 
 /**
@@ -203,10 +203,10 @@ export function getPhaseDisplayName(phase: HatchingPhase): string {
   if (typeof phase === "string") {
     return phase;
   }
-  if ("Generating" in phase) {
+  if ("generating" in phase) {
     return "Generating";
   }
-  if ("Done" in phase) {
+  if ("done" in phase) {
     return "Done";
   }
   return "Unknown";
