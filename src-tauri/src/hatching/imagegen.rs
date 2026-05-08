@@ -12,17 +12,20 @@ use tokio::time::sleep;
 ///
 /// Watches `<runtime_home>/generated_images/` for new `ig_*.png` files,
 /// validates provenance, hashes, and copies to workspace.
+#[allow(dead_code)]
 pub struct ImagegenIngester {
     runtime_home: PathBuf,
     workspace_dir: PathBuf,
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum ImagegenEvent {
     ArtifactIngested(ImageArtifact),
     IngestionFailed { path: PathBuf, reason: String },
 }
 
+#[allow(dead_code)]
 impl ImagegenIngester {
     /// Create a new imagegen ingester for the given session.
     pub fn new(runtime_home: PathBuf, workspace_dir: PathBuf) -> Self {

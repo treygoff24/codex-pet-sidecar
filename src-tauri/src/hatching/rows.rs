@@ -1,9 +1,11 @@
 use crate::error::{AppError, AppResult};
 use crate::hatching::atlas::derive_running_left;
-use crate::hatching::session::{GeneratedRowKey, ImageArtifact, ImageMetadata, RowKey, RowState, SourceProvenance};
+use crate::hatching::session::{
+    GeneratedRowKey, ImageArtifact, ImageMetadata, RowKey, RowState, SourceProvenance,
+};
 use crate::runtime::json_rpc::JsonRpcClient;
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 /// Generate all eight required row strips after prototype acceptance.
@@ -38,13 +40,13 @@ pub async fn generate_single_row(
     thread_id: &str,
     row_key: GeneratedRowKey,
     prompt: &str,
-    canonical_reference_path: &PathBuf,
+    canonical_reference_path: &Path,
 ) -> AppResult<RowState> {
     // Run imagegen turn with row prompt + canonical reference
     let items = vec![
         json!({
             "type": "text",
-            "text": &format!("Generate a {} animation frame for this pet character based on this prompt: {}", 
+            "text": &format!("Generate a {} animation frame for this pet character based on this prompt: {}",
                 format!("{:?}", row_key).to_lowercase(), prompt),
             "text_elements": []
         }),
@@ -98,8 +100,8 @@ pub async fn regenerate_row(
     thread_id: Option<&str>,
     row_key: RowKey,
     prompt: Option<&str>,
-    canonical_reference_path: Option<&PathBuf>,
-    runtime_home: &PathBuf,
+    canonical_reference_path: Option<&Path>,
+    runtime_home: &Path,
 ) -> AppResult<RowState> {
     match row_key {
         RowKey::RunningLeft => {
@@ -125,8 +127,9 @@ pub async fn regenerate_row(
         }
         _ => {
             // For other rows, use Codex if available
-            if let (Some(client), Some(thread_id), Some(prompt), Some(canonical_ref)) = 
-                (client, thread_id, prompt, canonical_reference_path) {
+            if let (Some(client), Some(thread_id), Some(prompt), Some(canonical_ref)) =
+                (client, thread_id, prompt, canonical_reference_path)
+            {
                 let generated_key = match row_key {
                     RowKey::Idle => GeneratedRowKey::Idle,
                     RowKey::RunningRight => GeneratedRowKey::RunningRight,
@@ -183,7 +186,10 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(super::generate_all_rows(session_id, runtime_home));
 
-        assert!(matches!(result, Err(crate::error::AppError::NotImplemented { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::error::AppError::NotImplemented { .. })
+        ));
     }
 
     #[test]
@@ -198,9 +204,19 @@ mod tests {
         let row_key = RowKey::Idle;
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(regenerate_row(None, None, row_key, None, None, &runtime_home));
+        let result = rt.block_on(regenerate_row(
+            None,
+            None,
+            row_key,
+            None,
+            None,
+            &runtime_home,
+        ));
 
-        assert!(matches!(result, Err(crate::error::AppError::NotImplemented { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::error::AppError::NotImplemented { .. })
+        ));
     }
 
     #[test]
@@ -210,7 +226,14 @@ mod tests {
         let row_key = RowKey::RunningLeft;
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(regenerate_row(None, None, row_key, None, None, &runtime_home));
+        let result = rt.block_on(regenerate_row(
+            None,
+            None,
+            row_key,
+            None,
+            None,
+            &runtime_home,
+        ));
 
         // Should fail because running-right source doesn't exist
         assert!(result.is_err());
@@ -225,6 +248,9 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(super::draft_row_prompt(session_id, row_key, runtime_home));
 
-        assert!(matches!(result, Err(crate::error::AppError::NotImplemented { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::error::AppError::NotImplemented { .. })
+        ));
     }
 }

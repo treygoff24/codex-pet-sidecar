@@ -12,11 +12,11 @@ use crate::runtime::{
     StartPetSessionRequest,
 };
 use crate::skills::{hatching_prompt, personality_prompt, SkillPrompt};
+use crate::state::library::archive_pet as archive_pet_library;
 use crate::state::{
     discover_library_pets, ensure_library, import_staged_pet, load_active_pet_config, load_config,
     save_config, set_active_pet as set_active_pet_in_library, PetConfig, PetLibrary, TuckConfig,
 };
-use crate::state::library::archive_pet as archive_pet_library;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -87,10 +87,7 @@ pub async fn set_active_pet(
 }
 
 #[tauri::command]
-pub async fn archive_pet(
-    state: State<'_, AppState>,
-    pet_id: String,
-) -> CommandResult<PetLibrary> {
+pub async fn archive_pet(state: State<'_, AppState>, pet_id: String) -> CommandResult<PetLibrary> {
     archive_pet_library(&state.paths, &pet_id).map_err(Into::into)
 }
 

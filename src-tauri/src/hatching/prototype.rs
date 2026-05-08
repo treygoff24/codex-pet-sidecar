@@ -75,7 +75,9 @@ pub async fn generate_prototype(
     Ok(PrototypeIteration {
         n: iteration_n,
         revised_prompt,
-        summary_of_changes: feedback.map(|f| format!("Applied feedback: {}", f)).unwrap_or_default(),
+        summary_of_changes: feedback
+            .map(|f| format!("Applied feedback: {}", f))
+            .unwrap_or_default(),
         user_feedback: feedback.map(|f| f.to_string()),
         image: ImageArtifact {
             source_path: PathBuf::from("/placeholder/ig_prototype.png"),
@@ -102,6 +104,7 @@ pub async fn generate_prototype(
 /// 2. Validate iteration_n exists in prototype.iterations
 /// 3. Update prototype.current to iteration_n - 1
 /// 4. Persist session
+#[allow(dead_code)]
 pub async fn revert_to_iteration(
     _session_id: Uuid,
     _iteration_n: u32,
@@ -123,6 +126,7 @@ pub async fn revert_to_iteration(
 /// 4. Update phase to Generating with initial progress
 /// 5. Persist session
 /// 6. Trigger background row generation (separate task)
+#[allow(dead_code)]
 pub async fn accept_prototype(_session_id: Uuid, _runtime_home: PathBuf) -> AppResult<()> {
     // TODO: Implement prototype acceptance and generation phase transition
     Err(AppError::NotImplemented {
@@ -163,9 +167,16 @@ mod tests {
         let iteration_n = 1;
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(super::revert_to_iteration(session_id, iteration_n, runtime_home));
+        let result = rt.block_on(super::revert_to_iteration(
+            session_id,
+            iteration_n,
+            runtime_home,
+        ));
 
-        assert!(matches!(result, Err(crate::error::AppError::NotImplemented { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::error::AppError::NotImplemented { .. })
+        ));
     }
 
     #[test]
@@ -176,7 +187,10 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(super::accept_prototype(session_id, runtime_home));
 
-        assert!(matches!(result, Err(crate::error::AppError::NotImplemented { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::error::AppError::NotImplemented { .. })
+        ));
     }
 
     #[test]
@@ -187,6 +201,9 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(super::draft_prototype_prompt(session_id, runtime_home));
 
-        assert!(matches!(result, Err(crate::error::AppError::NotImplemented { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::error::AppError::NotImplemented { .. })
+        ));
     }
 }

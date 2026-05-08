@@ -306,7 +306,12 @@ pub async fn generate_prototype(
     let prompt = session
         .brief
         .as_ref()
-        .map(|b| format!("A pet named {} with personality: {:?}", b.display_name, b.personality))
+        .map(|b| {
+            format!(
+                "A pet named {} with personality: {:?}",
+                b.display_name, b.personality
+            )
+        })
         .unwrap_or_else(|| "A cute pixel art pet".to_string());
 
     // Get reference image path
@@ -466,7 +471,12 @@ pub async fn regenerate_row(
     let prompt = session
         .brief
         .as_ref()
-        .map(|b| format!("A pet named {} with personality: {:?}", b.display_name, b.personality))
+        .map(|b| {
+            format!(
+                "A pet named {} with personality: {:?}",
+                b.display_name, b.personality
+            )
+        })
         .unwrap_or_else(|| "A cute pixel art pet".to_string());
 
     // Get canonical reference path (placeholder - in real implementation this would be workspace/decoded/base.png)

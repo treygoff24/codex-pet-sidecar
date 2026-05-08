@@ -76,10 +76,13 @@ impl HatchingRuntimeManager {
 
         // Start thread with experimentalRawEvents: true
         let thread = client
-            .call("thread/start", json!({
-                "reason": "hatching",
-                "experimentalRawEvents": true
-            }))
+            .call(
+                "thread/start",
+                json!({
+                    "reason": "hatching",
+                    "experimentalRawEvents": true
+                }),
+            )
             .await?;
 
         // Extract thread ID
@@ -143,10 +146,13 @@ impl HatchingRuntimeManager {
 
         // Start thread with experimentalRawEvents: true
         let thread = client
-            .call("thread/start", json!({
-                "reason": "hatching",
-                "experimentalRawEvents": true
-            }))
+            .call(
+                "thread/start",
+                json!({
+                    "reason": "hatching",
+                    "experimentalRawEvents": true
+                }),
+            )
             .await?;
 
         // Extract thread ID
@@ -241,27 +247,20 @@ impl HatchingRuntimeManager {
     ) -> AppResult<(String, serde_json::Value)> {
         let mut events_rx = {
             let mut guard = self.events_rx.lock().await;
-            guard
-                .take()
-                .ok_or_else(|| AppError::JsonRpc {
-                    method: "wait_for_any_notification".to_string(),
-                    message: "events receiver not initialized".to_string(),
-                })?
+            guard.take().ok_or_else(|| AppError::JsonRpc {
+                method: "wait_for_any_notification".to_string(),
+                message: "events receiver not initialized".to_string(),
+            })?
         };
 
         let start = std::time::Instant::now();
         loop {
-            let recv_result = tokio::time::timeout(
-                tokio::time::Duration::from_millis(100),
-                events_rx.recv(),
-            )
-            .await;
+            let recv_result =
+                tokio::time::timeout(tokio::time::Duration::from_millis(100), events_rx.recv())
+                    .await;
 
             match recv_result {
-                Ok(Some(crate::runtime::json_rpc::WireEvent::Notification {
-                    method,
-                    params,
-                })) => {
+                Ok(Some(crate::runtime::json_rpc::WireEvent::Notification { method, params })) => {
                     // Put the receiver back before returning
                     self.events_rx.lock().await.replace(events_rx);
                     return Ok((method, params));
@@ -302,21 +301,17 @@ impl HatchingRuntimeManager {
     ) -> AppResult<serde_json::Value> {
         let mut events_rx = {
             let mut guard = self.events_rx.lock().await;
-            guard
-                .take()
-                .ok_or_else(|| AppError::JsonRpc {
-                    method: "wait_for_notification".to_string(),
-                    message: "events receiver not initialized".to_string(),
-                })?
+            guard.take().ok_or_else(|| AppError::JsonRpc {
+                method: "wait_for_notification".to_string(),
+                message: "events receiver not initialized".to_string(),
+            })?
         };
 
         let start = std::time::Instant::now();
         loop {
-            let recv_result = tokio::time::timeout(
-                tokio::time::Duration::from_millis(100),
-                events_rx.recv(),
-            )
-            .await;
+            let recv_result =
+                tokio::time::timeout(tokio::time::Duration::from_millis(100), events_rx.recv())
+                    .await;
 
             match recv_result {
                 Ok(Some(crate::runtime::json_rpc::WireEvent::Notification {
@@ -383,11 +378,13 @@ impl HatchingRuntimeManager {
 /// Registry for HatchingRuntimeManager instances.
 ///
 /// Manages runtime managers for active hatching sessions, keyed by session_id.
+#[allow(dead_code)]
 pub struct HatchingRuntimeManagerRegistry {
     managers: RwLock<HashMap<Uuid, Arc<Mutex<HatchingRuntimeManager>>>>,
     paths: AppPaths,
 }
 
+#[allow(dead_code)]
 impl HatchingRuntimeManagerRegistry {
     pub fn new(paths: AppPaths) -> Self {
         Self {
@@ -405,7 +402,10 @@ impl HatchingRuntimeManagerRegistry {
         drop(managers);
 
         // Create new manager
-        let manager = Arc::new(Mutex::new(HatchingRuntimeManager::new(session_id, &self.paths)));
+        let manager = Arc::new(Mutex::new(HatchingRuntimeManager::new(
+            session_id,
+            &self.paths,
+        )));
         let mut managers = self.managers.write().await;
         managers.insert(session_id, manager.clone());
         manager
