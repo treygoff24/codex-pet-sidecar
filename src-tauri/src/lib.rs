@@ -51,6 +51,7 @@ pub fn run() {
             load_pet_config,
             save_pet_config,
             set_active_pet,
+            archive_pet,
             import_pet,
             start_hatching_flow,
             start_personality_flow,
@@ -74,8 +75,7 @@ pub fn run() {
             revert_to_iteration,
             accept_prototype,
             regenerate_row,
-            import_hatched_pet,
-            archive_pet
+            import_hatched_pet
         ])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {

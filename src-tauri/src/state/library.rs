@@ -99,8 +99,46 @@ pub fn discover_library_pets(paths: &AppPaths) -> AppResult<Vec<InstalledPet>> {
             pets.push(pet);
         }
     }
-    pets.sort_by(|left, right| left.display_name.cmp(&right.display_name));
     Ok(pets)
+}
+
+pub fn archive_pet(paths: &AppPaths, pet_id: &str) -> AppResult<PetLibrary> {
+    validate_pet_id(pet_id)?;
+
+    let mut library = ensure_library(paths)?;
+
+    // Check if pet exists
+    if !library.pets.iter().any(|pet| pet.pet_id == pet_id) {
+        return Err(AppError::PetNotFound(pet_id.to_string()));
+    }
+
+    // Block archiving the active pet
+    if library.active_pet_id.as_deref() == Some(pet_id) {
+        return Err(AppError::InvalidPetAsset {
+            path: paths.pet_support_dir(pet_id),
+            reason: "Cannot archive the active pet. Switch to a different pet first.".to_string(),
+        });
+    }
+
+    // Create archived-pets directory
+    let archived_dir = paths.app_support.join("archived-pets");
+    std::fs::create_dir_all(&archived_dir)?;
+
+    // Move pet package to archived-pets with timestamp
+    let pet_dir = paths.pet_support_dir(pet_id);
+    let timestamp = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "unknown".to_string());
+    let archive_name = format!("{}-{}", pet_id, timestamp);
+    let archive_path = archived_dir.join(&archive_name);
+
+    std::fs::rename(&pet_dir, &archive_path)?;
+
+    // Remove pet from library
+    library.pets.retain(|pet| pet.pet_id != pet_id);
+    save_library(paths, &library)?;
+
+    Ok(library)
 }
 
 pub fn import_staged_pet(paths: &AppPaths, source_dir: &Path) -> AppResult<PetLibrary> {

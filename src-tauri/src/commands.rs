@@ -16,6 +16,7 @@ use crate::state::{
     discover_library_pets, ensure_library, import_staged_pet, load_active_pet_config, load_config,
     save_config, set_active_pet as set_active_pet_in_library, PetConfig, PetLibrary, TuckConfig,
 };
+use crate::state::library::archive_pet as archive_pet_library;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -25,9 +26,9 @@ use tokio::time::{sleep, Duration};
 
 // Re-export hatching commands for Tauri invoke registration
 pub use hatching_commands::{
-    accept_prototype, archive_pet, cancel_hatching_run, describe_reference_image,
-    generate_prototype, get_hatching_state, import_hatched_pet, list_orphan_hatching_sessions,
-    regenerate_row, revert_to_iteration, start_hatching_run, submit_brief, upload_reference_image,
+    accept_prototype, cancel_hatching_run, describe_reference_image, generate_prototype,
+    get_hatching_state, import_hatched_pet, list_orphan_hatching_sessions, regenerate_row,
+    revert_to_iteration, start_hatching_run, submit_brief, upload_reference_image,
 };
 
 #[derive(Debug, Serialize)]
@@ -83,6 +84,14 @@ pub async fn set_active_pet(
     pet_id: String,
 ) -> CommandResult<PetLibrary> {
     set_active_pet_in_library(&state.paths, &pet_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn archive_pet(
+    state: State<'_, AppState>,
+    pet_id: String,
+) -> CommandResult<PetLibrary> {
+    archive_pet_library(&state.paths, &pet_id).map_err(Into::into)
 }
 
 #[tauri::command]

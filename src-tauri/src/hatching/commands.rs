@@ -358,15 +358,6 @@ pub async fn import_hatched_pet(
         .map_err(CommandError::from)
 }
 
-#[allow(dead_code)]
-#[tauri::command]
-pub async fn archive_pet(_session_id: Uuid) -> CommandResult<()> {
-    Err(AppError::NotImplemented {
-        command: "archive_pet".to_string(),
-    }
-    .into())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
