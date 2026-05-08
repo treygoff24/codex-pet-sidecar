@@ -272,20 +272,9 @@ pub async fn describe_reference_image(
         .await
         .map_err(CommandError::from)?;
 
-    // Get JsonRpcClient
-    let client = {
-        let manager_guard = runtime_manager.lock().await;
-        manager_guard
-            .client()
-            .ok_or_else(|| CommandError {
-                message: "Runtime manager not started".to_string(),
-                recoverable: true,
-            })?
-            .clone()
-    };
-
-    // Call vision function
-    crate::hatching::vision::describe_reference_image(&client, &thread_id, &image_path)
+    // Call vision function with runtime manager
+    let manager_guard = runtime_manager.lock().await;
+    crate::hatching::vision::describe_reference_image(&manager_guard, &thread_id, &image_path)
         .await
         .map_err(CommandError::from)
 }
