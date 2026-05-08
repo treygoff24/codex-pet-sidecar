@@ -195,6 +195,16 @@ pub struct GenerationProgress {
     pub total_imagegen_calls: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OrphanSummary {
+    pub session_id: Uuid,
+    pub display_name: Option<String>,
+    pub phase: HatchingPhase,
+    #[serde(with = "time::serde::iso8601")]
+    pub created_at: time::OffsetDateTime,
+}
+
 // HatchingSessionRegistry
 
 #[allow(dead_code)]
@@ -213,6 +223,15 @@ impl HatchingSessionRegistry {
 
     #[allow(dead_code)]
     pub async fn get(&self, id: Uuid) -> AppResult<HatchingSession> {
+        let sessions = self.sessions.read().await;
+        sessions
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| AppError::PetNotFound(id.to_string()))
+    }
+
+    #[allow(dead_code)]
+    pub async fn get_mut(&self, id: Uuid) -> AppResult<HatchingSession> {
         let sessions = self.sessions.read().await;
         sessions
             .get(&id)

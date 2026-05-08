@@ -13,10 +13,13 @@ mod tray;
 
 use app_state::AppState;
 use commands::{
-    get_pet_visibility_state, import_pet, interrupt_turn, list_installed_pets, load_pet_config,
-    load_pet_library, respond_to_approval, save_pet_config, send_user_message, set_active_pet,
-    set_mute_until, start_hatching_flow, start_personality_flow, start_pet_runtime, tuck_pet,
-    wake_pet,
+    accept_prototype, archive_pet, cancel_hatching_run, describe_reference_image,
+    generate_prototype, get_hatching_state, get_pet_visibility_state, import_hatched_pet,
+    import_pet, interrupt_turn, list_installed_pets, list_orphan_hatching_sessions,
+    load_pet_config, load_pet_library, regenerate_row, respond_to_approval, revert_to_iteration,
+    save_pet_config, send_user_message, set_active_pet, set_mute_until, start_hatching_flow,
+    start_hatching_run, start_personality_flow, start_pet_runtime, submit_brief, tuck_pet,
+    upload_reference_image, wake_pet,
 };
 use runtime::RuntimeEvent;
 use tauri::{Emitter, Manager};
@@ -58,7 +61,21 @@ pub fn run() {
             tuck_pet,
             wake_pet,
             get_pet_visibility_state,
-            respond_to_approval
+            respond_to_approval,
+            // Hatching wizard commands
+            start_hatching_run,
+            cancel_hatching_run,
+            get_hatching_state,
+            submit_brief,
+            upload_reference_image,
+            list_orphan_hatching_sessions,
+            describe_reference_image,
+            generate_prototype,
+            revert_to_iteration,
+            accept_prototype,
+            regenerate_row,
+            import_hatched_pet,
+            archive_pet
         ])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {

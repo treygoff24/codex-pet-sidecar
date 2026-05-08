@@ -50,6 +50,8 @@ pub enum AppError {
     #[error("hatching runtime for session {0} is missing or corrupt")]
     #[allow(dead_code)]
     HatchingRuntimeMissing(String),
+    #[error("command '{command}' is not yet implemented")]
+    NotImplemented { command: String },
 }
 
 pub type AppResult<T> = Result<T, AppError>;

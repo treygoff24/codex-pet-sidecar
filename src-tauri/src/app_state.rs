@@ -3,6 +3,7 @@ use crate::proactive::AmbientEngine;
 use crate::runtime::{RuntimeEvent, RuntimeSessionManager};
 use crate::state::AppPaths;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
 pub struct AppState {
@@ -12,7 +13,7 @@ pub struct AppState {
     pub ambient: Mutex<AmbientEngine>,
     pub observer_started: AtomicBool,
     #[allow(dead_code)]
-    pub hatching: HatchingSessionRegistry,
+    pub hatching_session_registry: Arc<HatchingSessionRegistry>,
 }
 
 impl AppState {
@@ -23,7 +24,7 @@ impl AppState {
             event_tx,
             ambient: Mutex::new(AmbientEngine::default()),
             observer_started: AtomicBool::new(false),
-            hatching: HatchingSessionRegistry::new(paths),
+            hatching_session_registry: Arc::new(HatchingSessionRegistry::new(paths)),
         }
     }
 }

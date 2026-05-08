@@ -1,5 +1,6 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
+use crate::hatching::commands as hatching_commands;
 use crate::memory::ensure_memory_file;
 use crate::observers::{
     capture_ambient_screenshot, observe_active_app, observe_idle_state_with_current,
@@ -21,6 +22,13 @@ use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Manager, State};
 use time::OffsetDateTime;
 use tokio::time::{sleep, Duration};
+
+// Re-export hatching commands for Tauri invoke registration
+pub use hatching_commands::{
+    accept_prototype, archive_pet, cancel_hatching_run, describe_reference_image,
+    generate_prototype, get_hatching_state, import_hatched_pet, list_orphan_hatching_sessions,
+    regenerate_row, revert_to_iteration, start_hatching_run, submit_brief, upload_reference_image,
+};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
