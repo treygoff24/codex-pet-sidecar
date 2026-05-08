@@ -1,6 +1,7 @@
 use crate::app_state::AppState;
 use crate::commands::{CommandError, CommandResult};
 use crate::error::AppError;
+use crate::hatching::pipeline::import_hatched_pet as pipeline_import_hatched_pet;
 use crate::hatching::prototype::{
     accept_prototype as prototype_accept_prototype, generate_prototype as prototype_generate_prototype,
     revert_to_iteration as prototype_revert_to_iteration,
@@ -341,11 +342,22 @@ pub async fn regenerate_row(
 
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn import_hatched_pet(_session_id: Uuid) -> CommandResult<String> {
-    Err(AppError::NotImplemented {
-        command: "import_hatched_pet".to_string(),
-    }
-    .into())
+pub async fn import_hatched_pet(
+    state: State<'_, AppState>,
+    session_id: Uuid,
+    activate: bool,
+) -> CommandResult<String> {
+    let session = std::sync::Arc::clone(&state.hatching_session_registry)
+        .get(session_id)
+        .await
+        .map_err(CommandError::from)?;
+
+    let runtime_home = session.runtime_home.clone();
+    let workspace = session.workspace.clone();
+
+    pipeline_import_hatched_pet(session_id, runtime_home, workspace, activate)
+        .await
+        .map_err(CommandError::from)
 }
 
 #[allow(dead_code)]
