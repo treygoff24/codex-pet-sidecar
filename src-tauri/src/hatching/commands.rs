@@ -1,6 +1,10 @@
 use crate::app_state::AppState;
 use crate::commands::{CommandError, CommandResult};
 use crate::error::AppError;
+use crate::hatching::prototype::{
+    accept_prototype as prototype_accept_prototype, generate_prototype as prototype_generate_prototype,
+    revert_to_iteration as prototype_revert_to_iteration,
+};
 use crate::hatching::reference_image::validate_and_copy_reference;
 use crate::hatching::runtime::HatchingRuntimeManager;
 use crate::hatching::session::{
@@ -209,29 +213,55 @@ pub async fn describe_reference_image(
 
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn generate_prototype(_session_id: Uuid, _feedback: Option<String>) -> CommandResult<()> {
-    Err(AppError::NotImplemented {
-        command: "generate_prototype".to_string(),
-    }
-    .into())
+pub async fn generate_prototype(
+    state: State<'_, AppState>,
+    session_id: Uuid,
+    feedback: Option<String>,
+) -> CommandResult<crate::hatching::session::PrototypeIteration> {
+    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
+        .get(session_id)
+        .await
+        .map_err(CommandError::from)?
+        .runtime_home;
+
+    prototype_generate_prototype(session_id, feedback, runtime_home)
+        .await
+        .map_err(CommandError::from)
 }
 
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn revert_to_iteration(_session_id: Uuid, _iteration_n: u32) -> CommandResult<()> {
-    Err(AppError::NotImplemented {
-        command: "revert_to_iteration".to_string(),
-    }
-    .into())
+pub async fn revert_to_iteration(
+    state: State<'_, AppState>,
+    session_id: Uuid,
+    iteration_n: u32,
+) -> CommandResult<()> {
+    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
+        .get(session_id)
+        .await
+        .map_err(CommandError::from)?
+        .runtime_home;
+
+    prototype_revert_to_iteration(session_id, iteration_n, runtime_home)
+        .await
+        .map_err(CommandError::from)
 }
 
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn accept_prototype(_session_id: Uuid) -> CommandResult<()> {
-    Err(AppError::NotImplemented {
-        command: "accept_prototype".to_string(),
-    }
-    .into())
+pub async fn accept_prototype(
+    state: State<'_, AppState>,
+    session_id: Uuid,
+) -> CommandResult<()> {
+    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
+        .get(session_id)
+        .await
+        .map_err(CommandError::from)?
+        .runtime_home;
+
+    prototype_accept_prototype(session_id, runtime_home)
+        .await
+        .map_err(CommandError::from)
 }
 
 #[allow(dead_code)]

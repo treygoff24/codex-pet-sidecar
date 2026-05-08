@@ -5,6 +5,7 @@
 pub mod commands;
 pub mod imagegen;
 pub mod imagegen_fixture;
+pub mod prototype;
 pub mod reference_image;
 pub mod runtime;
 pub mod session;
