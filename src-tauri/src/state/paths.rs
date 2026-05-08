@@ -2,6 +2,9 @@ use crate::error::{AppError, AppResult};
 use std::path::PathBuf;
 use tauri::{path::BaseDirectory, AppHandle, Manager};
 
+#[allow(dead_code)]
+pub const RESERVED_PET_IDS: &[&str] = &["olive", "codex", "default", "assets", "tmp", "hatching"];
+
 #[derive(Debug, Clone)]
 pub struct AppPaths {
     pub app_support: PathBuf,
@@ -75,6 +78,27 @@ impl AppPaths {
     pub fn runtime_codex_home_dir(&self) -> PathBuf {
         self.app_support.join("codex-runtime-home")
     }
+
+    // Hatching wizard paths
+    #[allow(dead_code)]
+    pub fn hatching_workspace_root_dir(&self) -> PathBuf {
+        self.app_support.join("hatching-workspace")
+    }
+
+    #[allow(dead_code)]
+    pub fn hatching_workspace_dir(&self, session_id: &str) -> PathBuf {
+        self.hatching_workspace_root_dir().join(session_id)
+    }
+
+    #[allow(dead_code)]
+    pub fn hatching_runtime_root_dir(&self) -> PathBuf {
+        self.app_support.join("hatching-runtime")
+    }
+
+    #[allow(dead_code)]
+    pub fn hatching_runtime_home_dir(&self, session_id: &str) -> PathBuf {
+        self.hatching_runtime_root_dir().join(session_id)
+    }
 }
 
 #[cfg(test)]
@@ -93,5 +117,53 @@ mod tests {
             paths.runtime_codex_home_dir(),
             PathBuf::from("/tmp/support/codex-runtime-home")
         );
+    }
+
+    #[test]
+    fn hatching_paths_are_under_app_support() {
+        let paths = AppPaths::with_roots(PathBuf::from("/tmp/support"));
+
+        assert_eq!(
+            paths.hatching_workspace_root_dir(),
+            PathBuf::from("/tmp/support/hatching-workspace")
+        );
+        assert_eq!(
+            paths.hatching_workspace_dir("session-123"),
+            PathBuf::from("/tmp/support/hatching-workspace/session-123")
+        );
+        assert_eq!(
+            paths.hatching_runtime_root_dir(),
+            PathBuf::from("/tmp/support/hatching-runtime")
+        );
+        assert_eq!(
+            paths.hatching_runtime_home_dir("session-123"),
+            PathBuf::from("/tmp/support/hatching-runtime/session-123")
+        );
+    }
+
+    #[test]
+    fn hatching_paths_do_not_overlap_with_pet_runtime() {
+        let paths = AppPaths::with_roots(PathBuf::from("/tmp/support"));
+
+        // Hatching paths should be separate from pet runtime paths
+        assert_ne!(
+            paths.hatching_workspace_root_dir(),
+            paths.runtime_workspace_dir()
+        );
+        assert_ne!(
+            paths.hatching_runtime_root_dir(),
+            paths.runtime_codex_home_dir()
+        );
+        assert_ne!(paths.hatching_runtime_root_dir(), paths.pets_dir());
+    }
+
+    #[test]
+    fn reserved_pet_ids_contains_expected_values() {
+        assert!(RESERVED_PET_IDS.contains(&"olive"));
+        assert!(RESERVED_PET_IDS.contains(&"codex"));
+        assert!(RESERVED_PET_IDS.contains(&"default"));
+        assert!(RESERVED_PET_IDS.contains(&"assets"));
+        assert!(RESERVED_PET_IDS.contains(&"tmp"));
+        assert!(RESERVED_PET_IDS.contains(&"hatching"));
     }
 }
