@@ -8,9 +8,11 @@ import argparse
 import sys
 from pathlib import Path
 
-# Try to add scripts directory to path (for dev mode)
-# In bundled mode, scripts are available via the PyInstaller datas mechanism
-scripts_dir = Path(__file__).parent.parent / "scripts"
+# Try to add scripts directory to path. In bundled mode, PyInstaller extracts
+# data files under sys._MEIPASS; in dev mode this file lives under
+# tools/pet-hatching/build and scripts are one directory up.
+bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).parent.parent))
+scripts_dir = bundle_root / "scripts"
 if scripts_dir.exists():
     sys.path.insert(0, str(scripts_dir))
 

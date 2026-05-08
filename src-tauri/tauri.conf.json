@@ -68,7 +68,8 @@
       "../assets/pets/olive/personality.md",
       "../assets/pets/olive/README.md",
       "../assets/pets/olive/spritesheet.webp"
-    ]
+    ],
+    "externalBin": ["binaries/pet-hatching"]
   },
   "plugins": {
     "updater": {

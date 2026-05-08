@@ -16,7 +16,16 @@
     "core:window:allow-start-dragging",
     "dialog:allow-open",
     "process:default",
-    "shell:allow-execute",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "args": true,
+          "name": "binaries/pet-hatching",
+          "sidecar": true
+        }
+      ]
+    },
     "updater:default"
   ]
 }

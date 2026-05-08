@@ -14,6 +14,12 @@ a = Analysis(
         ("../scripts", "scripts"),
     ],
     hiddenimports=[
+        "PIL.Image",
+        "PIL.ImageFile",
+        "PIL.ImageOps",
+        "PIL.JpegImagePlugin",
+        "PIL.PngImagePlugin",
+        "PIL.WebPImagePlugin",
         "PIL._tkinter_finder",
     ],
     hookspath=[],

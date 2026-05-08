@@ -30,6 +30,7 @@ const isCodexResidueAllowlisted = (file) =>
     "src-tauri/src/runtime/process.rs",
     "src-tauri/src/hatching/runtime.rs",
     "scripts/smoke-codex-runtime.mjs",
+    "tools/pet-hatching/scripts/imagegen-pin-spike.mjs",
     "scripts/audit-public.mjs",
     "docs/specs/2026-05-07-hatching-wizard-design-v2.md",
   ].includes(file);
