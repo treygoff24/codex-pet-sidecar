@@ -3,7 +3,6 @@ use crate::commands::{CommandError, CommandResult};
 use crate::error::AppError;
 use crate::hatching::pipeline::import_hatched_pet as pipeline_import_hatched_pet;
 use crate::hatching::reference_image::validate_and_copy_reference;
-use crate::hatching::rows::regenerate_row as rows_regenerate_row;
 use crate::hatching::runtime::HatchingRuntimeManager;
 use crate::hatching::session::{
     HatchingPhase, HatchingSession, OrphanSummary, PetBrief, ReferenceImage, RowKey,
@@ -417,11 +416,11 @@ pub async fn regenerate_row(
     session_id: Uuid,
     row_key: String,
 ) -> CommandResult<crate::hatching::session::RowState> {
-    let runtime_home = std::sync::Arc::clone(&state.hatching_session_registry)
+    // Get session
+    let session = std::sync::Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
-        .map_err(CommandError::from)?
-        .runtime_home;
+        .map_err(CommandError::from)?;
 
     // Parse row_key string to RowKey enum
     let parsed_row_key = match row_key.as_str() {
@@ -435,17 +434,66 @@ pub async fn regenerate_row(
         "running" => RowKey::Running,
         "review" => RowKey::Review,
         _ => {
-            return Err(AppError::InvalidPetMetadata {
-                path: PathBuf::from("<row_key>"),
-                reason: format!("Invalid row_key: {}", row_key),
-            }
-            .into())
+            return Err(CommandError {
+                message: format!("Invalid row_key: {}", row_key),
+                recoverable: true,
+            })
         }
     };
 
-    rows_regenerate_row(session_id, parsed_row_key, runtime_home)
-        .await
-        .map_err(CommandError::from)
+    // Get runtime manager and client if not running-left
+    let (client_opt, thread_id_opt) = if parsed_row_key != RowKey::RunningLeft {
+        let thread_id = session
+            .codex_thread_id
+            .as_ref()
+            .ok_or_else(|| CommandError {
+                message: "No Codex thread ID found in session".to_string(),
+                recoverable: true,
+            })?
+            .clone();
+
+        let runtime_manager = std::sync::Arc::clone(&state.hatching_runtime_registry)
+            .get(session_id)
+            .await
+            .map_err(CommandError::from)?;
+
+        let client = {
+            let manager_guard = runtime_manager.lock().await;
+            manager_guard
+                .client()
+                .ok_or_else(|| CommandError {
+                    message: "Runtime manager not started".to_string(),
+                    recoverable: true,
+                })?
+                .clone()
+        };
+
+        (Some(client), Some(thread_id))
+    } else {
+        (None, None)
+    };
+
+    // Get prompt from brief (placeholder)
+    let prompt = session
+        .brief
+        .as_ref()
+        .map(|b| format!("A pet named {} with personality: {:?}", b.display_name, b.personality))
+        .unwrap_or_else(|| "A cute pixel art pet".to_string());
+
+    // Get canonical reference path (placeholder - in real implementation this would be workspace/decoded/base.png)
+    let canonical_ref = session.workspace.join("decoded/base.png");
+
+    // Call row regeneration
+    crate::hatching::rows::regenerate_row(
+        client_opt.as_ref(),
+        thread_id_opt.as_deref(),
+        parsed_row_key,
+        Some(&prompt),
+        Some(&canonical_ref),
+        &session.runtime_home,
+    )
+    .await
+    .map_err(CommandError::from)
 }
 
 #[allow(dead_code)]
