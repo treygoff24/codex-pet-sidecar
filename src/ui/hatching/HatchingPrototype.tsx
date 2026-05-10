@@ -1,10 +1,3 @@
-/**
- * HatchingPrototype - Step 4 of the hatching wizard.
- *
- * Allows users to generate, review, and iterate on prototype images.
- * Follows accessibility and UI/UX best practices from the design system.
- */
-
 import { useState } from "react";
 
 interface HatchingPrototypeProps {

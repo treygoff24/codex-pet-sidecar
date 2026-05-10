@@ -4,12 +4,26 @@ use crate::runtime::auth::link_or_copy_user_auth;
 use crate::runtime::json_rpc::JsonRpcClient;
 use crate::runtime::process::AppServerProcess;
 use crate::state::paths::AppPaths;
+use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use uuid::Uuid;
+
+pub fn read_only_turn_params<T>(thread_id: &str, items: Vec<T>) -> serde_json::Value
+where
+    T: serde::Serialize,
+{
+    json!({
+        "threadId": thread_id,
+        "input": items,
+        "approvalPolicy": "never",
+        "approvalsReviewer": "auto_review",
+        "sandboxPolicy": {"type": "readOnly", "networkAccess": true}
+    })
+}
 
 /// Hatching runtime manager - independent of pet RuntimeSessionManager.
 ///
@@ -23,6 +37,16 @@ pub struct HatchingRuntimeManager {
     client: Option<JsonRpcClient>,
     thread_id: Arc<Mutex<Option<String>>>,
     events_rx: Arc<Mutex<Option<mpsc::UnboundedReceiver<crate::runtime::json_rpc::WireEvent>>>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ThreadStartResponse {
+    thread: ThreadReference,
+}
+
+#[derive(Debug, Deserialize)]
+struct ThreadReference {
+    id: String,
 }
 
 #[allow(dead_code)]
@@ -45,41 +69,18 @@ impl HatchingRuntimeManager {
     /// Creates the runtime home directory, links/copies user auth,
     /// writes a minimal config.toml, and spawns the Codex app-server.
     pub async fn start(&mut self) -> AppResult<()> {
-        // Create runtime home directory
         tokio::fs::create_dir_all(&self.runtime_home).await?;
 
-        // Link or copy user auth
         link_or_copy_user_auth(&self.runtime_home)?;
 
-        // Write minimal config.toml (auth + zero MCP plugins + zero skill bundles)
         tokio::fs::write(
             self.runtime_home.join("config.toml"),
             "[analytics]\nenabled = false\n",
         )
         .await?;
 
-        // Spawn Codex app-server process scoped to CODEX_HOME=<runtime_home>
         let process = AppServerProcess::spawn(&self.runtime_home).await?;
-
-        // Open JSON-RPC thread with experimentalRawEvents: true
-        let websocket_url = process.websocket_url.clone();
-        let (wire_tx, wire_rx) = tokio::sync::mpsc::unbounded_channel();
-        let client = JsonRpcClient::connect(&websocket_url, wire_tx).await?;
-
-        // Store the events receiver
-        *self.events_rx.lock().await = Some(wire_rx);
-
-        // Initialize the client
-        client.call("initialize", json!({
-            "clientInfo": {"name":"codex-pet-sidecar","title":"Codex Pet Sidecar","version": env!("CARGO_PKG_VERSION")},
-            "capabilities": {"experimentalApi": true}
-        })).await?;
-
-        // Store process and client
-        self.process = Some(process);
-        self.client = Some(client);
-
-        Ok(())
+        self.attach_process(process).await
     }
 
     /// Reattach to an existing runtime home.
@@ -89,14 +90,12 @@ impl HatchingRuntimeManager {
     ///
     /// Returns AppError::HatchingRuntimeMissing if the runtime home is missing or corrupt.
     pub async fn reattach(&mut self) -> AppResult<()> {
-        // Check if runtime home exists
         if !self.runtime_home.exists() {
             return Err(AppError::HatchingRuntimeMissing(
                 self.session_id.to_string(),
             ));
         }
 
-        // Check if auth.json exists
         let auth_path = self.runtime_home.join("auth.json");
         if !auth_path.exists() {
             return Err(AppError::HatchingRuntimeMissing(
@@ -104,24 +103,22 @@ impl HatchingRuntimeManager {
             ));
         }
 
-        // Spawn fresh Codex app-server process pointed at existing runtime home
         let process = AppServerProcess::spawn(&self.runtime_home).await?;
+        self.attach_process(process).await
+    }
 
-        // Open JSON-RPC connection
+    async fn attach_process(&mut self, process: AppServerProcess) -> AppResult<()> {
         let websocket_url = process.websocket_url.clone();
         let (wire_tx, wire_rx) = tokio::sync::mpsc::unbounded_channel();
         let client = JsonRpcClient::connect(&websocket_url, wire_tx).await?;
 
-        // Store the events receiver
         *self.events_rx.lock().await = Some(wire_rx);
 
-        // Initialize the client
         client.call("initialize", json!({
             "clientInfo": {"name":"codex-pet-sidecar","title":"Codex Pet Sidecar","version": env!("CARGO_PKG_VERSION")},
             "capabilities": {"experimentalApi": true}
         })).await?;
 
-        // Store process and client
         self.process = Some(process);
         self.client = Some(client);
 
@@ -142,8 +139,8 @@ impl HatchingRuntimeManager {
         }
 
         let client = self.client.as_ref().ok_or(AppError::RuntimeNotStarted)?;
-        let thread = client
-            .call(
+        let response = client
+            .call_result::<ThreadStartResponse>(
                 "thread/start",
                 json!({
                     "cwd": self.runtime_home,
@@ -160,14 +157,7 @@ impl HatchingRuntimeManager {
             )
             .await?;
 
-        let thread_id = thread
-            .pointer("/thread/id")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| AppError::JsonRpc {
-                method: "thread/start".into(),
-                message: "response missing /thread/id".into(),
-            })?
-            .to_string();
+        let thread_id = response.thread.id;
         *self.thread_id.lock().await = Some(thread_id.clone());
         Ok(thread_id)
     }
@@ -180,31 +170,21 @@ impl HatchingRuntimeManager {
     }
 
     /// Cancel the hatching runtime.
-    ///
-    /// Shuts down the Codex process and cleans up the runtime home.
     pub async fn cancel(&mut self) -> AppResult<()> {
-        // Shutdown the Codex process if it exists
         if let Some(process) = self.process.take() {
-            // The AppServerProcess should handle shutdown when dropped
-            // For now, we just let it drop
             drop(process);
         }
 
-        // Clear the client
         self.client = None;
 
-        // Clear the thread ID
         *self.thread_id.lock().await = None;
 
-        // Clear the events receiver
         *self.events_rx.lock().await = None;
 
         Ok(())
     }
 
     /// Shutdown the hatching runtime.
-    ///
-    /// Alias for cancel - both shut down the process and clean up.
     pub async fn shutdown(&mut self) -> AppResult<()> {
         self.cancel().await
     }
@@ -227,10 +207,7 @@ impl HatchingRuntimeManager {
         ImagegenIngester::new(self.runtime_home.clone(), workspace_dir)
     }
 
-    /// Wait for any notification with timeout (for debugging).
-    ///
-    /// This method waits for any notification and returns it.
-    /// Useful for debugging to see what notifications are being sent.
+    /// Wait for any notification with timeout.
     pub async fn wait_for_any_notification(
         &self,
         timeout_ms: u64,
@@ -251,18 +228,14 @@ impl HatchingRuntimeManager {
                 Ok(Some(crate::runtime::json_rpc::WireEvent::Notification { method, params })) => {
                     return Ok((method, params));
                 }
-                Ok(Some(_)) => {
-                    // Ignore other events (shouldn't happen)
-                }
+                Ok(Some(_)) => {}
                 Ok(None) => {
-                    // Channel closed
                     return Err(AppError::JsonRpc {
                         method: "wait_for_any_notification".to_string(),
                         message: "events channel closed".to_string(),
                     });
                 }
                 Err(_) => {
-                    // Timeout check
                     if start.elapsed().as_millis() > timeout_ms.into() {
                         return Err(AppError::JsonRpc {
                             method: "wait_for_any_notification".to_string(),
@@ -302,18 +275,14 @@ impl HatchingRuntimeManager {
                 })) if event_method == method => {
                     return Ok(params);
                 }
-                Ok(Some(_)) => {
-                    // Ignore other notifications
-                }
+                Ok(Some(_)) => {}
                 Ok(None) => {
-                    // Channel closed
                     return Err(AppError::JsonRpc {
                         method: "wait_for_notification".to_string(),
                         message: "events channel closed".to_string(),
                     });
                 }
                 Err(_) => {
-                    // Timeout check
                     if start.elapsed().as_millis() > timeout_ms.into() {
                         return Err(AppError::JsonRpc {
                             method: "wait_for_notification".to_string(),
@@ -378,7 +347,6 @@ impl HatchingRuntimeManagerRegistry {
         }
         drop(managers);
 
-        // Create new manager
         let manager = Arc::new(Mutex::new(HatchingRuntimeManager::new(
             session_id,
             &self.paths,
@@ -441,11 +409,8 @@ mod tests {
         let session_id = Uuid::new_v4();
         let manager = HatchingRuntimeManager::new(session_id, &paths);
 
-        // Runtime home should not exist yet
         assert!(!manager.runtime_home().exists());
 
-        // Start should create it (in a real scenario with auth)
-        // For now, we just test the structure
         assert_eq!(manager.session_id(), &session_id);
         assert!(manager.client().is_none());
         assert!(tokio::runtime::Runtime::new()
@@ -522,7 +487,6 @@ mod tests {
         let session_id = Uuid::new_v4();
         let mut manager = HatchingRuntimeManager::new(session_id, &paths);
 
-        // Reattach should fail if runtime home doesn't exist
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(manager.reattach());
         assert!(matches!(result, Err(AppError::HatchingRuntimeMissing(_))));
@@ -535,10 +499,8 @@ mod tests {
         let session_id = Uuid::new_v4();
         let mut manager = HatchingRuntimeManager::new(session_id, &paths);
 
-        // Create runtime home but not auth
         std::fs::create_dir_all(manager.runtime_home()).unwrap();
 
-        // Reattach should fail if auth.json doesn't exist
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(manager.reattach());
         assert!(matches!(result, Err(AppError::HatchingRuntimeMissing(_))));

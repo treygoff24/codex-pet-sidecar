@@ -5,56 +5,28 @@
 
 use crate::error::{AppError, AppResult};
 use crate::hatching::atlas::validate_atlas;
-#[allow(unused_imports)]
+use crate::hatching::provenance::validate_pet_completeness;
 use crate::hatching::session::{HatchingPhase, HatchingSession, RowKey, RowStatus};
-use std::path::PathBuf;
-use uuid::Uuid;
+use crate::state::library::import_staged_pet;
+use crate::state::paths::AppPaths;
+use tauri::AppHandle;
+use tauri_plugin_shell::ShellExt;
 
-/// Full hatching pipeline: generate rows, compose atlas, validate, package, import.
+/// Package and import a hatched pet from the hatching workspace.
 ///
-/// This is the main orchestration function for the hatching wizard.
-/// When the Codex client is available, this should:
-/// 1. Generate all row strips using the Codex imagegen integration
-/// 2. Derive running-left from running-right using deterministic mirroring
-/// 3. Compose the atlas from the row strips
-/// 4. Validate the atlas against the Codex spec
-/// 5. Package the validated atlas as a pet
-/// 6. Import the pet into the library
-#[allow(dead_code)]
-pub async fn run_hatching_pipeline(
-    _session_id: Uuid,
-    _runtime_home: PathBuf,
-    _workspace: PathBuf,
+/// Invokes the bundled `pet-hatching` sidecar (declared under
+/// `bundle.externalBin` in `tauri.conf.json`) for compose / validate /
+/// package, then imports the staged result into the pet library.
+pub async fn import_hatched_pet_with_paths(
+    app: &AppHandle,
+    paths: &AppPaths,
+    session: &mut HatchingSession,
+    activate: bool,
 ) -> AppResult<String> {
-    // TODO: This is a high-level orchestration function
-    // For now, it's a stub pending Codex client integration
-    // When implemented, it should:
-    // 1. Call generate_all_rows from the rows module
-    // 2. Derive running-left using atlas::derive_running_left
-    // 3. Compose atlas using atlas::compose_atlas_from_frames
-    // 4. Validate using atlas::validate_atlas
-    // 5. Package using atlas::package_pet
-    // 6. Import using the library module
+    validate_rows_for_composition(session)?;
+    validate_pet_completeness(session)?;
 
-    Err(AppError::NotImplemented {
-        command: "run_hatching_pipeline (requires Codex client integration)".to_string(),
-    })
-}
-
-/// Import a hatched pet from the hatching session.
-///
-/// This function packages and imports the pet from the hatching workspace.
-/// It uses the Rust implementation of the packaging logic instead of Python scripts.
-pub async fn import_hatched_pet(
-    session_id: Uuid,
-    _runtime_home: PathBuf,
-    workspace: PathBuf,
-    _activate: bool,
-) -> AppResult<String> {
-    // This is a partial implementation using the Rust atlas operations
-    // It demonstrates the packaging workflow, but still needs session integration
-
-    // For demonstration, validate that workspace exists
+    let workspace = session.workspace.clone();
     if !workspace.exists() {
         return Err(AppError::IoWithPath {
             path: workspace.clone(),
@@ -65,37 +37,99 @@ pub async fn import_hatched_pet(
         });
     }
 
-    // Check for expected atlas file
     let atlas_path = workspace.join("atlas.png");
-    if !atlas_path.exists() {
-        return Err(AppError::IoWithPath {
-            path: atlas_path,
-            source: std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "atlas.png not found in workspace",
-            ),
-        });
-    }
+    let spritesheet_path = workspace.join("spritesheet.webp");
+    run_pet_hatching_command(
+        app,
+        vec![
+            "--cmd".into(),
+            "compose".into(),
+            "--frames-root".into(),
+            workspace.join("frames").display().to_string(),
+            "--output".into(),
+            atlas_path.display().to_string(),
+            "--webp-output".into(),
+            spritesheet_path.display().to_string(),
+        ],
+    )
+    .await?;
 
-    // Validate the atlas
+    run_pet_hatching_command(
+        app,
+        vec![
+            "--cmd".into(),
+            "validate".into(),
+            atlas_path.display().to_string(),
+            "--json-out".into(),
+            workspace
+                .join("atlas-validation.json")
+                .display()
+                .to_string(),
+        ],
+    )
+    .await?;
+
     let validation_result = validate_atlas(&atlas_path, 50, 0.95, false, false)?;
     if !validation_result.ok {
+        for row in session.rows.values_mut() {
+            row.status = RowStatus::Failed;
+            row.last_error = Some(format!(
+                "Atlas validation failed: {:?}",
+                validation_result.errors
+            ));
+        }
+        session.phase = HatchingPhase::Review;
         return Err(AppError::InvalidPetAsset {
             path: atlas_path,
             reason: format!("Atlas validation failed: {:?}", validation_result.errors),
         });
     }
 
-    // TODO: Package the pet using package_pet
-    // TODO: Import into library using the library module
-    // TODO: Activate if requested
+    let brief = session
+        .brief
+        .as_ref()
+        .ok_or_else(|| AppError::InvalidPetMetadata {
+            path: workspace.join("brief"),
+            reason: "pet brief is required before import".to_string(),
+        })?;
+    let package_dir = workspace.join("package");
+    if package_dir.exists() {
+        tokio::fs::remove_dir_all(&package_dir).await?;
+    }
+    run_pet_hatching_command(
+        app,
+        vec![
+            "--cmd".into(),
+            "package".into(),
+            "--pet-name".into(),
+            brief.pet_id.clone(),
+            "--display-name".into(),
+            brief.display_name.clone(),
+            "--description".into(),
+            brief.description.clone(),
+            "--spritesheet".into(),
+            atlas_path.display().to_string(),
+            "--output-dir".into(),
+            package_dir.display().to_string(),
+            "--force".into(),
+        ],
+    )
+    .await?;
 
-    // For now, return a placeholder pet_id
-    Ok(format!("hatched-{}", session_id))
+    let mut library = import_staged_pet(paths, &package_dir)?;
+    if activate {
+        library = crate::state::library::set_active_pet(paths, &brief.pet_id)?;
+    }
+    drop(library);
+
+    session.phase = HatchingPhase::Done {
+        pet_id: brief.pet_id.clone(),
+    };
+
+    Ok(brief.pet_id.clone())
 }
 
 /// Validate that all required rows are present and ready for atlas composition.
-#[allow(dead_code)]
 pub fn validate_rows_for_composition(session: &HatchingSession) -> AppResult<()> {
     let required_rows = vec![
         RowKey::Idle,
@@ -114,7 +148,7 @@ pub fn validate_rows_for_composition(session: &HatchingSession) -> AppResult<()>
             Some(row_state) => {
                 if row_state.status != RowStatus::Ready {
                     return Err(AppError::InvalidPetAsset {
-                        path: runtime_home_from_session(session),
+                        path: session.runtime_home.clone(),
                         reason: format!(
                             "Row {:?} is not ready (status: {:?})",
                             row_key, row_state.status
@@ -123,14 +157,14 @@ pub fn validate_rows_for_composition(session: &HatchingSession) -> AppResult<()>
                 }
                 if row_state.image.is_none() {
                     return Err(AppError::InvalidPetAsset {
-                        path: runtime_home_from_session(session),
+                        path: session.runtime_home.clone(),
                         reason: format!("Row {:?} has no image artifact", row_key),
                     });
                 }
             }
             None => {
                 return Err(AppError::InvalidPetAsset {
-                    path: runtime_home_from_session(session),
+                    path: session.runtime_home.clone(),
                     reason: format!("Row {:?} is missing from session", row_key),
                 });
             }
@@ -140,10 +174,22 @@ pub fn validate_rows_for_composition(session: &HatchingSession) -> AppResult<()>
     Ok(())
 }
 
-/// Helper to get runtime_home from session.
-#[allow(dead_code)]
-fn runtime_home_from_session(session: &HatchingSession) -> PathBuf {
-    session.runtime_home.clone()
+async fn run_pet_hatching_command(app: &AppHandle, args: Vec<String>) -> AppResult<()> {
+    let sidecar = app
+        .shell()
+        .sidecar("pet-hatching")
+        .map_err(|error| AppError::CommandFailed("pet-hatching".to_string(), error.to_string()))?;
+    let output =
+        sidecar.args(args).output().await.map_err(|error| {
+            AppError::CommandFailed("pet-hatching".to_string(), error.to_string())
+        })?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(AppError::CommandFailed(
+        "pet-hatching".to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    ))
 }
 
 #[cfg(test)]
@@ -151,6 +197,7 @@ mod tests {
     use super::*;
     use crate::hatching::session::{HatchingSession, RowState, RowStatus};
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
     #[test]
     fn test_validate_rows_for_composition_all_ready() {
@@ -213,7 +260,7 @@ mod tests {
                         source_path: PathBuf::from("/tmp/source.png"),
                         output_path: PathBuf::from("/tmp/output.png"),
                         source_provenance: SourceProvenance::BuiltInImagegen,
-                        source_sha256: "abc".to_string(),
+                        source_sha256: Some("abc".to_string()),
                         output_sha256: "def".to_string(),
                         metadata: ImageMetadata {
                             width: 192,
@@ -232,7 +279,7 @@ mod tests {
         }
 
         HatchingSession {
-            id: Uuid::new_v4(),
+            id: uuid::Uuid::new_v4(),
             runtime_home: PathBuf::from("/tmp/runtime"),
             workspace: PathBuf::from("/tmp/workspace"),
             codex_thread_id: None,

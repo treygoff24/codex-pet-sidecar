@@ -50,12 +50,17 @@ pub enum AppError {
     #[error("Codex authentication not found. Install Codex CLI and run `codex` to sign in with ChatGPT.")]
     CodexAuthNotFound,
     #[error("hatching runtime for session {0} is missing or corrupt")]
-    #[allow(dead_code)]
     HatchingRuntimeMissing(String),
     #[error("hatching session {0} was not found")]
     HatchingSessionNotFound(String),
-    #[error("command '{command}' is not yet implemented")]
-    NotImplemented { command: String },
+    #[error("reference image for session {0} was not found")]
+    ReferenceImageMissing(String),
+    #[error("row key `{0}` is not valid")]
+    InvalidRowKey(String),
+    #[error("prototype state for session {0} is missing")]
+    PrototypeMissing(String),
+    #[error("brief for hatching session {0} is missing")]
+    HatchingBriefMissing(String),
 }
 
 pub type AppResult<T> = Result<T, AppError>;

@@ -1,10 +1,3 @@
-/**
- * HatchingWizardApp - Main hatching wizard orchestrator.
- *
- * This component orchestrates all the hatching wizard steps and manages the overall flow.
- * It uses the shared HatchingWizard shell and integrates all step components.
- */
-
 import { useState, useCallback } from "react";
 import { HatchingWizard, type HatchingWizardStep } from "../HatchingWizard";
 import { HatchingChoiceGate } from "./HatchingChoiceGate";
@@ -14,15 +7,21 @@ import { HatchingPrototype } from "./HatchingPrototype";
 import { HatchingGenerationProgress } from "./HatchingGenerationProgress";
 import { HatchingAtlasReview } from "./HatchingAtlasReview";
 
+// TODO(phase-3): wire hatchingBridge calls into each step callback.
+// The wizard currently runs as a navigation-only shell — every action is
+// a placeholder. See src/hatchingBridge.ts for the typed contract that
+// these callbacks should consume (startHatchingRun, submitBrief,
+// generatePrototype, runRowGeneration, importHatchedPet, etc).
+
+const PHASE_3_IS_LOADING = false;
+const PHASE_3_IS_LIBRARY_FULL = false;
+
 export function HatchingWizardApp() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [isLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isLibraryFull] = useState(false); // TODO: Check library status from backend
 
   const handleOpenLibrary = useCallback(() => {
-    // TODO: Implement library opening logic
-    console.log("Open library to archive a pet");
+    // TODO(phase-3): open pet library window
   }, []);
 
   const handleNext = useCallback(() => {
@@ -36,8 +35,7 @@ export function HatchingWizardApp() {
   }, []);
 
   const handleCancel = useCallback(() => {
-    // TODO: Implement cancel logic - close window or show confirmation
-    console.log("Cancel hatching wizard");
+    // TODO(phase-3): cancel session via hatchingBridge.cancelHatchingSession
   }, []);
 
   const steps: HatchingWizardStep[] = [
@@ -48,12 +46,12 @@ export function HatchingWizardApp() {
       content: (
         <HatchingChoiceGate
           onStartNew={() => handleNext()}
-          onResumeSession={(sessionId) => {
-            console.log("Resume session:", sessionId);
+          onResumeSession={(_sessionId) => {
+            // TODO(phase-3): resume via hatchingBridge.resumeHatchingSession(sessionId)
             handleNext();
           }}
-          isLoading={isLoading}
-          isLibraryFull={isLibraryFull}
+          isLoading={PHASE_3_IS_LOADING}
+          isLibraryFull={PHASE_3_IS_LIBRARY_FULL}
           onOpenLibrary={handleOpenLibrary}
         />
       ),
@@ -68,14 +66,14 @@ export function HatchingWizardApp() {
       content: (
         <HatchingInspiration
           onSkip={() => {
-            console.log("Skip inspiration");
+            // TODO(phase-3): record archetype skip
             handleNext();
           }}
-          onSelectArchetype={(archetypeId) => {
-            console.log("Selected archetype:", archetypeId);
+          onSelectArchetype={(_archetypeId) => {
+            // TODO(phase-3): record archetype via hatchingBridge
             handleNext();
           }}
-          isLoading={isLoading}
+          isLoading={PHASE_3_IS_LOADING}
         />
       ),
       canProceed: false,
@@ -89,11 +87,11 @@ export function HatchingWizardApp() {
       phase: "brief",
       content: (
         <HatchingBrief
-          onSubmit={(brief) => {
-            console.log("Submit brief:", brief);
+          onSubmit={(_brief) => {
+            // TODO(phase-3): submitBrief; honor BriefSubmitOutcome.invalidatesIterations and requiresConfirmation
             handleNext();
           }}
-          isLoading={isLoading}
+          isLoading={PHASE_3_IS_LOADING}
         />
       ),
       canProceed: false,
@@ -107,14 +105,14 @@ export function HatchingWizardApp() {
       phase: "prototype",
       content: (
         <HatchingPrototype
-          onGeneratePrototype={(feedback) => {
-            console.log("Generate prototype with feedback:", feedback);
+          onGeneratePrototype={(_feedback) => {
+            // TODO(phase-3): generatePrototype with feedback
           }}
           onAcceptPrototype={() => {
-            console.log("Accept prototype");
+            // TODO(phase-3): acceptPrototype
             handleNext();
           }}
-          isLoading={isLoading}
+          isLoading={PHASE_3_IS_LOADING}
           error={error}
         />
       ),
@@ -145,14 +143,14 @@ export function HatchingWizardApp() {
       phase: "review",
       content: (
         <HatchingAtlasReview
-          onImport={(activate) => {
-            console.log("Import atlas, activate:", activate);
+          onImport={(_activate) => {
+            // TODO(phase-3): importHatchedPet({ activate })
             handleNext();
           }}
-          onRegenerateRow={(rowKey) => {
-            console.log("Regenerate row:", rowKey);
+          onRegenerateRow={(_rowKey) => {
+            // TODO(phase-3): regenerateRow(rowKey)
           }}
-          isLoading={isLoading}
+          isLoading={PHASE_3_IS_LOADING}
           error={error}
         />
       ),
@@ -168,7 +166,7 @@ export function HatchingWizardApp() {
       steps={steps}
       currentStepIndex={currentStepIndex}
       onStepChange={setCurrentStepIndex}
-      isLoading={isLoading}
+      isLoading={PHASE_3_IS_LOADING}
       error={error}
     />
   );

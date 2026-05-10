@@ -1,10 +1,3 @@
-/**
- * HatchingBrief - Step 3 of the hatching wizard.
- *
- * Collects pet brief information with validation.
- * Follows accessibility and UI/UX best practices from the design system.
- */
-
 import { useState } from "react";
 import type { PetBrief } from "../../domain/hatching";
 

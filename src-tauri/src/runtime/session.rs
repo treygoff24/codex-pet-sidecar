@@ -3,6 +3,7 @@ use crate::runtime::approvals::{
     approval_request, kind_for_method, response_for_action, ApprovalKind,
 };
 use crate::runtime::events::{ApprovalAction, RuntimeEvent, RuntimeSession};
+use crate::runtime::input::TurnInputItem;
 use crate::runtime::json_rpc::{JsonRpcClient, WireEvent};
 use crate::runtime::process::AppServerProcess;
 use crate::runtime::prompt::{compose_base_instructions, compose_developer_instructions};
@@ -53,6 +54,10 @@ struct RuntimeConnection {
     session: RuntimeSession,
     tracker: Arc<Mutex<TurnTracker>>,
     pending_approvals: Arc<Mutex<HashMap<String, ApprovalKind>>>,
+    // The forwarding task that pumps wire events into the user-facing event
+    // channel. We abort it on shutdown so the websocket-reset error produced
+    // by killing the codex child never reaches the frontend as a fresh error.
+    wire_task: tokio::task::JoinHandle<()>,
 }
 
 #[derive(Debug, Default)]
@@ -68,6 +73,27 @@ struct AmbientTurnState {
     cleanup_screenshot_after_turn: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct ThreadStartResponse {
+    thread: ThreadReference,
+    model: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ThreadReference {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TurnStartResponse {
+    turn: Option<TurnReference>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TurnReference {
+    id: String,
+}
+
 impl RuntimeSessionManager {
     pub async fn start_pet_session(
         &self,
@@ -77,7 +103,7 @@ impl RuntimeSessionManager {
         self.shutdown().await?;
         let process = AppServerProcess::spawn(&request.runtime_codex_home).await?;
         let websocket_url = process.websocket_url.clone();
-        let (wire_tx, mut wire_rx) = mpsc::unbounded_channel();
+        let (wire_tx, wire_rx) = mpsc::unbounded_channel();
         let client = JsonRpcClient::connect(&websocket_url, wire_tx).await?;
 
         client.call("initialize", json!({
@@ -85,52 +111,25 @@ impl RuntimeSessionManager {
             "capabilities": {"experimentalApi": true}
         })).await?;
         let thread = client
-            .call("thread/start", thread_start_params(&request)?)
+            .call_result::<ThreadStartResponse>("thread/start", thread_start_params(&request)?)
             .await?;
-        let thread_id = thread
-            .pointer("/thread/id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| AppError::JsonRpc {
-                method: "thread/start".into(),
-                message: "response missing /thread/id".into(),
-            })?
-            .to_string();
-        let effective_model = thread
-            .get("model")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown")
-            .to_string();
+        let thread_id = thread.thread.id;
+        let effective_model = thread.model.unwrap_or_else(|| "unknown".to_string());
         let session = RuntimeSession {
             thread_id,
             websocket_url,
             effective_model,
         };
 
-        let client_for_events = client.clone();
-        let event_tx_for_task = event_tx.clone();
         let pending_approvals = Arc::new(Mutex::new(HashMap::new()));
-        let pending_for_task = Arc::clone(&pending_approvals);
         let tracker = Arc::new(Mutex::new(TurnTracker::default()));
-        let tracker_for_task = Arc::clone(&tracker);
-        tokio::spawn(async move {
-            while let Some(event) = wire_rx.recv().await {
-                // Only track approvals we know how to act on. Unknown kinds
-                // are auto-declined inside map_wire_event and never reach the
-                // user, so registering them in pending_approvals would just
-                // leak entries that are never popped.
-                if let WireEvent::ServerRequest { id, ref method, .. } = event {
-                    let kind = kind_for_method(method);
-                    if kind != ApprovalKind::Unknown {
-                        pending_for_task.lock().await.insert(id.to_string(), kind);
-                    }
-                }
-                if let Some(runtime_event) =
-                    map_wire_event(event, &client_for_events, &tracker_for_task).await
-                {
-                    let _ = event_tx_for_task.send(runtime_event);
-                }
-            }
-        });
+        let wire_task = spawn_wire_event_forwarder(
+            client.clone(),
+            wire_rx,
+            event_tx.clone(),
+            Arc::clone(&pending_approvals),
+            Arc::clone(&tracker),
+        );
 
         *self.inner.lock().await = Some(RuntimeConnection {
             process,
@@ -138,6 +137,7 @@ impl RuntimeSessionManager {
             session: session.clone(),
             tracker,
             pending_approvals,
+            wire_task,
         });
         Ok(session)
     }
@@ -181,7 +181,7 @@ impl RuntimeSessionManager {
 
         let result = connection
             .client
-            .call(
+            .call_result::<TurnStartResponse>(
                 "turn/start",
                 json!({
                     "threadId": connection.session.thread_id,
@@ -189,8 +189,10 @@ impl RuntimeSessionManager {
                 }),
             )
             .await?;
-        if let Some(turn_id) = turn_id_from_response(&result) {
+        if let Some(turn_id) = turn_id_from_response(result) {
             connection.tracker.lock().await.active_user_turn_id = Some(turn_id);
+        } else {
+            eprintln!("warning: turn/start response had no turn.id; correlation may be lost");
         }
         Ok(())
     }
@@ -203,7 +205,7 @@ impl RuntimeSessionManager {
         }
         let result = connection
             .client
-            .call(
+            .call_result::<TurnStartResponse>(
                 "turn/start",
                 json!({
                     "threadId": connection.session.thread_id,
@@ -211,7 +213,7 @@ impl RuntimeSessionManager {
                 }),
             )
             .await?;
-        if let Some(turn_id) = turn_id_from_response(&result) {
+        if let Some(turn_id) = turn_id_from_response(result) {
             connection.tracker.lock().await.ambient_turns.insert(
                 turn_id,
                 AmbientTurnState {
@@ -222,6 +224,7 @@ impl RuntimeSessionManager {
             );
             return Ok(true);
         }
+        eprintln!("warning: turn/start response had no turn.id; correlation may be lost");
         Ok(false)
     }
 
@@ -269,6 +272,12 @@ impl RuntimeSessionManager {
 
     pub async fn shutdown(&self) -> AppResult<()> {
         if let Some(mut connection) = self.inner.lock().await.take() {
+            // Abort the wire-event forwarding task BEFORE killing the codex
+            // child. Otherwise the websocket-reset that follows the kill is
+            // mapped to a RuntimeEvent::Error and pushed to the live UI as a
+            // fresh "Connection reset" error, even though this teardown is
+            // intentional (pet switch, runtime restart, app shutdown).
+            connection.wire_task.abort();
             connection.process.shutdown().await?;
         }
         Ok(())
@@ -335,15 +344,15 @@ struct AmbientDecision {
     message: String,
 }
 
-fn user_input_items(input: &PetUserInput) -> Vec<Value> {
-    let mut items = vec![json!({"type":"text","text":input.text,"text_elements":[]})];
+fn user_input_items(input: &PetUserInput) -> Vec<TurnInputItem> {
+    let mut items = vec![TurnInputItem::text(input.text.as_str())];
     for path in &input.local_images {
-        items.push(json!({"type":"localImage","path":path}));
+        items.push(TurnInputItem::local_image(path));
     }
     items
 }
 
-fn ambient_input_items(input: &AmbientTurnInput) -> Vec<Value> {
+fn ambient_input_items(input: &AmbientTurnInput) -> Vec<TurnInputItem> {
     let pet_input = PetUserInput {
         text: input.prompt.clone(),
         local_images: input.screenshot_path.iter().cloned().collect(),
@@ -351,11 +360,8 @@ fn ambient_input_items(input: &AmbientTurnInput) -> Vec<Value> {
     user_input_items(&pet_input)
 }
 
-fn turn_id_from_response(response: &Value) -> Option<String> {
-    response
-        .pointer("/turn/id")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned)
+fn turn_id_from_response(response: TurnStartResponse) -> Option<String> {
+    response.turn.map(|turn| turn.id)
 }
 
 fn thread_start_params(request: &StartPetSessionRequest) -> AppResult<Value> {
@@ -458,6 +464,37 @@ async fn map_wire_event(
         }
         _ => None,
     }
+}
+
+/// Spawn the task that pumps wire events from the JSON-RPC client into the
+/// user-facing event channel. The returned `JoinHandle` is held on
+/// `RuntimeConnection` so `shutdown` can `abort()` it before killing the codex
+/// child — otherwise the websocket-reset that follows the kill would be mapped
+/// to a fresh `RuntimeEvent::Error` and surfaced to the UI.
+fn spawn_wire_event_forwarder(
+    client: JsonRpcClient,
+    mut wire_rx: mpsc::UnboundedReceiver<WireEvent>,
+    event_tx: mpsc::UnboundedSender<RuntimeEvent>,
+    pending_approvals: Arc<Mutex<HashMap<String, ApprovalKind>>>,
+    tracker: Arc<Mutex<TurnTracker>>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(event) = wire_rx.recv().await {
+            // Only track approvals we know how to act on. Unknown kinds are
+            // auto-declined inside map_wire_event and never reach the user, so
+            // registering them in pending_approvals would just leak entries
+            // that are never popped.
+            if let WireEvent::ServerRequest { id, ref method, .. } = event {
+                let kind = kind_for_method(method);
+                if kind != ApprovalKind::Unknown {
+                    pending_approvals.lock().await.insert(id.to_string(), kind);
+                }
+            }
+            if let Some(runtime_event) = map_wire_event(event, &client, &tracker).await {
+                let _ = event_tx.send(runtime_event);
+            }
+        }
+    })
 }
 
 async fn clear_tracker_on_error(tracker: &Arc<Mutex<TurnTracker>>) {
@@ -574,6 +611,7 @@ mod tests {
             local_images: vec![PathBuf::from("/tmp/screen.jpg")],
         };
         let items = user_input_items(&input);
+        let items = serde_json::to_value(items).expect("items serialize");
         assert_eq!(items[0]["type"], "text");
         assert_eq!(items[1]["type"], "localImage");
         assert_eq!(items[1]["path"], "/tmp/screen.jpg");
@@ -587,7 +625,8 @@ mod tests {
             cleanup_screenshot_after_turn: true,
         };
         let items = ambient_input_items(&input);
-        assert_eq!(items.len(), 2);
+        let items = serde_json::to_value(items).expect("items serialize");
+        assert_eq!(items.as_array().expect("items array").len(), 2);
         assert_eq!(items[0]["type"], "text");
         assert_eq!(items[0]["text"], "ambient snapshot");
         assert_eq!(items[1]["type"], "localImage");
@@ -705,6 +744,76 @@ mod tests {
         // Missing path and missing file are both no-ops.
         cleanup_screenshot_file(true, None);
         cleanup_screenshot_file(true, Some(dir.path().join("never-existed.jpg").as_path()));
+    }
+
+    /// Regression test for "WebSocket protocol error: Connection reset without
+    /// closing handshake" leaking to the live UI on every legitimate shutdown.
+    ///
+    /// Before the fix, the wire-event forwarding task kept running after
+    /// `shutdown` killed the codex child, so the websocket-reset that the
+    /// kill produced was mapped to a fresh `RuntimeEvent::Error` and pushed
+    /// to `event_tx`. With the fix, `shutdown` aborts the forwarder first,
+    /// so post-kill wire errors have nowhere to land.
+    #[tokio::test]
+    async fn aborting_wire_task_suppresses_reset_error_after_shutdown() {
+        use tokio::net::TcpListener;
+        use tokio_tungstenite::accept_async;
+
+        // Spin up a throwaway WS server so JsonRpcClient::connect can succeed.
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let url = format!("ws://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let _ws = accept_async(stream).await.expect("ws");
+            std::future::pending::<()>().await;
+        });
+
+        // Internal channel used by JsonRpcClient — we don't care about it here.
+        let (jsonrpc_wire_tx, _jsonrpc_wire_rx) = mpsc::unbounded_channel();
+        let client = crate::runtime::json_rpc::JsonRpcClient::connect(&url, jsonrpc_wire_tx)
+            .await
+            .expect("client connect");
+
+        // Independent channel that the forwarder reads from. Lets us inject
+        // synthetic wire events without going through the websocket reader.
+        let (wire_tx, wire_rx) = mpsc::unbounded_channel::<WireEvent>();
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel::<RuntimeEvent>();
+        let pending_approvals = Arc::new(Mutex::new(HashMap::new()));
+        let tracker = Arc::new(Mutex::new(TurnTracker::default()));
+
+        let wire_task =
+            spawn_wire_event_forwarder(client, wire_rx, event_tx, pending_approvals, tracker);
+
+        // Pre-abort: a wire error is forwarded to the user-facing channel.
+        wire_tx
+            .send(WireEvent::Error("simulated reset".into()))
+            .expect("send pre-abort");
+        let pre = tokio::time::timeout(tokio::time::Duration::from_secs(1), event_rx.recv())
+            .await
+            .expect("pre-abort event arrives")
+            .expect("pre-abort event present");
+        assert!(matches!(pre, RuntimeEvent::Error { ref message } if message == "simulated reset"));
+
+        // Abort, then attempt to push the same error the websocket reader
+        // emits when the codex child dies. After abort, that error must NOT
+        // reach the user-facing channel — either the receiver is dropped (so
+        // `send` returns SendError) or the event simply never arrives.
+        wire_task.abort();
+        let _ = wire_task.await;
+        let _ = wire_tx.send(WireEvent::Error(
+            "WebSocket protocol error: Connection reset without closing handshake".into(),
+        ));
+        // Acceptable post-abort outcomes: timeout (no event), or channel
+        // closed (None). What must NOT happen: a freshly delivered event.
+        let post =
+            tokio::time::timeout(tokio::time::Duration::from_millis(200), event_rx.recv()).await;
+        match post {
+            Err(_) => {}   // timeout
+            Ok(None) => {} // channel closed when forwarder dropped event_tx
+            Ok(Some(event)) => panic!(
+                "no runtime event should reach the UI after the forwarder is aborted, got {event:?}"
+            ),
+        }
     }
 
     #[test]

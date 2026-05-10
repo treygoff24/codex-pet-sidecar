@@ -1,4 +1,5 @@
 use crate::runtime::events::{ApprovalAction, ApprovalRequest, ApprovalRisk};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7,6 +8,12 @@ pub enum ApprovalKind {
     FileChange,
     Permissions,
     Unknown,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FileChangeApprovalParams {
+    grant_root: Option<String>,
 }
 
 pub fn approval_request(id: u64, method: &str, params: &Value) -> ApprovalRequest {
@@ -19,7 +26,7 @@ pub fn approval_request(id: u64, method: &str, params: &Value) -> ApprovalReques
     ApprovalRequest {
         request_id: id.to_string(),
         tool_name: tool_name.to_string(),
-        detail: approval_detail(params),
+        detail: approval_detail(method, params),
         risk: approval_risk(method),
         allow_for_session: matches!(
             kind_for_method(method),
@@ -68,7 +75,16 @@ fn file_decision(action: ApprovalAction) -> &'static str {
     command_decision(action)
 }
 
-fn approval_detail(params: &Value) -> String {
+fn approval_detail(method: &str, params: &Value) -> String {
+    if kind_for_method(method) == ApprovalKind::FileChange {
+        if let Ok(file_params) = serde_json::from_value::<FileChangeApprovalParams>(params.clone())
+        {
+            if let Some(grant_root) = file_params.grant_root.filter(|value| !value.is_empty()) {
+                return format!("Requesting write access under {grant_root}");
+            }
+        }
+    }
+
     for key in ["command", "cmd", "reason", "summary", "description"] {
         if let Some(value) = params.get(key).and_then(Value::as_str) {
             return value.to_string();

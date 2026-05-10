@@ -1,10 +1,3 @@
-/**
- * HatchingInspiration - Step 2 of the hatching wizard.
- *
- * Provides inspiration through archetype gallery and creative prompts.
- * Follows accessibility and UI/UX best practices from the design system.
- */
-
 import { useState } from "react";
 
 interface Archetype {

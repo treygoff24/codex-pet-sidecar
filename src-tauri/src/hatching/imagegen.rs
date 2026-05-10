@@ -1,14 +1,16 @@
 use crate::error::{AppError, AppResult};
+use crate::hatching::provenance::validate_image_artifact;
 use crate::hatching::session::{ImageArtifact, ImageMetadata, SourceProvenance};
 use image::GenericImageView;
 use image::ImageReader;
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 
-/// Imagegen artifact ingester using file watching (Branch B).
+/// Imagegen artifact ingester using file watching.
 ///
 /// Watches `<runtime_home>/generated_images/` for new `ig_*.png` files,
 /// validates provenance, hashes, and copies to workspace.
@@ -49,10 +51,12 @@ impl ImagegenIngester {
 
         let watch_dir = generated_images_dir.clone();
         let workspace_dir = self.workspace_dir.clone();
+        let runtime_home = self.runtime_home.clone();
 
-        // Spawn watcher in background
         tokio::spawn(async move {
-            if let Err(e) = Self::watch_directory(watch_dir, workspace_dir, event_tx).await {
+            if let Err(e) =
+                Self::watch_directory(watch_dir, runtime_home, workspace_dir, event_tx).await
+            {
                 eprintln!("imagegen watcher error: {}", e);
             }
         });
@@ -63,12 +67,12 @@ impl ImagegenIngester {
     /// Watch directory for new imagegen files.
     async fn watch_directory(
         watch_dir: PathBuf,
+        runtime_home: PathBuf,
         workspace_dir: PathBuf,
         public_event_tx: mpsc::UnboundedSender<ImagegenEvent>,
     ) -> AppResult<()> {
         use notify::{EventKind, RecursiveMode, Watcher};
 
-        // Internal channel for watcher events
         let (internal_tx, mut internal_rx) = mpsc::unbounded_channel::<PathBuf>();
 
         let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
@@ -92,21 +96,22 @@ impl ImagegenIngester {
                 reason: format!("failed to watch directory: {}", e),
             })?;
 
-        // Process events with debounce
         let mut pending_files: std::collections::HashMap<PathBuf, tokio::time::Instant> =
             std::collections::HashMap::new();
+        let mut processed_files = HashSet::<PathBuf>::new();
 
         loop {
             tokio::select! {
                 event = internal_rx.recv() => {
                     if let Some(path) = event {
-                        if Self::is_imagegen_file(&path) {
+                        if Self::is_imagegen_file(&path)
+                            && !processed_files.contains(&path)
+                        {
                             pending_files.insert(path.clone(), tokio::time::Instant::now());
                         }
                     }
                 }
                 _ = sleep(Duration::from_millis(100)) => {
-                    // Check for files that have been stable for 500ms
                     let now = tokio::time::Instant::now();
                     let mut to_process = Vec::new();
                     pending_files.retain(|path, timestamp| {
@@ -119,7 +124,10 @@ impl ImagegenIngester {
                     });
 
                     for path in to_process {
-                        match Self::ingest_single_file(&path, &workspace_dir) {
+                        if !processed_files.insert(path.clone()) {
+                            continue;
+                        }
+                        match Self::ingest_single_file(&path, &runtime_home, &workspace_dir) {
                             Ok(artifact) => {
                                 let _ = public_event_tx.send(ImagegenEvent::ArtifactIngested(artifact));
                             }
@@ -143,35 +151,21 @@ impl ImagegenIngester {
     }
 
     /// Validate and ingest a single imagegen file.
-    fn ingest_single_file(source_path: &Path, workspace_dir: &Path) -> AppResult<ImageArtifact> {
-        // Validate file is under generated_images (provenance check)
-        let parent = source_path
-            .parent()
-            .ok_or_else(|| AppError::InvalidPetAsset {
-                path: source_path.to_path_buf(),
-                reason: "file has no parent directory".to_string(),
-            })?;
-
-        if parent.file_name().and_then(|n| n.to_str()) != Some("generated_images") {
+    pub fn ingest_single_file(
+        source_path: &Path,
+        runtime_home: &Path,
+        workspace_dir: &Path,
+    ) -> AppResult<ImageArtifact> {
+        if !Self::is_imagegen_file(source_path) {
             return Err(AppError::InvalidPetAsset {
                 path: source_path.to_path_buf(),
-                reason: "file must be under generated_images directory".to_string(),
+                reason: "file name must match ig_*.png".to_string(),
             });
         }
 
-        // Validate file is not inside workspace (provenance violation)
-        if source_path.starts_with(workspace_dir) {
-            return Err(AppError::InvalidPetAsset {
-                path: source_path.to_path_buf(),
-                reason: "file cannot be inside workspace directory".to_string(),
-            });
-        }
-
-        // Read and hash the file
         let file_bytes = std::fs::read(source_path)?;
-        let source_sha256 = format!("{:x}", Sha256::digest(&file_bytes));
+        let source_sha256 = Some(format!("{:x}", Sha256::digest(&file_bytes)));
 
-        // Decode image to get metadata
         let image =
             ImageReader::open(source_path)?
                 .decode()
@@ -181,7 +175,6 @@ impl ImagegenIngester {
                 })?;
         let dimensions = image.dimensions();
 
-        // Create output path in workspace
         let file_name = source_path
             .file_name()
             .and_then(|n| n.to_str())
@@ -193,14 +186,12 @@ impl ImagegenIngester {
         std::fs::create_dir_all(&output_dir)?;
         let output_path = output_dir.join(file_name);
 
-        // Copy file
-        std::fs::copy(source_path, &output_path)?;
+        std::fs::write(&output_path, &file_bytes)?;
+        let output_sha256 = source_sha256
+            .clone()
+            .expect("source_sha256 is always Some here");
 
-        // Hash output file
-        let output_bytes = std::fs::read(&output_path)?;
-        let output_sha256 = format!("{:x}", Sha256::digest(&output_bytes));
-
-        Ok(ImageArtifact {
+        let artifact = ImageArtifact {
             source_path: source_path.to_path_buf(),
             output_path,
             source_provenance: SourceProvenance::BuiltInImagegen,
@@ -212,8 +203,93 @@ impl ImagegenIngester {
                 mode: "RGBA".to_string(),
                 format: "PNG".to_string(),
             },
-        })
+        };
+        validate_image_artifact(&artifact, runtime_home, workspace_dir)?;
+        Ok(artifact)
     }
+}
+
+pub async fn ingest_next_imagegen_artifact(
+    runtime_home: &Path,
+    workspace_dir: &Path,
+    timeout_ms: u64,
+) -> AppResult<ImageArtifact> {
+    // Baseline existing files so we don't reingest a previous row's artifact.
+    let baseline: HashSet<PathBuf> = collect_all_imagegen_files(runtime_home)?;
+
+    let started = tokio::time::Instant::now();
+    let timeout = tokio::time::Duration::from_millis(timeout_ms);
+    loop {
+        if let Some(path) = newest_imagegen_file_excluding(runtime_home, &baseline)? {
+            return ImagegenIngester::ingest_single_file(&path, runtime_home, workspace_dir);
+        }
+        if started.elapsed() >= timeout {
+            return Err(AppError::CommandFailed(
+                "ingest imagegen artifact".to_string(),
+                "timed out waiting for ig_*.png under generated_images".to_string(),
+            ));
+        }
+        sleep(Duration::from_millis(250)).await;
+    }
+}
+
+/// Collect all currently-present imagegen file paths under `generated_images/`.
+fn collect_all_imagegen_files(runtime_home: &Path) -> AppResult<HashSet<PathBuf>> {
+    let generated_images = runtime_home.join("generated_images");
+    if !generated_images.exists() {
+        return Ok(HashSet::new());
+    }
+    let mut result = HashSet::new();
+    let mut stack = vec![generated_images];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let metadata = entry.metadata()?;
+            if metadata.is_dir() {
+                stack.push(path);
+            } else if ImagegenIngester::is_imagegen_file(&path) {
+                result.insert(path);
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Newest imagegen file under `runtime_home/generated_images/`, skipping
+/// paths in `exclude` so we don't re-ingest a previous row's artifact.
+fn newest_imagegen_file_excluding(
+    runtime_home: &Path,
+    exclude: &HashSet<PathBuf>,
+) -> AppResult<Option<PathBuf>> {
+    let generated_images = runtime_home.join("generated_images");
+    if !generated_images.exists() {
+        return Ok(None);
+    }
+
+    let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
+    let mut stack = vec![generated_images];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let metadata = entry.metadata()?;
+            if metadata.is_dir() {
+                stack.push(path);
+            } else if ImagegenIngester::is_imagegen_file(&path) && !exclude.contains(&path) {
+                let modified = metadata
+                    .modified()
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+                if newest
+                    .as_ref()
+                    .is_none_or(|(previous, _)| modified > *previous)
+                {
+                    newest = Some((modified, path));
+                }
+            }
+        }
+    }
+    Ok(newest.map(|(_, path)| path))
 }
 
 #[cfg(test)]
@@ -244,13 +320,14 @@ mod tests {
     #[test]
     fn ingest_single_file_rejects_workspace_source() {
         let root = tempdir().expect("tempdir");
+        let runtime_home = root.path().join("runtime_home");
         let workspace = root.path().join("workspace");
         std::fs::create_dir_all(&workspace).expect("create workspace");
 
         let source_path = workspace.join("ig_001.png");
         std::fs::write(&source_path, b"fake png").expect("write");
 
-        let result = ImagegenIngester::ingest_single_file(&source_path, &workspace);
+        let result = ImagegenIngester::ingest_single_file(&source_path, &runtime_home, &workspace);
         assert!(matches!(result, Err(AppError::InvalidPetAsset { .. })));
     }
 
@@ -264,13 +341,12 @@ mod tests {
         let workspace = root.path().join("workspace");
         std::fs::create_dir_all(&workspace).expect("create workspace");
 
-        // Create a valid PNG
         let source_path = generated_images.join("ig_001.png");
         let image: ImageBuffer<Rgba<u8>, Vec<u8>> =
             ImageBuffer::from_pixel(64, 64, Rgba([255, 255, 255, 255]));
         image.save(&source_path).expect("save png");
 
-        let result = ImagegenIngester::ingest_single_file(&source_path, &workspace);
+        let result = ImagegenIngester::ingest_single_file(&source_path, &runtime_home, &workspace);
         assert!(result.is_ok());
 
         let artifact = result.unwrap();

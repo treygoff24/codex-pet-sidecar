@@ -5,6 +5,8 @@
  * and are used for type-safe communication between the frontend and backend.
  */
 
+import type { PetAnimationState } from "./petAnimation";
+
 /**
  * Hatching session — owned by Rust backend, mutable across wizard steps.
  */
@@ -98,16 +100,7 @@ export interface PrototypeIteration {
 /**
  * Animation row keys for the pet spritesheet.
  */
-export type RowKey =
-  | "idle"
-  | "running-right"
-  | "running-left"
-  | "waving"
-  | "jumping"
-  | "failed"
-  | "waiting"
-  | "running"
-  | "review";
+export type RowKey = PetAnimationState;
 
 /**
  * State of a single animation row.
@@ -182,6 +175,45 @@ export interface OrphanSummary {
   phase: HatchingPhase;
   createdAt: string; // ISO 8601 timestamp
 }
+
+export interface BriefSubmitOutcome {
+  invalidatesIterations: boolean;
+  requiresConfirmation: boolean;
+}
+
+export type HatchingAtlasReviewRow = {
+  key: RowKey;
+  label: string;
+  description: string;
+};
+
+export const HATCHING_ROW_LABELS = {
+  idle: { label: "Idle", description: "Standing still" },
+  "running-right": { label: "Running Right", description: "Moving right" },
+  "running-left": { label: "Running Left", description: "Moving left (mirrored)" },
+  waving: { label: "Waving", description: "Greeting animation" },
+  jumping: { label: "Jumping", description: "Jumping animation" },
+  failed: { label: "Failed", description: "Error state" },
+  waiting: { label: "Waiting", description: "Waiting state" },
+  running: { label: "Running", description: "General running" },
+  review: { label: "Review", description: "Review state" },
+} as const satisfies Record<RowKey, Omit<HatchingAtlasReviewRow, "key">>;
+
+export const HATCHING_ATLAS_REVIEW_ROW_KEYS = [
+  "idle",
+  "running-right",
+  "running-left",
+  "waving",
+  "jumping",
+  "failed",
+  "waiting",
+  "running",
+] as const satisfies readonly RowKey[];
+
+export const HATCHING_ATLAS_REVIEW_ROWS = HATCHING_ATLAS_REVIEW_ROW_KEYS.map((key) => ({
+  key,
+  ...HATCHING_ROW_LABELS[key],
+})) satisfies readonly HatchingAtlasReviewRow[];
 
 /**
  * Helper to check if a phase is a specific type.

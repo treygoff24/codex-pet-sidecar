@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+pub use crate::command_result::{CommandError, CommandResult};
 use crate::error::AppError;
 use crate::hatching::commands as hatching_commands;
 use crate::memory::ensure_memory_file;
@@ -24,30 +25,12 @@ use tauri::{AppHandle, Manager, State};
 use time::OffsetDateTime;
 use tokio::time::{sleep, Duration};
 
-// Re-export hatching commands for Tauri invoke registration
 pub use hatching_commands::{
-    accept_prototype, cancel_hatching_run, describe_reference_image, generate_prototype,
-    get_hatching_state, import_hatched_pet, list_orphan_hatching_sessions, regenerate_row,
-    revert_to_iteration, start_hatching_run, submit_brief, upload_reference_image,
+    accept_prototype, cancel_hatching_run, confirm_brief_change, describe_reference_image,
+    generate_prototype, get_hatching_state, import_hatched_pet, list_orphan_hatching_sessions,
+    preview_pet_id, regenerate_row, resume_hatching_run, revert_to_iteration, start_hatching_run,
+    submit_brief, upload_reference_image,
 };
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandError {
-    pub message: String,
-    pub recoverable: bool,
-}
-
-impl From<AppError> for CommandError {
-    fn from(error: AppError) -> Self {
-        Self {
-            message: error.to_string(),
-            recoverable: true,
-        }
-    }
-}
-
-pub type CommandResult<T> = Result<T, CommandError>;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -118,12 +101,10 @@ pub async fn start_pet_runtime(
         .map_err(CommandError::from)?
         .ok_or_else(|| CommandError {
             message: "Pick a pet before starting the runtime.".into(),
-            recoverable: true,
         })?;
     if tuck_is_active(&config) {
         return Err(CommandError {
             message: "Pet is tucked. Wake the pet before starting runtime.".into(),
-            recoverable: true,
         });
     }
     let memory_path = state.paths.pet_memory_path(&config.pet_id);
@@ -192,7 +173,6 @@ pub async fn tuck_pet(
         .map_err(CommandError::from)?
         .ok_or_else(|| CommandError {
             message: "No active pet to tuck.".into(),
-            recoverable: true,
         })?;
     config.tuck.tucked = true;
     config.tuck.tucked_until = until;
@@ -210,7 +190,6 @@ pub async fn wake_pet(
         .map_err(CommandError::from)?
         .ok_or_else(|| CommandError {
             message: "No active pet to wake.".into(),
-            recoverable: true,
         })?;
     config.tuck.tucked = false;
     config.tuck.tucked_until = None;
@@ -244,7 +223,6 @@ pub async fn respond_to_approval(
         _ => {
             return Err(CommandError {
                 message: format!("unknown approval action {action}"),
-                recoverable: true,
             })
         }
     };
@@ -519,13 +497,6 @@ mod tests {
         );
         config.tuck = tuck;
         config
-    }
-
-    #[test]
-    fn command_error_is_recoverable() {
-        let error: CommandError = AppError::RuntimeNotStarted.into();
-        assert!(error.recoverable);
-        assert!(error.message.contains("runtime"));
     }
 
     #[test]

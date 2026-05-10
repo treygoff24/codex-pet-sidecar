@@ -1,15 +1,9 @@
 import { useState } from "react";
-
-/**
- * HatchingAtlasReview - Step 5 of the hatching wizard.
- *
- * Allows users to review the generated atlas before importing.
- * Follows accessibility and UI/UX best practices from the design system.
- */
+import { HATCHING_ATLAS_REVIEW_ROWS, type RowKey } from "../../domain/hatching";
 
 interface HatchingAtlasReviewProps {
   onImport: (activate: boolean) => void;
-  onRegenerateRow: (rowKey: string) => void;
+  onRegenerateRow: (rowKey: RowKey) => void;
   isLoading?: boolean;
   error?: string | null;
 }
@@ -20,7 +14,7 @@ export function HatchingAtlasReview({
   isLoading = false,
   error = null,
 }: HatchingAtlasReviewProps) {
-  const [selectedRow, setSelectedRow] = useState<string | null>(null);
+  const [selectedRow, setSelectedRow] = useState<RowKey | null>(null);
 
   const handleImportAndActivate = () => {
     onImport(true);
@@ -30,21 +24,10 @@ export function HatchingAtlasReview({
     onImport(false);
   };
 
-  const handleRegenerateRow = (rowKey: string) => {
+  const handleRegenerateRow = (rowKey: RowKey) => {
     setSelectedRow(rowKey);
     onRegenerateRow(rowKey);
   };
-
-  const rowNames = [
-    { key: "idle", label: "Idle", description: "Standing still" },
-    { key: "running-right", label: "Running Right", description: "Moving right" },
-    { key: "running-left", label: "Running Left", description: "Moving left (mirrored)" },
-    { key: "waving", label: "Waving", description: "Greeting animation" },
-    { key: "jumping", label: "Jumping", description: "Jumping animation" },
-    { key: "failed", label: "Failed", description: "Error state" },
-    { key: "waiting", label: "Waiting", description: "Waiting state" },
-    { key: "running", label: "Running", description: "General running" },
-  ];
 
   return (
     <div className="hatching-atlas-review">
@@ -72,7 +55,7 @@ export function HatchingAtlasReview({
       <div className="hatching-atlas-review__rows">
         <h4 className="hatching-atlas-review__rows-title">Animation Rows</h4>
         <div className="hatching-atlas-review__rows-grid">
-          {rowNames.map((row) => (
+          {HATCHING_ATLAS_REVIEW_ROWS.map((row) => (
             <button
               key={row.key}
               type="button"

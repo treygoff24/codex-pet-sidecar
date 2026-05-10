@@ -7,8 +7,6 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-// Data contracts from spec
-
 /// Hatching session — owned by Rust backend, mutable across wizard steps.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -116,7 +114,6 @@ pub enum RowKey {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case")]
-#[allow(dead_code)]
 pub enum GeneratedRowKey {
     Idle,
     RunningRight,
@@ -155,7 +152,7 @@ pub struct ImageArtifact {
     pub source_path: PathBuf,
     pub output_path: PathBuf,
     pub source_provenance: SourceProvenance,
-    pub source_sha256: String,
+    pub source_sha256: Option<String>,
     pub output_sha256: String,
     pub metadata: ImageMetadata,
 }
@@ -205,7 +202,20 @@ pub struct OrphanSummary {
     pub created_at: time::OffsetDateTime,
 }
 
-// HatchingSessionRegistry
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BriefSubmitOutcome {
+    pub invalidates_iterations: bool,
+    pub requires_confirmation: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PetIdPreview {
+    pub pet_id: String,
+    pub available: bool,
+    pub suggestion: Option<String>,
+}
 
 #[allow(dead_code)]
 pub struct HatchingSessionRegistry {
@@ -265,7 +275,14 @@ impl HatchingSessionRegistry {
             .paths
             .hatching_workspace_dir(&session.id.to_string())
             .join("session.json");
-        tokio::fs::create_dir_all(session_path.parent().unwrap()).await?;
+        tokio::fs::create_dir_all(session_path.parent().ok_or_else(|| AppError::IoWithPath {
+            path: session_path.clone(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "session path has no parent",
+            ),
+        })?)
+        .await?;
         tokio::fs::write(&session_path, serde_json::to_string_pretty(session)?).await?;
         Ok(())
     }
@@ -426,7 +443,6 @@ mod tests {
             pet_id: "done-pet".to_string(),
         };
 
-        // Manually write sessions to disk
         let session1_path = paths
             .hatching_workspace_dir(&id1.to_string())
             .join("session.json");
@@ -459,7 +475,6 @@ mod tests {
         std::fs::create_dir_all(session_path.parent().unwrap()).unwrap();
         std::fs::write(&session_path, "invalid json").unwrap();
 
-        // Should not panic, just log warning
         let recovered = registry.recover_from_disk().await.unwrap();
         assert_eq!(recovered.len(), 0);
     }
@@ -479,7 +494,6 @@ mod tests {
         registry.insert(session1.clone()).await.unwrap();
         registry.insert(session2.clone()).await.unwrap();
 
-        // Concurrent mutations to different sessions
         let registry1 = registry.clone();
         let registry2 = registry.clone();
 

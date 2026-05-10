@@ -4,11 +4,10 @@
 //! - `derive_running_left_from_running_right.py` → `mirror_horizontally`
 //! - `compose_atlas.py` → `compose_atlas`
 //! - `validate_atlas.py` → `validate_atlas`
-//! - `package_custom_pet.py` → `package_pet`
+//! - packaging is delegated to the Python/PyInstaller sidecar
 
 use crate::error::{AppError, AppResult};
 use crate::hatching::session::{ImageArtifact, ImageMetadata, MirrorDecision};
-use image::codecs::webp::WebPEncoder;
 use image::{GenericImageView, RgbaImage};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -71,15 +70,10 @@ pub fn image_metadata(path: &Path) -> AppResult<ImageMetadata> {
 
 /// Mirror an image horizontally.
 ///
-/// Port of `derive_running_left_from_running_right.py`.
 pub fn mirror_horizontally(source_path: &Path, output_path: &Path) -> AppResult<()> {
     let img = image::open(source_path)?;
     let rgba = img.to_rgba8();
-
-    // Mirror horizontally by reversing each row
     let mirrored = image::imageops::flip_horizontal(&rgba);
-
-    // Ensure parent directory exists
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -89,14 +83,11 @@ pub fn mirror_horizontally(source_path: &Path, output_path: &Path) -> AppResult<
 }
 
 /// Derive running-left from running-right with provenance tracking.
-///
-/// This is the full implementation of the Python script with proper provenance tracking.
 pub fn derive_running_left(
     source_path: &Path,
     output_path: &Path,
     decision_note: &str,
 ) -> AppResult<(ImageArtifact, MirrorDecision)> {
-    // Validate source exists
     if !source_path.exists() {
         return Err(AppError::IoWithPath {
             path: source_path.to_path_buf(),
@@ -104,7 +95,6 @@ pub fn derive_running_left(
         });
     }
 
-    // Check if output already exists (caller should handle force logic)
     if output_path.exists() {
         return Err(AppError::IoWithPath {
             path: output_path.to_path_buf(),
@@ -112,24 +102,15 @@ pub fn derive_running_left(
         });
     }
 
-    // Perform the mirror operation
     mirror_horizontally(source_path, output_path)?;
-
-    // Compute hashes
-    let source_sha256 = file_sha256(source_path)?;
+    let source_sha256 = Some(file_sha256(source_path)?);
     let output_sha256 = file_sha256(output_path)?;
-
-    // Get metadata
     let metadata = image_metadata(output_path)?;
-
-    // Create mirror decision
     let mirror_decision = MirrorDecision {
         approved: true,
         reason: decision_note.to_string(),
         decided_at: OffsetDateTime::now_utc(),
     };
-
-    // Create image artifact
     let artifact = ImageArtifact {
         source_path: source_path.to_path_buf(),
         output_path: output_path.to_path_buf(),
@@ -174,7 +155,6 @@ fn alpha_nonzero_count(img: &RgbaImage) -> u32 {
 
 /// Validate an atlas against the Codex pet specification.
 ///
-/// Port of `validate_atlas.py`.
 pub fn validate_atlas(
     atlas_path: &Path,
     min_used_pixels: u32,
@@ -186,8 +166,6 @@ pub fn validate_atlas(
     let mut warnings = Vec::new();
     let mut cells = Vec::new();
     let mut near_opaque_used_cells: HashMap<String, Vec<u32>> = HashMap::new();
-
-    // Load the atlas
     let img = image::open(atlas_path)?;
     let rgba = img.to_rgba8();
     let source_format = atlas_path
@@ -195,8 +173,6 @@ pub fn validate_atlas(
         .and_then(|ext| ext.to_str())
         .unwrap_or("unknown")
         .to_uppercase();
-
-    // Check dimensions
     if rgba.width() != ATLAS_WIDTH || rgba.height() != ATLAS_HEIGHT {
         errors.push(format!(
             "expected {}x{}, got {}x{}",
@@ -218,15 +194,10 @@ pub fn validate_atlas(
             cells: vec![],
         });
     }
-
-    // Check format
     if source_format != "PNG" && source_format != "WEBP" {
         errors.push(format!("expected PNG or WebP, got {}", source_format));
     }
-
-    // Check alpha channel
     if !allow_opaque {
-        // RGBA images always have alpha, but we can check if it's fully opaque
         let alpha_count = alpha_nonzero_count(&rgba);
         if alpha_count == ATLAS_WIDTH * ATLAS_HEIGHT {
             warnings.push(
@@ -235,8 +206,6 @@ pub fn validate_atlas(
             );
         }
     }
-
-    // Validate each cell
     for (state, row_index, frame_count) in ROW_SPECS {
         for column_index in 0..COLUMNS {
             let left = column_index * CELL_WIDTH;
@@ -253,24 +222,18 @@ pub fn validate_atlas(
                 used,
                 nontransparent_pixels: nontransparent,
             });
-
-            // Check used cells have enough content
             if used && nontransparent < min_used_pixels {
                 errors.push(format!(
                     "{} row {} column {} is empty or too sparse ({} pixels)",
                     state, row_index, column_index, nontransparent
                 ));
             }
-
-            // Check for near-opaque used cells (potential background issue)
             if used && nontransparent > (CELL_WIDTH * CELL_HEIGHT) * near_opaque_threshold as u32 {
                 near_opaque_used_cells
                     .entry(format!("{} row {}", state, row_index))
                     .or_default()
                     .push(column_index);
             }
-
-            // Check unused cells are transparent
             if !used && nontransparent != 0 {
                 errors.push(format!(
                     "{} row {} unused column {} is not transparent ({} pixels)",
@@ -279,8 +242,6 @@ pub fn validate_atlas(
             }
         }
     }
-
-    // Process near-opaque warnings/errors
     for (row_label, columns) in near_opaque_used_cells {
         let message = format!(
             "{} has {} nearly opaque used cells; this usually means the sprite has a non-transparent background",
@@ -308,14 +269,11 @@ pub fn validate_atlas(
 }
 
 /// Compose atlas from individual row strips.
-///
-/// Port of `compose_atlas.py` frames-root mode.
 #[allow(dead_code)]
 pub fn compose_atlas_from_frames(frames_root: &Path) -> AppResult<RgbaImage> {
     let mut atlas = RgbaImage::new(ATLAS_WIDTH, ATLAS_HEIGHT);
 
     for (state, row_index, frame_count) in ROW_SPECS {
-        // Try to find frame files in various locations
         let frame_paths = find_row_frames(frames_root, state, row_index);
 
         if frame_paths.len() < frame_count as usize {
@@ -349,8 +307,6 @@ pub fn compose_atlas_from_frames(frames_root: &Path) -> AppResult<RgbaImage> {
 #[allow(dead_code)]
 fn find_row_frames(root: &Path, state: &str, row_index: u32) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
-
-    // Try directory-based layouts
     let dir_candidates = vec![
         root.join(state),
         root.join(format!("row-{}", row_index)),
@@ -374,8 +330,6 @@ fn find_row_frames(root: &Path, state: &str, row_index: u32) -> Vec<PathBuf> {
             }
         }
     }
-
-    // Try glob patterns
     let patterns = vec![
         format!("{}_*", state),
         format!("{}-*", state),
@@ -416,8 +370,6 @@ fn paste_centered(
     column: u32,
 ) -> AppResult<()> {
     let mut frame = frame.clone();
-
-    // Resize if necessary
     if frame.width() != CELL_WIDTH || frame.height() != CELL_HEIGHT {
         frame = image::imageops::resize(
             &frame,
@@ -429,8 +381,6 @@ fn paste_centered(
 
     let left = column * CELL_WIDTH;
     let top = row * CELL_HEIGHT;
-
-    // Alpha composite the frame onto the atlas
     for y in 0..CELL_HEIGHT {
         for x in 0..CELL_WIDTH {
             let atlas_x = left + x;
@@ -447,48 +397,32 @@ fn paste_centered(
     Ok(())
 }
 
-/// Save atlas as PNG and optionally WebP.
+/// Save atlas as PNG.
 #[allow(dead_code)]
 pub fn save_atlas_outputs(
     atlas: &RgbaImage,
     output_path: &Path,
-    webp_output_path: Option<&Path>,
+    _webp_output_path: Option<&Path>,
 ) -> AppResult<()> {
-    // Ensure parent directory exists
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-
-    // Save as PNG
     atlas.save(output_path)?;
-
-    // Save as WebP if requested
-    if let Some(webp_path) = webp_output_path {
-        if let Some(parent) = webp_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        let webp_file = std::fs::File::create(webp_path)?;
-        let encoder = WebPEncoder::new_lossless(webp_file);
-        atlas.write_with_encoder(encoder)?;
-    }
 
     Ok(())
 }
 
 /// Package a validated atlas as a pet.
 ///
-/// Port of `package_custom_pet.py`.
 #[allow(dead_code)]
 pub fn package_pet(
-    pet_id: &str,
-    display_name: &str,
-    description: &str,
+    _pet_id: &str,
+    _display_name: &str,
+    _description: &str,
     spritesheet_path: &Path,
     output_dir: &Path,
     force: bool,
 ) -> AppResult<PathBuf> {
-    // Validate spritesheet
     let img = image::open(spritesheet_path)?;
     if img.width() != ATLAS_WIDTH || img.height() != ATLAS_HEIGHT {
         return Err(AppError::InvalidPetMetadata {
@@ -516,13 +450,11 @@ pub fn package_pet(
         });
     }
 
-    // Create output directory
     std::fs::create_dir_all(output_dir)?;
 
     let target_sheet = output_dir.join("spritesheet.webp");
     let manifest_path = output_dir.join("pet.json");
 
-    // Check if files already exist
     if !force && (target_sheet.exists() || manifest_path.exists()) {
         return Err(AppError::IoWithPath {
             path: output_dir.to_path_buf(),
@@ -533,38 +465,10 @@ pub fn package_pet(
         });
     }
 
-    // Convert to WebP if necessary
-    let rgba = img.to_rgba8();
-    let webp_file = std::fs::File::create(&target_sheet)?;
-    let encoder = WebPEncoder::new_lossless(webp_file);
-    rgba.write_with_encoder(encoder)?;
-
-    // Write manifest
-    #[derive(serde::Serialize)]
-    struct PetManifest {
-        id: String,
-        display_name: String,
-        description: String,
-        spritesheet_path: String,
-    }
-
-    let manifest = PetManifest {
-        id: pet_id.to_string(),
-        display_name: display_name.to_string(),
-        description: description.to_string(),
-        spritesheet_path: target_sheet
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .to_string(),
-    };
-
-    std::fs::write(
-        &manifest_path,
-        serde_json::to_string_pretty(&manifest)? + "\n",
-    )?;
-
-    Ok(output_dir.to_path_buf())
+    Err(AppError::CommandFailed(
+        "package_pet".to_string(),
+        "Rust packaging no longer writes WebP; use the pet-hatching sidecar".to_string(),
+    ))
 }
 
 #[cfg(test)]
@@ -588,7 +492,6 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let test_file = temp_dir.path().join("test.png");
 
-        // Create a simple test image
         let img = RgbaImage::new(10, 10);
         img.save(&test_file).unwrap();
 
@@ -602,7 +505,6 @@ mod tests {
         let source = temp_dir.path().join("source.png");
         let output = temp_dir.path().join("output.png");
 
-        // Create a test image with a pattern
         let mut img = RgbaImage::new(10, 10);
         for x in 0..5 {
             img.put_pixel(x, 0, Rgba([255, 0, 0, 255]));
@@ -612,7 +514,6 @@ mod tests {
         mirror_horizontally(&source, &output).unwrap();
         assert!(output.exists());
 
-        // Verify the image was mirrored
         let mirrored = image::open(&output).unwrap();
         assert_eq!(mirrored.width(), 10);
         assert_eq!(mirrored.height(), 10);
@@ -624,7 +525,6 @@ mod tests {
         let source = temp_dir.path().join("running-right.png");
         let output = temp_dir.path().join("running-left.png");
 
-        // Create a test image
         let img = RgbaImage::new(192, 208);
         img.save(&source).unwrap();
 
@@ -645,7 +545,6 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let atlas_path = temp_dir.path().join("atlas.png");
 
-        // Create an atlas with wrong dimensions
         let img = RgbaImage::new(100, 100);
         img.save(&atlas_path).unwrap();
 
@@ -659,12 +558,10 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let atlas_path = temp_dir.path().join("atlas.png");
 
-        // Create an atlas with correct dimensions (but empty)
         let img = RgbaImage::new(ATLAS_WIDTH, ATLAS_HEIGHT);
         img.save(&atlas_path).unwrap();
 
         let result = validate_atlas(&atlas_path, 50, 0.95, false, false).unwrap();
-        // Should fail because all cells are empty
         assert!(!result.ok);
     }
 
@@ -689,6 +586,6 @@ mod tests {
         save_atlas_outputs(&atlas, &output, Some(&webp_output)).unwrap();
 
         assert!(output.exists());
-        assert!(webp_output.exists());
+        assert!(!webp_output.exists());
     }
 }

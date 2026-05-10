@@ -1,13 +1,16 @@
-export type PetAnimationState =
-  | "idle"
-  | "running-right"
-  | "running-left"
-  | "waving"
-  | "jumping"
-  | "failed"
-  | "waiting"
-  | "running"
-  | "review";
+export const PET_ANIMATION_ROW_KEYS = [
+  "idle",
+  "running-right",
+  "running-left",
+  "waving",
+  "jumping",
+  "failed",
+  "waiting",
+  "running",
+  "review",
+] as const;
+
+export type PetAnimationState = (typeof PET_ANIMATION_ROW_KEYS)[number];
 
 export type PetAnimationFrame = {
   rowIndex: number;

@@ -1,24 +1,16 @@
-/**
- * Tauri command bridge for hatching wizard operations.
- *
- * This module provides type-safe wrappers around Tauri commands for the hatching wizard,
- * following the same pattern as runtimeBridge.ts.
- */
-
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type {
+  BriefSubmitOutcome,
   HatchingSession,
   OrphanSummary,
   PetBrief,
   ReferenceImage,
   PrototypeIteration,
+  RowKey,
   RowState,
 } from "./domain/hatching";
 
-/**
- * Helper to pick a single file for reference image upload.
- */
 async function pickSingleImage(opts?: {
   defaultPath?: string;
   title?: string;
@@ -36,97 +28,66 @@ async function pickSingleImage(opts?: {
   return typeof result === "string" ? result : null;
 }
 
-/**
- * Hatching wizard command bridge.
- */
 export const hatchingBridge = {
-  /**
-   * Start a new hatching run.
-   * Creates a new session, runtime home, and workspace directory.
-   */
-  startHatchingRun: (): Promise<string> => invoke("start_hatching_run"),
+  /** Creates a new session, runtime home, and workspace directory. */
+  startHatchingRun: (): Promise<string> => invoke<string>("start_hatching_run"),
 
-  /**
-   * Cancel an in-progress hatching run.
-   * Tears down the runtime home and deletes the workspace directory.
-   */
+  /** Tears down the runtime home and deletes the workspace directory. */
   cancelHatchingRun: (sessionId: string): Promise<void> =>
-    invoke("cancel_hatching_run", { sessionId }),
+    invoke<void>("cancel_hatching_run", { sessionId }),
 
-  /**
-   * Get the current state of a hatching session.
-   */
+  /** Get the current state of a hatching session. */
   getHatchingState: (sessionId: string): Promise<HatchingSession> =>
-    invoke("get_hatching_state", { sessionId }),
+    invoke<HatchingSession>("get_hatching_state", { sessionId }),
 
   /**
-   * Submit the pet brief for a hatching session.
-   * Validates that the brief has non-empty display_name, description, and a normalized/unique pet_id.
-   * If the brief changes after prototype iterations have started, invalidates the prototype state.
+   * Validates the brief and normalizes the pet_id; invalidates prototype state if the
+   * brief changes after iterations have started.
    */
   submitBrief: (
     sessionId: string,
     brief: PetBrief,
     archetypeId: string | null,
     referenceImageId: string | null,
-  ): Promise<void> => invoke("submit_brief", { sessionId, brief, archetypeId, referenceImageId }),
+  ): Promise<BriefSubmitOutcome> =>
+    invoke<BriefSubmitOutcome>("submit_brief", { sessionId, brief, archetypeId, referenceImageId }),
 
-  /**
-   * Upload and validate a reference image for a hatching session.
-   */
+  /** Upload and validate a reference image for a hatching session. */
   uploadReferenceImage: (sessionId: string, localPath: string): Promise<ReferenceImage> =>
-    invoke("upload_reference_image", { sessionId, localPath }),
+    invoke<ReferenceImage>("upload_reference_image", { sessionId, localPath }),
 
-  /**
-   * List orphan hatching sessions.
-   * Returns sessions that were interrupted before completion for resume banner.
-   */
+  /** Returns interrupted sessions eligible for the resume banner. */
   listOrphanHatchingSessions: (): Promise<OrphanSummary[]> =>
-    invoke("list_orphan_hatching_sessions"),
+    invoke<OrphanSummary[]>("list_orphan_hatching_sessions"),
 
-  /**
-   * Describe a reference image using vision AI.
-   */
+  /** Describe a reference image using vision AI. */
   describeReferenceImage: (sessionId: string, referenceImageId: string): Promise<string> =>
-    invoke("describe_reference_image", { sessionId, referenceImageId }),
+    invoke<string>("describe_reference_image", { sessionId, referenceImageId }),
 
-  /**
-   * Generate a prototype iteration.
-   */
+  /** Generate a prototype iteration. */
   generatePrototype: (sessionId: string, feedback: string | null): Promise<PrototypeIteration> =>
-    invoke("generate_prototype", { sessionId, feedback }),
+    invoke<PrototypeIteration>("generate_prototype", { sessionId, feedback }),
 
-  /**
-   * Revert to a specific prototype iteration.
-   */
+  /** Revert to a specific prototype iteration. */
   revertToIteration: (sessionId: string, iterationN: number): Promise<void> =>
-    invoke("revert_to_iteration", { sessionId, iterationN }),
+    invoke<void>("revert_to_iteration", { sessionId, iterationN }),
 
-  /**
-   * Accept the current prototype iteration.
-   */
-  acceptPrototype: (sessionId: string): Promise<void> => invoke("accept_prototype", { sessionId }),
+  /** Accept the current prototype iteration. */
+  acceptPrototype: (sessionId: string): Promise<void> =>
+    invoke<void>("accept_prototype", { sessionId }),
 
-  /**
-   * Regenerate a specific animation row.
-   */
-  regenerateRow: (sessionId: string, rowKey: string): Promise<RowState> =>
-    invoke("regenerate_row", { sessionId, rowKey }),
+  /** Regenerate a specific animation row. */
+  regenerateRow: (sessionId: string, rowKey: RowKey): Promise<RowState> =>
+    invoke<RowState>("regenerate_row", { sessionId, rowKey }),
 
-  /**
-   * Import the hatched pet into the library.
-   */
+  /** Import the hatched pet into the library. */
   importHatchedPet: (sessionId: string, activate: boolean): Promise<string> =>
-    invoke("import_hatched_pet", { sessionId, activate }),
+    invoke<string>("import_hatched_pet", { sessionId, activate }),
 
-  /**
-   * Archive a hatching session.
-   */
-  archivePet: (sessionId: string): Promise<void> => invoke("archive_pet", { sessionId }),
+  /** Archive a hatching session. */
+  archivePet: (sessionId: string): Promise<void> => invoke<void>("archive_pet", { sessionId }),
 
-  /**
-   * Pick a reference image file.
-   */
+  /** Pick a reference image file from disk. */
   pickReferenceImage: (opts?: { defaultPath?: string }): Promise<string | null> =>
     pickSingleImage({
       title: "Choose a reference image",

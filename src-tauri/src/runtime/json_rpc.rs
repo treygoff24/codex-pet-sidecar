@@ -1,5 +1,6 @@
 use crate::error::{AppError, AppResult};
 use futures_util::{SinkExt, StreamExt};
+use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -111,6 +112,17 @@ impl JsonRpcClient {
             });
         }
         Ok(response.get("result").cloned().unwrap_or(Value::Null))
+    }
+
+    pub async fn call_result<T>(&self, method: &str, params: Value) -> AppResult<T>
+    where
+        T: DeserializeOwned,
+    {
+        let result = self.call(method, params).await?;
+        serde_json::from_value(result).map_err(|error| AppError::JsonRpc {
+            method: method.to_string(),
+            message: format!("response shape mismatch: {error}"),
+        })
     }
 
     pub async fn respond(&self, id: u64, result: Value) -> AppResult<()> {

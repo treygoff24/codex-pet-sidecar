@@ -1,10 +1,3 @@
-/**
- * HatchingChoiceGate - Step 1 of the hatching wizard.
- *
- * Presents users with the choice to start a new pet or resume an interrupted session.
- * Follows accessibility and UI/UX best practices from the design system.
- */
-
 import { useEffect, useState } from "react";
 import { hatchingBridge } from "../../hatchingBridge";
 import type { OrphanSummary } from "../../domain/hatching";

@@ -3,7 +3,6 @@ use crate::hatching::session::{ReferenceDescriptionStatus, ReferenceImage};
 use image::GenericImageView;
 use image::ImageReader;
 use sha2::{Digest, Sha256};
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const MAX_FILE_SIZE: u64 = 4 * 1024 * 1024; // 4 MB
@@ -26,11 +25,13 @@ pub async fn validate_and_copy_reference(
     local_path: &Path,
     workspace_dir: &Path,
 ) -> AppResult<ReferenceImage> {
-    // Step 1: Resolve and validate it's a regular file
-    let metadata = std::fs::metadata(local_path).map_err(|e| AppError::InvalidPetAsset {
-        path: local_path.to_path_buf(),
-        reason: format!("cannot access file: {e}"),
-    })?;
+    let metadata =
+        tokio::fs::metadata(local_path)
+            .await
+            .map_err(|e| AppError::InvalidPetAsset {
+                path: local_path.to_path_buf(),
+                reason: format!("cannot access file: {e}"),
+            })?;
 
     if !metadata.is_file() {
         return Err(AppError::InvalidPetAsset {
@@ -39,7 +40,6 @@ pub async fn validate_and_copy_reference(
         });
     }
 
-    // Step 2: Validate file size
     let file_size = metadata.len();
     if file_size > MAX_FILE_SIZE {
         return Err(AppError::InvalidPetAsset {
@@ -48,16 +48,17 @@ pub async fn validate_and_copy_reference(
         });
     }
 
-    // Step 3: Read magic bytes to validate PNG/JPEG
-    let mut file = std::fs::File::open(local_path)?;
-    let mut magic_bytes = [0u8; 8];
-    file.read_exact(&mut magic_bytes)?;
-    drop(file);
+    let file_bytes = tokio::fs::read(local_path).await?;
+    let magic_bytes = file_bytes
+        .get(..8)
+        .ok_or_else(|| AppError::InvalidPetAsset {
+            path: local_path.to_path_buf(),
+            reason: "file too small to contain PNG or JPEG magic bytes".to_string(),
+        })?;
 
-    let format = detect_image_format(&magic_bytes)?;
+    let format = detect_image_format(magic_bytes)?;
     let extension = format.extension();
 
-    // Step 4: Decode image and validate dimensions
     let image = ImageReader::open(local_path)?
         .decode()
         .map_err(|e| AppError::InvalidPetAsset {
@@ -86,17 +87,13 @@ pub async fn validate_and_copy_reference(
         });
     }
 
-    // Step 5: SHA-256 the file
-    let file_bytes = std::fs::read(local_path)?;
     let sha256 = format!("{:x}", Sha256::digest(&file_bytes));
 
-    // Step 6: Copy to workspace/references/<sha256>.<ext>
     let references_dir = workspace_dir.join("references");
-    std::fs::create_dir_all(&references_dir)?;
+    tokio::fs::create_dir_all(&references_dir).await?;
     let target_path = references_dir.join(format!("{}.{}", sha256, extension));
-    std::fs::copy(local_path, &target_path)?;
+    tokio::fs::write(&target_path, &file_bytes).await?;
 
-    // Step 7: Return ReferenceImage
     Ok(ReferenceImage {
         id: uuid::Uuid::new_v4(),
         path: target_path,
@@ -237,7 +234,6 @@ mod tests {
         let root = tempdir().expect("tempdir");
         let large_path = root.path().join("large.png");
 
-        // Create a file slightly larger than 4 MB
         let large_content = vec![0u8; (MAX_FILE_SIZE + 1) as usize];
         write_test_file(&large_path, &large_content);
 

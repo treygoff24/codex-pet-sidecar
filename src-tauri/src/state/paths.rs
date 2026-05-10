@@ -79,7 +79,6 @@ impl AppPaths {
         self.app_support.join("codex-runtime-home")
     }
 
-    // Hatching wizard paths
     #[allow(dead_code)]
     pub fn hatching_workspace_root_dir(&self) -> PathBuf {
         self.app_support.join("hatching-workspace")

@@ -1,15 +1,64 @@
 use crate::app_state::AppState;
-use crate::commands::{CommandError, CommandResult};
+use crate::command_result::{CommandError, CommandResult};
 use crate::error::AppError;
-use crate::hatching::pipeline::import_hatched_pet as pipeline_import_hatched_pet;
+use crate::hatching::pipeline::import_hatched_pet_with_paths;
 use crate::hatching::reference_image::validate_and_copy_reference;
+use crate::hatching::rows::{derive_and_register_running_left, GENERATED_ROW_COUNT};
 use crate::hatching::runtime::HatchingRuntimeManager;
 use crate::hatching::session::{
-    HatchingPhase, HatchingSession, OrphanSummary, PetBrief, ReferenceImage, RowKey,
+    BriefSubmitOutcome, GeneratedRowKey, GenerationProgress, HatchingPhase, HatchingSession,
+    ImageArtifact, ImageMetadata, OrphanSummary, PetBrief, PetIdPreview,
+    ReferenceDescriptionStatus, ReferenceImage, RowKey, RowState, RowStatus, SourceProvenance,
 };
+use crate::runtime::json_rpc::JsonRpcClient;
+use crate::state::library::{normalize_display_name_to_pet_id, resolve_pet_id_collision};
+use crate::state::AppPaths;
+use image::{ImageBuffer, Rgba};
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
-use tauri::State;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::sync::Mutex;
 use uuid::Uuid;
+
+type SharedHatchingRuntimeManager = Arc<Mutex<HatchingRuntimeManager>>;
+
+fn normalize_ws(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+async fn open_hatching_runtime_thread<E>(
+    runtime_manager: &SharedHatchingRuntimeManager,
+) -> Result<String, E>
+where
+    E: From<AppError>,
+{
+    let (_client, thread_id) =
+        open_hatching_runtime_client_thread(runtime_manager, AppError::RuntimeNotStarted).await?;
+    Ok(thread_id)
+}
+
+async fn open_hatching_runtime_client_thread<E>(
+    runtime_manager: &SharedHatchingRuntimeManager,
+    runtime_not_started: E,
+) -> Result<(JsonRpcClient, String), E>
+where
+    E: From<AppError>,
+{
+    let mut manager = runtime_manager.lock().await;
+    if manager.client().is_none() {
+        manager.start().await.map_err(E::from)?;
+    }
+    let thread_id = manager.current_or_open_thread().await.map_err(E::from)?;
+    let client = manager.client().ok_or(runtime_not_started)?.clone();
+    Ok((client, thread_id))
+}
+
+fn runtime_manager_not_started_command() -> CommandError {
+    CommandError {
+        message: "Runtime manager not started".to_string(),
+    }
+}
 
 /// Start a new hatching run.
 ///
@@ -17,23 +66,23 @@ use uuid::Uuid;
 /// Persists the session to disk.
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn start_hatching_run(state: State<'_, AppState>) -> CommandResult<Uuid> {
+pub async fn start_hatching_run(app: AppHandle, state: State<'_, AppState>) -> CommandResult<Uuid> {
     let session_id = Uuid::new_v4();
     let session_id_str = session_id.to_string();
     let runtime_home = state.paths.hatching_runtime_home_dir(&session_id_str);
     let workspace = state.paths.hatching_workspace_dir(&session_id_str);
-
-    // Create directories
-    std::fs::create_dir_all(&runtime_home).map_err(|e| AppError::IoWithPath {
-        path: runtime_home.clone(),
-        source: e,
-    })?;
-    std::fs::create_dir_all(&workspace).map_err(|e| AppError::IoWithPath {
-        path: workspace.clone(),
-        source: e,
-    })?;
-
-    // Create session
+    tokio::fs::create_dir_all(&runtime_home)
+        .await
+        .map_err(|e| AppError::IoWithPath {
+            path: runtime_home.clone(),
+            source: e,
+        })?;
+    tokio::fs::create_dir_all(&workspace)
+        .await
+        .map_err(|e| AppError::IoWithPath {
+            path: workspace.clone(),
+            source: e,
+        })?;
     let session = HatchingSession {
         id: session_id,
         runtime_home: runtime_home.clone(),
@@ -47,10 +96,17 @@ pub async fn start_hatching_run(state: State<'_, AppState>) -> CommandResult<Uui
         phase: HatchingPhase::Inspiration,
         created_at: time::OffsetDateTime::now_utc(),
     };
-
-    // Persist session
-    let registry = std::sync::Arc::clone(&state.hatching_session_registry);
+    let registry = Arc::clone(&state.hatching_session_registry);
     registry.insert(session).await.map_err(CommandError::from)?;
+
+    if let Some(window) = app.get_webview_window("hatching-wizard") {
+        window.show().map_err(|error| {
+            AppError::CommandFailed("show hatching wizard".to_string(), error.to_string())
+        })?;
+        window.set_focus().map_err(|error| {
+            AppError::CommandFailed("focus hatching wizard".to_string(), error.to_string())
+        })?;
+    }
 
     Ok(session_id)
 }
@@ -61,27 +117,28 @@ pub async fn start_hatching_run(state: State<'_, AppState>) -> CommandResult<Uui
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn cancel_hatching_run(
+    app: AppHandle,
     state: State<'_, AppState>,
     session_id: Uuid,
 ) -> CommandResult<()> {
     let session_id_str = session_id.to_string();
     let workspace = state.paths.hatching_workspace_dir(&session_id_str);
     let _runtime_home = state.paths.hatching_runtime_home_dir(&session_id_str);
-
-    // Remove from registry
-    let registry = std::sync::Arc::clone(&state.hatching_session_registry);
+    let registry = Arc::clone(&state.hatching_session_registry);
     let _ = registry.remove(session_id).await; // Ignore errors if session doesn't exist
-
-    // Teardown runtime if it exists
     let runtime_manager = HatchingRuntimeManager::new(session_id, &state.paths);
     let _ = runtime_manager.teardown().await; // Ignore errors if runtime doesn't exist
-
-    // Delete workspace
     if workspace.exists() {
-        std::fs::remove_dir_all(&workspace).map_err(|e| AppError::IoWithPath {
-            path: workspace.clone(),
-            source: e,
-        })?;
+        tokio::fs::remove_dir_all(&workspace)
+            .await
+            .map_err(|e| AppError::IoWithPath {
+                path: workspace.clone(),
+                source: e,
+            })?;
+    }
+
+    if let Some(window) = app.get_webview_window("hatching-wizard") {
+        let _ = window.hide();
     }
 
     Ok(())
@@ -94,7 +151,7 @@ pub async fn get_hatching_state(
     state: State<'_, AppState>,
     session_id: Uuid,
 ) -> CommandResult<HatchingSession> {
-    let registry = std::sync::Arc::clone(&state.hatching_session_registry);
+    let registry = Arc::clone(&state.hatching_session_registry);
     registry.get(session_id).await.map_err(|e| e.into())
 }
 
@@ -110,8 +167,7 @@ pub async fn submit_brief(
     brief: PetBrief,
     archetype_id: Option<String>,
     _reference_image_id: Option<Uuid>,
-) -> CommandResult<()> {
-    // Validate brief
+) -> CommandResult<BriefSubmitOutcome> {
     if brief.display_name.trim().is_empty() {
         return Err(AppError::InvalidPetMetadata {
             path: PathBuf::from("<brief>"),
@@ -127,64 +183,84 @@ pub async fn submit_brief(
         .into());
     }
 
-    // TODO: Validate pet_id is normalized and unique (requires library access)
+    let available_pet_id =
+        resolve_pet_id_collision(&state.paths, &brief.pet_id).map_err(CommandError::from)?;
+    if available_pet_id != brief.pet_id {
+        return Err(AppError::PetAlreadyExists(brief.pet_id).into());
+    }
 
-    // Update session
-    let registry = std::sync::Arc::clone(&state.hatching_session_registry);
+    let registry = Arc::clone(&state.hatching_session_registry);
     let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
 
-    // Brief-change invalidation guard: if brief changes after prototype iterations,
-    // clear prototype state and reset phase to Brief
+    // Brief changes after prototype iterations require confirmation before mutation.
     let brief_changed = session
         .brief
         .as_ref()
         .map(|old_brief| {
-            old_brief.display_name != brief.display_name
-                || old_brief.description != brief.description
+            normalize_ws(&old_brief.display_name) != normalize_ws(&brief.display_name)
+                || normalize_ws(&old_brief.description) != normalize_ws(&brief.description)
                 || old_brief.personality != brief.personality
                 || old_brief.palette != brief.palette
-                || old_brief.backstory != brief.backstory
-                || old_brief.speech_style != brief.speech_style
-                || old_brief.behavioral_quirks != brief.behavioral_quirks
-                || old_brief.visual_notes != brief.visual_notes
+                || old_brief.backstory.as_deref().map(normalize_ws)
+                    != brief.backstory.as_deref().map(normalize_ws)
+                || old_brief.speech_style.as_deref().map(normalize_ws)
+                    != brief.speech_style.as_deref().map(normalize_ws)
+                || old_brief.behavioral_quirks.as_deref().map(normalize_ws)
+                    != brief.behavioral_quirks.as_deref().map(normalize_ws)
+                || old_brief.visual_notes.as_deref().map(normalize_ws)
+                    != brief.visual_notes.as_deref().map(normalize_ws)
         })
         .unwrap_or(false);
 
-    if brief_changed {
-        // Clear prototype state if brief changed
-        session.prototype = None;
-        // Reset phase to Brief if we were in a later phase
-        if matches!(
-            session.phase,
-            HatchingPhase::Prototype
-                | HatchingPhase::Generating { .. }
-                | HatchingPhase::Review
-                | HatchingPhase::Importing
-        ) {
-            session.phase = HatchingPhase::Brief;
-        }
+    let invalidates_iterations = brief_changed && session.prototype.is_some();
+    if invalidates_iterations {
+        return Ok(BriefSubmitOutcome {
+            invalidates_iterations: true,
+            requires_confirmation: true,
+        });
     }
 
     session.brief = Some(brief);
     session.archetype = archetype_id;
-    // Only set phase to Brief if not already set by invalidation guard
     if !brief_changed {
         session.phase = HatchingPhase::Brief;
     }
 
-    // TODO: Link reference_image_id to session.reference_image if provided
-
     registry.update(session).await.map_err(CommandError::from)?;
 
-    Ok(())
+    Ok(BriefSubmitOutcome {
+        invalidates_iterations: false,
+        requires_confirmation: false,
+    })
+}
+
+#[allow(dead_code)]
+#[tauri::command]
+pub async fn confirm_brief_change(
+    state: State<'_, AppState>,
+    session_id: Uuid,
+    brief: PetBrief,
+    archetype_id: Option<String>,
+) -> CommandResult<BriefSubmitOutcome> {
+    let registry = Arc::clone(&state.hatching_session_registry);
+    let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
+    session.prototype = None;
+    session.rows.clear();
+    session.brief = Some(brief);
+    session.archetype = archetype_id;
+    session.phase = HatchingPhase::Brief;
+    registry.update(session).await.map_err(CommandError::from)?;
+    Ok(BriefSubmitOutcome {
+        invalidates_iterations: true,
+        requires_confirmation: false,
+    })
 }
 
 /// Upload and validate a reference image for a hatching session.
-///
-/// Calls the reference image validator from Task 1.6.
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn upload_reference_image(
+    app: AppHandle,
     state: State<'_, AppState>,
     session_id: Uuid,
     local_path: String,
@@ -193,20 +269,32 @@ pub async fn upload_reference_image(
     let workspace = state.paths.hatching_workspace_dir(&session_id_str);
     let path = PathBuf::from(local_path);
 
-    validate_and_copy_reference(&path, &workspace)
+    let reference = validate_and_copy_reference(&path, &workspace)
         .await
-        .map_err(|e| e.into())
+        .map_err(CommandError::from)?;
+    let registry = Arc::clone(&state.hatching_session_registry);
+    let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
+    session.reference_image = Some(reference.clone());
+    registry.update(session).await.map_err(CommandError::from)?;
+    spawn_reference_prefetch(
+        app,
+        Arc::clone(&state.hatching_session_registry),
+        Arc::clone(&state.hatching_runtime_registry),
+        session_id,
+        reference.id,
+    );
+    Ok(reference)
 }
 
 /// List orphan hatching sessions.
 ///
-/// Returns sessions that were interrupted before completion for Wave 3's resume banner.
+/// Returns sessions that were interrupted before completion.
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn list_orphan_hatching_sessions(
     state: State<'_, AppState>,
 ) -> CommandResult<Vec<OrphanSummary>> {
-    let registry = std::sync::Arc::clone(&state.hatching_session_registry);
+    let registry = Arc::clone(&state.hatching_session_registry);
     let sessions = registry.list_all().await;
 
     let orphans: Vec<OrphanSummary> = sessions
@@ -223,8 +311,6 @@ pub async fn list_orphan_hatching_sessions(
     Ok(orphans)
 }
 
-// Stub commands for Wave 2 (return NotImplemented error)
-
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn describe_reference_image(
@@ -232,47 +318,28 @@ pub async fn describe_reference_image(
     session_id: Uuid,
     reference_image_id: Uuid,
 ) -> CommandResult<String> {
-    // Get session to extract reference image path and thread_id
-    let mut session = std::sync::Arc::clone(&state.hatching_session_registry)
+    let mut session = Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
         .map_err(CommandError::from)?;
-
-    // Get reference image path
     let reference_image = session
         .reference_image
         .as_ref()
-        .ok_or_else(|| CommandError {
-            message: "No reference image found in session".to_string(),
-            recoverable: true,
-        })?;
+        .ok_or_else(|| AppError::ReferenceImageMissing(session_id.to_string()))
+        .map_err(CommandError::from)?;
 
     if reference_image.id != reference_image_id {
-        return Err(CommandError {
-            message: "Reference image ID does not match session".to_string(),
-            recoverable: true,
-        });
+        return Err(AppError::ReferenceImageMissing(reference_image_id.to_string()).into());
     }
 
     let image_path = reference_image.path.clone();
 
-    let runtime_manager = std::sync::Arc::clone(&state.hatching_runtime_registry)
+    let runtime_manager = Arc::clone(&state.hatching_runtime_registry)
         .get_or_create(session_id)
         .await;
-
-    // Call vision function with runtime manager
-    let thread_id = {
-        let mut manager_guard = runtime_manager.lock().await;
-        if manager_guard.client().is_none() {
-            manager_guard.start().await.map_err(CommandError::from)?;
-        }
-        manager_guard
-            .current_or_open_thread()
-            .await
-            .map_err(CommandError::from)?
-    };
+    let thread_id = open_hatching_runtime_thread::<CommandError>(&runtime_manager).await?;
     session.codex_thread_id = Some(thread_id.clone());
-    std::sync::Arc::clone(&state.hatching_session_registry)
+    Arc::clone(&state.hatching_session_registry)
         .update(session)
         .await
         .map_err(CommandError::from)?;
@@ -290,71 +357,51 @@ pub async fn generate_prototype(
     session_id: Uuid,
     feedback: Option<String>,
 ) -> CommandResult<crate::hatching::session::PrototypeIteration> {
-    // Get session
-    let mut session = std::sync::Arc::clone(&state.hatching_session_registry)
+    let mut session = Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
         .map_err(CommandError::from)?;
 
-    // Get prompt from brief (placeholder - in real implementation this would come from draft_prototype_prompt)
-    let prompt = session
+    let brief = session
         .brief
         .as_ref()
-        .map(|b| {
-            format!(
-                "A pet named {} with personality: {:?}",
-                b.display_name, b.personality
-            )
-        })
-        .unwrap_or_else(|| "A cute pixel art pet".to_string());
-
-    // Get reference image path
+        .ok_or_else(|| AppError::HatchingBriefMissing(session_id.to_string()))
+        .map_err(CommandError::from)?;
+    let prompt = format!(
+        "A pet named {} with personality: {:?}",
+        brief.display_name, brief.personality
+    );
     let reference_image_path = session.reference_image.as_ref().map(|ri| ri.path.clone());
 
-    let runtime_manager = std::sync::Arc::clone(&state.hatching_runtime_registry)
+    let runtime_manager = Arc::clone(&state.hatching_runtime_registry)
         .get_or_create(session_id)
         .await;
 
-    let (client, thread_id) = {
-        let mut manager_guard = runtime_manager.lock().await;
-        if manager_guard.client().is_none() {
-            manager_guard.start().await.map_err(CommandError::from)?;
-        }
-        let thread_id = manager_guard
-            .current_or_open_thread()
-            .await
-            .map_err(CommandError::from)?;
-        let client = manager_guard
-            .client()
-            .ok_or_else(|| CommandError {
-                message: "Runtime manager not started".to_string(),
-                recoverable: true,
-            })?
-            .clone();
-        (client, thread_id)
-    };
+    let (client, thread_id) = open_hatching_runtime_client_thread(
+        &runtime_manager,
+        runtime_manager_not_started_command(),
+    )
+    .await?;
     session.codex_thread_id = Some(thread_id.clone());
-
-    // Determine iteration number
     let iteration_n = session
         .prototype
         .as_ref()
         .map(|p| p.iterations.len() as u32 + 1)
         .unwrap_or(1);
-
-    // Call prototype generation
     let iteration = crate::hatching::prototype::generate_prototype(
-        &client,
-        &thread_id,
-        &prompt,
-        reference_image_path.as_ref(),
-        feedback.as_deref(),
-        iteration_n,
+        crate::hatching::prototype::PrototypeGenerationRequest {
+            client: &client,
+            thread_id: &thread_id,
+            prompt: &prompt,
+            reference_image_path: reference_image_path.as_ref(),
+            feedback: feedback.as_deref(),
+            iteration_n,
+            runtime_home: &session.runtime_home,
+            workspace: &session.workspace,
+        },
     )
     .await
     .map_err(CommandError::from)?;
-
-    // Update session with new iteration
     if session.prototype.is_none() {
         session.prototype = Some(crate::hatching::session::PrototypeState {
             iterations: vec![],
@@ -366,9 +413,7 @@ pub async fn generate_prototype(
         prototype.iterations.push(iteration.clone());
         prototype.current = prototype.iterations.len() - 1;
     }
-
-    // Persist updated session
-    std::sync::Arc::clone(&state.hatching_session_registry)
+    Arc::clone(&state.hatching_session_registry)
         .update(session)
         .await
         .map_err(CommandError::from)?;
@@ -379,28 +424,76 @@ pub async fn generate_prototype(
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn revert_to_iteration(
-    _state: State<'_, AppState>,
-    _session_id: Uuid,
-    _iteration_n: u32,
+    state: State<'_, AppState>,
+    session_id: Uuid,
+    iteration_n: u32,
 ) -> CommandResult<()> {
-    // TODO: Implement revert logic
-    // This should update session.prototype.current to iteration_n - 1
-    Err(CommandError {
-        message: "revert_to_iteration not yet implemented".to_string(),
-        recoverable: true,
-    })
+    let registry = Arc::clone(&state.hatching_session_registry);
+    let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
+    let prototype = session.prototype.as_mut().ok_or_else(|| CommandError {
+        message: "No prototype iterations exist for this session".to_string(),
+    })?;
+    let index = prototype
+        .iterations
+        .iter()
+        .position(|iteration| iteration.n == iteration_n)
+        .ok_or_else(|| CommandError {
+            message: format!("Prototype iteration {iteration_n} does not exist"),
+        })?;
+    prototype.current = index;
+    registry.update(session).await.map_err(CommandError::from)?;
+    Ok(())
 }
 
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn accept_prototype(_state: State<'_, AppState>, _session_id: Uuid) -> CommandResult<()> {
-    // TODO: Implement accept logic
-    // This should copy current prototype to workspace/decoded/base.png
-    // and transition phase to Generating
-    Err(CommandError {
-        message: "accept_prototype not yet implemented".to_string(),
-        recoverable: true,
-    })
+pub async fn accept_prototype(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: Uuid,
+) -> CommandResult<()> {
+    let registry = Arc::clone(&state.hatching_session_registry);
+    let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
+    let (current_image, prototype_iteration_count) = {
+        let prototype = session
+            .prototype
+            .as_ref()
+            .ok_or_else(|| AppError::PrototypeMissing(session_id.to_string()))
+            .map_err(CommandError::from)?;
+        let current_image = prototype
+            .iterations
+            .get(prototype.current)
+            .ok_or_else(|| AppError::PrototypeMissing(session_id.to_string()))
+            .map_err(CommandError::from)?
+            .image
+            .output_path
+            .clone();
+        (current_image, prototype.iterations.len() as u32)
+    };
+    let decoded_dir = session.workspace.join("decoded");
+    tokio::fs::create_dir_all(&decoded_dir)
+        .await
+        .map_err(AppError::from)?;
+    tokio::fs::copy(&current_image, decoded_dir.join("base.png"))
+        .await
+        .map_err(AppError::from)?;
+    session.phase = HatchingPhase::Generating {
+        progress: GenerationProgress {
+            rows_completed: 0,
+            rows_total: GENERATED_ROW_COUNT,
+            estimated_remaining: std::time::Duration::from_secs(0),
+            total_imagegen_calls: prototype_iteration_count,
+        },
+    };
+    registry.update(session).await.map_err(CommandError::from)?;
+    spawn_row_generation(
+        app,
+        Arc::clone(&state.hatching_session_registry),
+        Arc::clone(&state.hatching_runtime_registry),
+        state.paths.clone(),
+        session_id,
+    );
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -410,130 +503,475 @@ pub async fn regenerate_row(
     session_id: Uuid,
     row_key: String,
 ) -> CommandResult<crate::hatching::session::RowState> {
-    // Get session
-    let mut session = std::sync::Arc::clone(&state.hatching_session_registry)
+    let mut session = Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
         .map_err(CommandError::from)?;
 
-    // Parse row_key string to RowKey enum
-    let parsed_row_key = match row_key.as_str() {
-        "idle" => RowKey::Idle,
-        "running-right" => RowKey::RunningRight,
-        "running-left" => RowKey::RunningLeft,
-        "waving" => RowKey::Waving,
-        "jumping" => RowKey::Jumping,
-        "failed" => RowKey::Failed,
-        "waiting" => RowKey::Waiting,
-        "running" => RowKey::Running,
-        "review" => RowKey::Review,
-        _ => {
-            return Err(CommandError {
-                message: format!("Invalid row_key: {}", row_key),
-                recoverable: true,
-            })
-        }
-    };
-
-    // Get runtime manager and client if not running-left
-    let (client_opt, thread_id_opt) = if parsed_row_key != RowKey::RunningLeft {
-        let runtime_manager = std::sync::Arc::clone(&state.hatching_runtime_registry)
-            .get_or_create(session_id)
-            .await;
-
-        let (client, thread_id) = {
-            let mut manager_guard = runtime_manager.lock().await;
-            if manager_guard.client().is_none() {
-                manager_guard.start().await.map_err(CommandError::from)?;
-            }
-            let thread_id = manager_guard
-                .current_or_open_thread()
-                .await
-                .map_err(CommandError::from)?;
-            let client = manager_guard
-                .client()
-                .ok_or_else(|| CommandError {
-                    message: "Runtime manager not started".to_string(),
-                    recoverable: true,
-                })?
-                .clone();
-            (client, thread_id)
-        };
-
-        (Some(client), Some(thread_id))
+    let parsed_row_key =
+        crate::hatching::rows::row_key_from_str(&row_key).map_err(CommandError::from)?;
+    let target_row_key = if parsed_row_key == RowKey::RunningLeft {
+        RowKey::RunningRight
     } else {
-        (None, None)
+        parsed_row_key.clone()
     };
 
-    if let Some(thread_id) = &thread_id_opt {
-        session.codex_thread_id = Some(thread_id.clone());
-        std::sync::Arc::clone(&state.hatching_session_registry)
-            .update(session.clone())
-            .await
-            .map_err(CommandError::from)?;
-    }
+    let runtime_manager = Arc::clone(&state.hatching_runtime_registry)
+        .get_or_create(session_id)
+        .await;
+    let (client, thread_id) = open_hatching_runtime_client_thread(
+        &runtime_manager,
+        runtime_manager_not_started_command(),
+    )
+    .await?;
+    session.codex_thread_id = Some(thread_id.clone());
+    Arc::clone(&state.hatching_session_registry)
+        .update(session.clone())
+        .await
+        .map_err(CommandError::from)?;
 
-    // Get prompt from brief (placeholder)
-    let prompt = session
+    let brief = session
         .brief
         .as_ref()
-        .map(|b| {
-            format!(
-                "A pet named {} with personality: {:?}",
-                b.display_name, b.personality
-            )
-        })
-        .unwrap_or_else(|| "A cute pixel art pet".to_string());
-
-    // Get canonical reference path (placeholder - in real implementation this would be workspace/decoded/base.png)
+        .ok_or_else(|| AppError::HatchingBriefMissing(session_id.to_string()))
+        .map_err(CommandError::from)?;
+    let prompt = format!(
+        "A pet named {} with personality: {:?}",
+        brief.display_name, brief.personality
+    );
     let canonical_ref = session.workspace.join("decoded/base.png");
-
-    // Call row regeneration
-    crate::hatching::rows::regenerate_row(
-        client_opt.as_ref(),
-        thread_id_opt.as_deref(),
-        parsed_row_key,
+    let row_state = crate::hatching::rows::regenerate_row(
+        Some(&client),
+        Some(&thread_id),
+        target_row_key.clone(),
         Some(&prompt),
         Some(&canonical_ref),
         &session.runtime_home,
     )
     .await
-    .map_err(CommandError::from)
+    .map_err(CommandError::from)?;
+
+    session
+        .rows
+        .insert(target_row_key.clone(), row_state.clone());
+    if target_row_key == RowKey::RunningRight {
+        derive_and_register_running_left(
+            &mut session,
+            "Re-derived after running-right regeneration",
+        )
+        .await
+        .map_err(CommandError::from)?;
+    }
+    Arc::clone(&state.hatching_session_registry)
+        .update(session)
+        .await
+        .map_err(CommandError::from)?;
+    Ok(row_state)
 }
 
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn import_hatched_pet(
+    app: AppHandle,
     state: State<'_, AppState>,
     session_id: Uuid,
     activate: bool,
 ) -> CommandResult<String> {
-    let session = std::sync::Arc::clone(&state.hatching_session_registry)
+    let registry = Arc::clone(&state.hatching_session_registry);
+    let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
+    session.phase = HatchingPhase::Importing;
+    registry
+        .update(session.clone())
+        .await
+        .map_err(CommandError::from)?;
+    let pet_id = import_hatched_pet_with_paths(&app, &state.paths, &mut session, activate)
+        .await
+        .map_err(CommandError::from)?;
+    registry
+        .update(session.clone())
+        .await
+        .map_err(CommandError::from)?;
+    let _ = HatchingRuntimeManager::new(session_id, &state.paths)
+        .teardown()
+        .await;
+    if session.workspace.exists() {
+        let _ = tokio::fs::remove_dir_all(&session.workspace).await;
+    }
+    Ok(pet_id)
+}
+
+#[allow(dead_code)]
+#[tauri::command]
+pub async fn preview_pet_id(
+    state: State<'_, AppState>,
+    display_name: String,
+) -> CommandResult<PetIdPreview> {
+    let pet_id = normalize_display_name_to_pet_id(&display_name).map_err(CommandError::from)?;
+    let resolved = resolve_pet_id_collision(&state.paths, &pet_id).map_err(CommandError::from)?;
+    let available = resolved == pet_id;
+    Ok(PetIdPreview {
+        pet_id,
+        available,
+        suggestion: (!available).then_some(resolved),
+    })
+}
+
+#[allow(dead_code)]
+#[tauri::command]
+pub async fn resume_hatching_run(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: Uuid,
+) -> CommandResult<HatchingSession> {
+    let session = Arc::clone(&state.hatching_session_registry)
         .get(session_id)
         .await
         .map_err(CommandError::from)?;
-
-    let runtime_home = session.runtime_home.clone();
-    let workspace = session.workspace.clone();
-
-    pipeline_import_hatched_pet(session_id, runtime_home, workspace, activate)
+    let runtime_manager = Arc::clone(&state.hatching_runtime_registry)
+        .get_or_create(session_id)
+        .await;
+    runtime_manager
+        .lock()
         .await
-        .map_err(CommandError::from)
+        .reattach()
+        .await
+        .map_err(CommandError::from)?;
+    if let Some(window) = app.get_webview_window("hatching-wizard") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    Ok(session)
+}
+
+fn spawn_reference_prefetch(
+    app: AppHandle,
+    registry: Arc<crate::hatching::session::HatchingSessionRegistry>,
+    runtime_registry: Arc<crate::hatching::runtime::HatchingRuntimeManagerRegistry>,
+    session_id: Uuid,
+    reference_image_id: Uuid,
+) {
+    tauri::async_runtime::spawn(async move {
+        let result = async {
+            let mut session = registry.get(session_id).await?;
+            let reference = session
+                .reference_image
+                .as_ref()
+                .filter(|reference| reference.id == reference_image_id)
+                .cloned()
+                .ok_or_else(|| AppError::ReferenceImageMissing(reference_image_id.to_string()))?;
+            let runtime_manager = runtime_registry.get_or_create(session_id).await;
+            let thread_id = open_hatching_runtime_thread::<AppError>(&runtime_manager).await?;
+            session.codex_thread_id = Some(thread_id.clone());
+            registry.update(session.clone()).await?;
+            let description = {
+                let manager = runtime_manager.lock().await;
+                crate::hatching::vision::prefetch_description(&manager, &thread_id, &reference.path)
+                    .await?
+            };
+            let mut updated = registry.get(session_id).await?;
+            if let Some(reference) = &mut updated.reference_image {
+                if reference.id == reference_image_id {
+                    reference.description = Some(description);
+                    reference.description_status = ReferenceDescriptionStatus::Ready;
+                    reference.described_at = Some(time::OffsetDateTime::now_utc());
+                }
+            }
+            registry.update(updated).await?;
+            Ok::<(), AppError>(())
+        }
+        .await;
+        if let Err(error) = result {
+            if let Ok(mut session) = registry.get(session_id).await {
+                if let Some(reference) = &mut session.reference_image {
+                    if reference.id == reference_image_id {
+                        reference.description_status = ReferenceDescriptionStatus::Failed;
+                        reference.description = Some(error.to_string());
+                    }
+                }
+                let _ = registry.update(session).await;
+            }
+            let _ = app.emit(
+                &format!("hatching://progress/{session_id}"),
+                serde_json::json!({"error": error.to_string()}),
+            );
+        }
+    });
+}
+
+fn spawn_row_generation(
+    app: AppHandle,
+    registry: Arc<crate::hatching::session::HatchingSessionRegistry>,
+    runtime_registry: Arc<crate::hatching::runtime::HatchingRuntimeManagerRegistry>,
+    paths: AppPaths,
+    session_id: Uuid,
+) {
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = run_row_generation(
+            app.clone(),
+            registry.clone(),
+            runtime_registry,
+            paths,
+            session_id,
+        )
+        .await
+        {
+            if let Ok(mut session) = registry.get(session_id).await {
+                session.phase = HatchingPhase::Review;
+                let _ = registry.update(session).await;
+            }
+            let _ = app.emit(
+                &format!("hatching://progress/{session_id}"),
+                serde_json::json!({"error": error.to_string()}),
+            );
+        }
+    });
+}
+
+struct RowOutcome {
+    /// The generated or failed row state.
+    row_state: RowState,
+    /// Number of imagegen API calls made (0 for synthetic, 1 for real generation).
+    imagegen_calls: u32,
+}
+
+/// Process a single generated row: draft prompt, set Generating placeholder, dispatch
+/// generation (synthetic or real), and handle mirror derivation for RunningRight.
+///
+/// Mutates `session` directly (inserts placeholder, final row state, and RunningLeft when
+/// applicable). The orchestrator is responsible for `registry.update` and `emit_progress`.
+async fn process_one_row(
+    session: &mut HatchingSession,
+    session_id: Uuid,
+    generated_key: GeneratedRowKey,
+    client: Option<&JsonRpcClient>,
+    thread_id: Option<&str>,
+    canonical_reference: &std::path::Path,
+    synthetic: bool,
+) -> crate::error::AppResult<RowOutcome> {
+    let row_key = crate::hatching::rows::generated_row_key(&generated_key);
+    let prompt = crate::hatching::rows::draft_row_prompt(
+        session_id,
+        generated_key.clone(),
+        session.runtime_home.clone(),
+    )
+    .await?;
+
+    // Insert a Generating placeholder so the UI can react immediately.
+    session.rows.insert(
+        row_key.clone(),
+        RowState {
+            prompt: prompt.clone(),
+            image: None,
+            derived_from: None,
+            mirror_decision: None,
+            attempts: 0,
+            last_error: None,
+            status: RowStatus::Generating,
+        },
+    );
+
+    let (row_state, imagegen_calls) = if synthetic {
+        let state =
+            synthetic_row_state(&session.runtime_home, &session.workspace, &row_key, &prompt)
+                .await?;
+        (state, 0_u32)
+    } else {
+        let state = crate::hatching::rows::generate_single_row_with_retries(
+            client.ok_or(AppError::RuntimeNotStarted)?,
+            thread_id.ok_or(AppError::RuntimeNotStarted)?,
+            generated_key,
+            &prompt,
+            canonical_reference,
+            &session.runtime_home,
+        )
+        .await;
+        (state, 1_u32)
+    };
+
+    session.rows.insert(row_key.clone(), row_state.clone());
+
+    // Mirror derivation lives here for RunningRight: the per-row helper owns the
+    // side-effect so the orchestrator loop stays free of row-specific branching.
+    if row_key == RowKey::RunningRight {
+        derive_and_register_running_left(
+            session,
+            "Derived deterministically from running-right after row generation",
+        )
+        .await?;
+    }
+
+    Ok(RowOutcome {
+        row_state,
+        imagegen_calls,
+    })
+}
+
+async fn run_row_generation(
+    app: AppHandle,
+    registry: Arc<crate::hatching::session::HatchingSessionRegistry>,
+    runtime_registry: Arc<crate::hatching::runtime::HatchingRuntimeManagerRegistry>,
+    paths: AppPaths,
+    session_id: Uuid,
+) -> crate::error::AppResult<()> {
+    let synthetic = std::env::var("HATCHING_ALLOW_SYNTHETIC").as_deref() == Ok("1");
+    let mut session = registry.get(session_id).await?;
+    let mut completed = 0_u32;
+    let mut total_calls = session
+        .prototype
+        .as_ref()
+        .map(|prototype| prototype.iterations.len() as u32)
+        .ok_or_else(|| AppError::PrototypeMissing(session_id.to_string()))?;
+    let canonical_reference = session.workspace.join("decoded/base.png");
+    tokio::fs::create_dir_all(session.workspace.join("decoded")).await?;
+    tokio::fs::create_dir_all(session.workspace.join("frames")).await?;
+
+    let runtime = if synthetic {
+        None
+    } else {
+        Some(runtime_registry.get_or_create(session_id).await)
+    };
+    let (client, thread_id) = if let Some(runtime) = &runtime {
+        let (client, thread_id) =
+            open_hatching_runtime_client_thread(runtime, AppError::RuntimeNotStarted).await?;
+        session.codex_thread_id = Some(thread_id.clone());
+        registry.update(session.clone()).await?;
+        (Some(client), Some(thread_id))
+    } else {
+        (None, None)
+    };
+
+    for generated_key in crate::hatching::rows::GENERATED_ROWS {
+        let outcome = process_one_row(
+            &mut session,
+            session_id,
+            generated_key,
+            client.as_ref(),
+            thread_id.as_deref(),
+            &canonical_reference,
+            synthetic,
+        )
+        .await?;
+
+        total_calls += outcome.imagegen_calls;
+        if outcome.row_state.status == RowStatus::Ready {
+            completed += 1;
+        }
+
+        let failed = session
+            .rows
+            .values()
+            .filter(|row| row.status == RowStatus::Failed)
+            .count();
+        session.phase = HatchingPhase::Generating {
+            progress: GenerationProgress {
+                rows_completed: completed,
+                rows_total: GENERATED_ROW_COUNT,
+                estimated_remaining: remaining_generation_time(completed),
+                total_imagegen_calls: total_calls,
+            },
+        };
+        if failed >= 3 {
+            session.phase = HatchingPhase::Review;
+        }
+        registry.update(session.clone()).await?;
+        emit_progress(&app, session_id, completed, total_calls);
+    }
+
+    let failures = session
+        .rows
+        .values()
+        .filter(|row| row.status == RowStatus::Failed)
+        .count();
+    if failures == 0 {
+        session.phase = HatchingPhase::Importing;
+        registry.update(session.clone()).await?;
+        let _pet_id = import_hatched_pet_with_paths(&app, &paths, &mut session, false).await?;
+        registry.update(session).await?;
+    } else {
+        session.phase = HatchingPhase::Review;
+        registry.update(session).await?;
+    }
+    Ok(())
+}
+
+fn emit_progress(app: &AppHandle, session_id: Uuid, rows_completed: u32, total_calls: u32) {
+    let _ = app.emit(
+        &format!("hatching://progress/{session_id}"),
+        GenerationProgress {
+            rows_completed,
+            rows_total: GENERATED_ROW_COUNT,
+            estimated_remaining: remaining_generation_time(rows_completed),
+            total_imagegen_calls: total_calls,
+        },
+    );
+}
+
+fn remaining_generation_time(rows_completed: u32) -> std::time::Duration {
+    std::time::Duration::from_secs(GENERATED_ROW_COUNT.saturating_sub(rows_completed) as u64 * 30)
+}
+
+async fn synthetic_row_state(
+    runtime_home: &std::path::Path,
+    workspace: &std::path::Path,
+    row_key: &RowKey,
+    prompt: &str,
+) -> crate::error::AppResult<RowState> {
+    let generated_dir = runtime_home.join("generated_images").join("synthetic");
+    tokio::fs::create_dir_all(&generated_dir).await?;
+    let slug = crate::hatching::rows::row_slug(row_key);
+    let source_path = generated_dir.join(format!("ig_{slug}.png"));
+    let frame_count = crate::hatching::rows::frame_count(row_key);
+    let mut strip = ImageBuffer::from_pixel(
+        crate::hatching::atlas::CELL_WIDTH * frame_count,
+        crate::hatching::atlas::CELL_HEIGHT,
+        Rgba([0, 0, 0, 0]),
+    );
+    for frame in 0..frame_count {
+        let base_x = frame * crate::hatching::atlas::CELL_WIDTH + 20 + (frame % 5);
+        let base_y = 60 + (frame % 7);
+        for y in base_y..base_y + 16 {
+            for x in base_x..base_x + 16 {
+                strip.put_pixel(x, y, Rgba([80u8, 120u8, 220u8, 255u8]));
+            }
+        }
+    }
+    strip.save(&source_path)?;
+    let source_bytes = tokio::fs::read(&source_path).await?;
+    let source_sha256 = Some(format!("{:x}", Sha256::digest(&source_bytes)));
+    let decoded_dir = workspace.join("decoded");
+    tokio::fs::create_dir_all(&decoded_dir).await?;
+    let output_path = decoded_dir.join(format!("{slug}.png"));
+    tokio::fs::copy(&source_path, &output_path).await?;
+    let output_bytes = tokio::fs::read(&output_path).await?;
+    let artifact = ImageArtifact {
+        source_path,
+        output_path: output_path.clone(),
+        source_provenance: SourceProvenance::SyntheticTest,
+        source_sha256,
+        output_sha256: format!("{:x}", Sha256::digest(&output_bytes)),
+        metadata: ImageMetadata {
+            width: strip.width(),
+            height: strip.height(),
+            mode: "RGBA".to_string(),
+            format: "PNG".to_string(),
+        },
+    };
+    crate::hatching::rows::split_row_strip_to_frames(&output_path, row_key, workspace)?;
+    Ok(RowState {
+        prompt: prompt.to_string(),
+        image: Some(artifact),
+        derived_from: None,
+        mirror_decision: None,
+        attempts: 1,
+        last_error: None,
+        status: RowStatus::Ready,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::hatching::session::{HatchingPhase, PrototypeIteration, PrototypeState};
-
-    #[test]
-    fn not_implemented_error_round_trips() {
-        let error = AppError::NotImplemented {
-            command: "test_command".to_string(),
-        };
-        assert!(error.to_string().contains("test_command"));
-        assert!(error.to_string().contains("not yet implemented"));
-    }
 
     #[test]
     fn brief_change_invalidation_clears_prototype() {
@@ -569,7 +1007,7 @@ mod tests {
                         output_path: PathBuf::from("/tmp/output.png"),
                         source_provenance:
                             crate::hatching::session::SourceProvenance::BuiltInImagegen,
-                        source_sha256: "abc".to_string(),
+                        source_sha256: Some("abc".to_string()),
                         output_sha256: "def".to_string(),
                         metadata: crate::hatching::session::ImageMetadata {
                             width: 192,
@@ -587,7 +1025,6 @@ mod tests {
             created_at: time::OffsetDateTime::now_utc(),
         };
 
-        // Simulate brief change
         let new_brief = PetBrief {
             display_name: "New Name".to_string(),
             pet_id: "new-name".to_string(),
@@ -668,7 +1105,6 @@ mod tests {
             created_at: time::OffsetDateTime::now_utc(),
         };
 
-        // Simulate brief unchanged
         let brief_changed = session
             .brief
             .as_ref()
@@ -686,7 +1122,6 @@ mod tests {
 
         assert!(!brief_changed);
 
-        // Prototype should remain unchanged
         assert!(session.prototype.is_some());
         assert!(matches!(session.phase, HatchingPhase::Prototype));
     }

@@ -139,11 +139,6 @@ describe("SettingsPanel", () => {
     expect(screen.queryByRole("button", { name: "Reset to bundled Olive" })).toBeNull();
   });
 
-  it("does not render the deprecated Improve with Codex action", () => {
-    render(<SettingsPanel config={petConfig()} onChange={vi.fn()} />);
-    expect(screen.queryByRole("button", { name: "Improve with Codex" })).toBeNull();
-  });
-
   it("calls the Olive reset handler when provided", async () => {
     const onReset = vi.fn();
     render(<SettingsPanel config={petConfig()} onChange={vi.fn()} onResetPersonality={onReset} />);

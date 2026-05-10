@@ -1,10 +1,3 @@
-/**
- * HatchingProgress - Generation progress UI for hatching wizard.
- *
- * Displays progress during row generation and atlas composition.
- * Follows accessibility and UI/UX best practices from the design system.
- */
-
 import type { GenerationProgress } from "../../domain/hatching";
 
 const formatTime = (milliseconds: number): string => {

@@ -1,12 +1,3 @@
-/**
- * HatchingLibraryFullBanner - Banner shown when pet library is full.
- *
- * This component displays a warning when the user has reached the maximum
- * number of pets (20) and provides guidance on how to archive a pet.
- *
- * Follows accessibility and UI/UX best practices from the design system.
- */
-
 interface HatchingLibraryFullBannerProps {
   onOpenLibrary: () => void;
 }

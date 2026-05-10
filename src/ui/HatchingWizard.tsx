@@ -1,24 +1,3 @@
-/**
- * HatchingWizard - Shared wizard shell for pet creation.
- *
- * This component provides the structure and navigation for the multi-step hatching wizard,
- * following accessibility best practices and the project's design system.
- *
- * Accessibility features:
- * - Proper focus management between steps
- * - Keyboard navigation support
- * - ARIA labels and live regions
- * - Screen reader announcements
- * - Reduced motion support
- *
- * UI/UX features:
- * - Touch targets ≥ 44×44px
- * - 8px+ spacing between interactive elements
- * - Loading feedback during async operations
- * - Clear error messaging
- * - Consistent design language
- */
-
 import { ReactNode, useEffect, useRef } from "react";
 import type { HatchingPhase } from "../domain/hatching";
 

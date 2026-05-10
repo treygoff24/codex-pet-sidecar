@@ -1,6 +1,7 @@
 pub mod approvals;
 pub mod auth;
 pub mod events;
+pub mod input;
 pub mod json_rpc;
 pub mod process;
 pub mod prompt;
