@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -47,12 +47,14 @@ function SettingsHarness({
   onConfigChange = vi.fn(),
   onCheckForUpdate = vi.fn(),
   onInstallUpdate = vi.fn(),
+  onStartDrag = vi.fn(),
 }: {
   initialConfig?: PetConfig;
   updateState?: OfficialUpdateState;
   onConfigChange?: (config: PetConfig) => void;
   onCheckForUpdate?: () => void;
   onInstallUpdate?: () => void;
+  onStartDrag?: () => void;
 }) {
   const [config, setConfig] = useState(initialConfig);
   return (
@@ -74,7 +76,7 @@ function SettingsHarness({
         setConfig(nextConfig);
       }}
       onApproval={vi.fn()}
-      onStartDrag={vi.fn()}
+      onStartDrag={onStartDrag}
       updateState={updateState}
       onCheckForUpdate={onCheckForUpdate}
       onInstallUpdate={onInstallUpdate}
@@ -103,6 +105,20 @@ describe("settings dialog end-to-end behavior", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Close settings" }));
     expect(screen.queryByRole("dialog", { name: "Pet settings" })).not.toBeInTheDocument();
+  });
+
+  it("starts window dragging from settings chrome without hijacking controls", async () => {
+    const user = userEvent.setup();
+    const onStartDrag = vi.fn();
+    render(<SettingsHarness onStartDrag={onStartDrag} />);
+    await user.click(screen.getByRole("button", { name: "Pet settings" }));
+    const dialog = await screen.findByRole("dialog", { name: "Pet settings" });
+
+    fireEvent.mouseDown(within(dialog).getByRole("heading", { name: "Settings" }), { button: 0 });
+    expect(onStartDrag).toHaveBeenCalledTimes(1);
+
+    fireEvent.mouseDown(within(dialog).getByLabelText("Personality"), { button: 0 });
+    expect(onStartDrag).toHaveBeenCalledTimes(1);
   });
 
   it("edits persona and workspace from the real dialog controls", async () => {

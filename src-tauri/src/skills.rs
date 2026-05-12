@@ -9,13 +9,6 @@ pub struct SkillPrompt {
     pub prompt: String,
 }
 
-pub fn hatching_prompt() -> SkillPrompt {
-    SkillPrompt {
-        skill: "pet-hatching".to_string(),
-        prompt: "Use the repo-local .codex/skills/pet-hatching skill to hatch a new Codex Pet Sidecar pet. Stage the run under hatch-runs/<pet-slug>, validate the 1536x1872 atlas, and stop for user review before importing.".to_string(),
-    }
-}
-
 pub fn personality_prompt(paths: &AppPaths) -> AppResult<SkillPrompt> {
     let target = load_active_pet_config(paths)?
         .map(|config| paths.pet_personality_path(&config.pet_id))
@@ -33,17 +26,6 @@ pub fn personality_prompt(paths: &AppPaths) -> AppResult<SkillPrompt> {
 mod tests {
     use super::*;
     use crate::state::config::{default_pet_config, save_config};
-
-    #[test]
-    fn hatching_prompt_points_to_repo_local_workflow_and_staging_contract() {
-        let prompt = hatching_prompt();
-
-        assert_eq!(prompt.skill, "pet-hatching");
-        assert!(prompt.prompt.contains(".codex/skills/pet-hatching"));
-        assert!(prompt.prompt.contains("hatch-runs/<pet-slug>"));
-        assert!(prompt.prompt.contains("1536x1872 atlas"));
-        assert!(prompt.prompt.contains("stop for user review"));
-    }
 
     #[test]
     fn personality_prompt_targets_selected_pet_personality_file_when_config_exists() {

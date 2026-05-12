@@ -19,13 +19,19 @@ const runtimeBridgeMock = vi.hoisted(() => ({
   sendUserMessage: vi.fn(),
   setActivePet: vi.fn(),
   setMuteUntil: vi.fn(),
-  startHatchingFlow: vi.fn(),
+  showHatchingWizardWindow: vi.fn(),
   startPetRuntime: vi.fn(),
   startWindowDrag: vi.fn(),
   tuckWindowToTab: vi.fn(),
   tuckPet: vi.fn(),
   restorePetWindowFromTab: vi.fn(),
   wakePet: vi.fn(),
+}));
+
+const hatchingBridgeMock = vi.hoisted(() => ({
+  archivePet: vi.fn(),
+  listOrphanHatchingSessions: vi.fn(),
+  startHatchingRun: vi.fn(),
 }));
 
 const updaterMock = vi.hoisted(() => ({
@@ -36,6 +42,10 @@ const updaterMock = vi.hoisted(() => ({
 
 vi.mock("./runtimeBridge", () => ({
   runtimeBridge: runtimeBridgeMock,
+}));
+
+vi.mock("./hatchingBridge", () => ({
+  hatchingBridge: hatchingBridgeMock,
 }));
 
 vi.mock("./hooks/useOfficialUpdater", () => ({
@@ -126,10 +136,10 @@ describe("App settings integration", () => {
     runtimeBridgeMock.sendUserMessage.mockResolvedValue(undefined);
     runtimeBridgeMock.setActivePet.mockResolvedValue(library);
     runtimeBridgeMock.setMuteUntil.mockResolvedValue(undefined);
-    runtimeBridgeMock.startHatchingFlow.mockResolvedValue({
-      skill: "pet-hatching",
-      prompt: "hatch",
-    });
+    runtimeBridgeMock.showHatchingWizardWindow.mockResolvedValue(undefined);
+    hatchingBridgeMock.archivePet.mockResolvedValue(undefined);
+    hatchingBridgeMock.listOrphanHatchingSessions.mockResolvedValue([]);
+    hatchingBridgeMock.startHatchingRun.mockResolvedValue("session-1");
     runtimeBridgeMock.startPetRuntime.mockResolvedValue({ sessionId: "session-1" });
     runtimeBridgeMock.startWindowDrag.mockResolvedValue(undefined);
     runtimeBridgeMock.tuckWindowToTab.mockResolvedValue(undefined);

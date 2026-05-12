@@ -20,7 +20,16 @@ const windowMock = vi.hoisted(() => ({
     setPosition: vi.fn(),
     setSize: vi.fn(),
     show: vi.fn(),
+    hide: vi.fn(),
     startDragging: vi.fn(),
+  },
+}));
+
+const webviewWindowMock = vi.hoisted(() => ({
+  getByLabel: vi.fn(),
+  window: {
+    show: vi.fn(),
+    setFocus: vi.fn(),
   },
 }));
 
@@ -34,6 +43,11 @@ vi.mock("@tauri-apps/api/window", () => ({
   currentMonitor: windowMock.currentMonitor,
   getCurrentWindow: windowMock.getCurrentWindow,
   primaryMonitor: windowMock.primaryMonitor,
+}));
+vi.mock("@tauri-apps/api/webviewWindow", () => ({
+  WebviewWindow: {
+    getByLabel: webviewWindowMock.getByLabel,
+  },
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: dialogMock.open }));
 
@@ -60,7 +74,11 @@ describe("runtimeBridge", () => {
     windowMock.window.setPosition.mockReset();
     windowMock.window.setSize.mockReset();
     windowMock.window.show.mockReset();
+    windowMock.window.hide.mockReset();
     windowMock.window.startDragging.mockReset();
+    webviewWindowMock.getByLabel.mockReset();
+    webviewWindowMock.window.show.mockReset();
+    webviewWindowMock.window.setFocus.mockReset();
   });
 
   it("is the only frontend adapter for Tauri commands", async () => {
@@ -92,7 +110,6 @@ describe("runtimeBridge", () => {
     invokeMock.mockResolvedValue(undefined);
     await runtimeBridge.setActivePet("olive");
     await runtimeBridge.importPet("/tmp/staged-pet");
-    await runtimeBridge.startHatchingFlow();
     await runtimeBridge.startPersonalityFlow();
     await runtimeBridge.tuckPet(null);
     await runtimeBridge.wakePet();
@@ -100,7 +117,6 @@ describe("runtimeBridge", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("set_active_pet", { petId: "olive" });
     expect(invokeMock).toHaveBeenCalledWith("import_pet", { sourceDir: "/tmp/staged-pet" });
-    expect(invokeMock).toHaveBeenCalledWith("start_hatching_flow");
     expect(invokeMock).toHaveBeenCalledWith("start_personality_flow");
     expect(invokeMock).toHaveBeenCalledWith("tuck_pet", { until: null });
     expect(invokeMock).toHaveBeenCalledWith("wake_pet");
@@ -113,6 +129,29 @@ describe("runtimeBridge", () => {
     const handler = vi.fn();
     await expect(runtimeBridge.onPetEvent(handler)).resolves.toBe(unlisten);
     expect(listenMock).toHaveBeenCalledWith("pet://event", expect.any(Function));
+  });
+
+  it("hides the current hatching wizard webview window", async () => {
+    await runtimeBridge.hideHatchingWizardWindow();
+    expect(windowMock.window.hide).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows and focuses the hatching wizard webview window by label", async () => {
+    webviewWindowMock.getByLabel.mockResolvedValue(webviewWindowMock.window);
+
+    await runtimeBridge.showHatchingWizardWindow();
+
+    expect(webviewWindowMock.getByLabel).toHaveBeenCalledWith("hatching-wizard");
+    expect(webviewWindowMock.window.show).toHaveBeenCalledTimes(1);
+    expect(webviewWindowMock.window.setFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails clearly when the hatching wizard window is unavailable", async () => {
+    webviewWindowMock.getByLabel.mockResolvedValue(null);
+
+    await expect(runtimeBridge.showHatchingWizardWindow()).rejects.toThrow(
+      "Hatching wizard window is unavailable",
+    );
   });
 
   it("uses the native directory dialog for workspace and pet imports", async () => {

@@ -3,7 +3,8 @@ use crate::hatching::atlas::derive_running_left;
 use crate::hatching::atlas::{file_sha256, CELL_HEIGHT, CELL_WIDTH};
 use crate::hatching::imagegen::ingest_next_imagegen_artifact;
 use crate::hatching::session::{
-    GeneratedRowKey, HatchingSession, ImageArtifact, ImageMetadata, RowKey, RowState, RowStatus,
+    GeneratedRowKey, HatchingSession, ImageArtifact, ImageMetadata, PetBrief, RowKey, RowState,
+    RowStatus,
 };
 use crate::runtime::input::TurnInputItem;
 use crate::runtime::json_rpc::JsonRpcClient;
@@ -13,8 +14,9 @@ use std::time::Duration;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-pub const GENERATED_ROWS: [GeneratedRowKey; 8] = [
-    GeneratedRowKey::Idle,
+const ROW_IMAGEGEN_TIMEOUT_MS: u64 = 10 * 60 * 1000;
+
+pub const GENERATED_ROWS_AFTER_BASE: [GeneratedRowKey; 7] = [
     GeneratedRowKey::RunningRight,
     GeneratedRowKey::Waving,
     GeneratedRowKey::Jumping,
@@ -24,6 +26,7 @@ pub const GENERATED_ROWS: [GeneratedRowKey; 8] = [
     GeneratedRowKey::Review,
 ];
 
+pub const GENERATED_ROWS: [GeneratedRowKey; 7] = GENERATED_ROWS_AFTER_BASE;
 pub const GENERATED_ROW_COUNT: u32 = GENERATED_ROWS.len() as u32;
 
 pub fn row_key_from_str(value: &str) -> AppResult<RowKey> {
@@ -163,7 +166,8 @@ pub async fn generate_single_row(
         .await?;
 
     let workspace = workspace_from_canonical_reference(canonical_reference_path)?;
-    let image = ingest_next_imagegen_artifact(runtime_home, workspace, 30_000).await?;
+    let image =
+        ingest_next_imagegen_artifact(runtime_home, workspace, ROW_IMAGEGEN_TIMEOUT_MS).await?;
     let row_key = generated_row_key(&row_key);
     let image = materialize_row_artifact(image, &row_key, workspace).await?;
     Ok(RowState {
@@ -342,7 +346,94 @@ pub async fn generate_single_row_with_retries(
     }
 }
 
+fn optional_line(label: &str, value: Option<&str>) -> String {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("\n{label}: {value}"))
+        .unwrap_or_default()
+}
+
+fn row_action_language(row_key: &GeneratedRowKey) -> &'static str {
+    match row_key {
+        GeneratedRowKey::Idle => {
+            "standing still in a calm idle pose, readable as the base identity sprite"
+        }
+        GeneratedRowKey::RunningRight => {
+            "moving to the right in a clear looping walk/run strip with consistent silhouette"
+        }
+        GeneratedRowKey::Waving => {
+            "raising one hand, paw, wing, or equivalent appendage in a greeting wave"
+        }
+        GeneratedRowKey::Jumping => {
+            "jumping upward with a squash-and-stretch arc and a clear airborne frame"
+        }
+        GeneratedRowKey::Failed => {
+            "reacting to failure with a readable frustrated, embarrassed, or defeated expression"
+        }
+        GeneratedRowKey::Waiting => {
+            "waiting patiently with subtle fidgeting and an easy-to-loop idle variation"
+        }
+        GeneratedRowKey::Running => {
+            "focused on an active work loop, looking busy and intent without changing identity"
+        }
+        GeneratedRowKey::Review => {
+            "reviewing something closely with a skeptical, evaluative, or approving reaction"
+        }
+    }
+}
+
+pub fn row_prompt_label(row_key: &GeneratedRowKey) -> &'static str {
+    match row_key {
+        GeneratedRowKey::Idle => "base · idle",
+        GeneratedRowKey::RunningRight => "running-right",
+        GeneratedRowKey::Waving => "waving",
+        GeneratedRowKey::Jumping => "jumping",
+        GeneratedRowKey::Failed => "failed",
+        GeneratedRowKey::Waiting => "waiting",
+        GeneratedRowKey::Running => "running · focused work loop",
+        GeneratedRowKey::Review => "review",
+    }
+}
+
 /// Draft a row prompt from the brief and row template.
+pub fn draft_row_prompt_from_brief(
+    brief: &PetBrief,
+    row_key: &GeneratedRowKey,
+    base_identity_prompt: &str,
+    archetype: Option<&str>,
+    reference_description: Option<&str>,
+) -> String {
+    let personality = if brief.personality.is_empty() {
+        "unspecified".to_string()
+    } else {
+        brief.personality.join(", ")
+    };
+    let identity_grounding = if matches!(row_key, GeneratedRowKey::Idle) {
+        let reference = optional_line("Reference grounding", reference_description);
+        format!(
+            "Base identity prompt:\n{base_identity_prompt}{reference}\nUse this as the canonical identity."
+        )
+    } else {
+        "Identity grounding: match the accepted canonical base image exactly; do not reinterpret the original upload or redesign the character.".to_string()
+    };
+    format!(
+        "Create a transparent-background pixel-art animation row strip for {name}.\n+         Row: {label}.\n+         Action: {action}.\n+         Description: {description}.\n+         Personality: {personality}.{archetype}{visual_notes}{backstory}{speech_style}{quirks}\n+         {identity_grounding}\n+         Keep the same scale, palette family, silhouette, and face readability across frames. Output only the row strip image.",
+        name = brief.display_name,
+        label = row_prompt_label(row_key),
+        action = row_action_language(row_key),
+        description = brief.description,
+        personality = personality,
+        archetype = optional_line("Archetype", archetype),
+        visual_notes = optional_line("Visual notes", brief.visual_notes.as_deref()),
+        backstory = optional_line("Backstory", brief.backstory.as_deref()),
+        speech_style = optional_line("Speech style", brief.speech_style.as_deref()),
+        quirks = optional_line("Behavioral quirks", brief.behavioral_quirks.as_deref()),
+        identity_grounding = identity_grounding,
+    )
+}
+
+/// Legacy wrapper retained for compile-time compatibility in old tests.
 #[allow(dead_code)]
 pub async fn draft_row_prompt(
     session_id: Uuid,
@@ -360,6 +451,15 @@ mod tests {
 
     #[test]
     fn generate_single_row_compiles() {}
+
+    #[test]
+    fn run_row_generation_uses_seven_rows_after_base() {
+        assert_eq!(GENERATED_ROW_COUNT, 7);
+        assert_eq!(GENERATED_ROWS_AFTER_BASE.len(), 7);
+        assert!(!GENERATED_ROWS_AFTER_BASE
+            .iter()
+            .any(|row| matches!(row, GeneratedRowKey::Idle)));
+    }
 
     #[test]
     fn regenerate_row_idle_requires_runtime() {
@@ -412,5 +512,42 @@ mod tests {
         let result = rt.block_on(super::draft_row_prompt(session_id, row_key, runtime_home));
 
         assert!(result.unwrap().contains("Idle"));
+    }
+
+    fn brief() -> PetBrief {
+        PetBrief {
+            display_name: "Wendell".to_string(),
+            pet_id: "wendell".to_string(),
+            description: "An old turtle sage".to_string(),
+            personality: vec!["wise".to_string(), "cranky".to_string()],
+            palette: None,
+            backstory: None,
+            speech_style: None,
+            behavioral_quirks: None,
+            visual_notes: Some("half-moon spectacles".to_string()),
+        }
+    }
+
+    #[test]
+    fn draft_row_prompt_from_brief_includes_context_and_action() {
+        for (row_key, action_word) in [
+            (GeneratedRowKey::Waving, "wave"),
+            (GeneratedRowKey::Jumping, "jumping"),
+            (GeneratedRowKey::Waiting, "waiting"),
+            (GeneratedRowKey::Review, "reviewing"),
+        ] {
+            let prompt = draft_row_prompt_from_brief(
+                &brief(),
+                &row_key,
+                "base identity",
+                Some("grumpy-sage"),
+                Some("reference turtle"),
+            );
+            assert!(prompt.contains("Wendell"));
+            assert!(prompt.contains("An old turtle sage"));
+            assert!(prompt.contains("wise, cranky"));
+            assert!(prompt.contains(action_word));
+            assert!(prompt.contains("canonical base image"));
+        }
     }
 }

@@ -1,319 +1,409 @@
-import { useState } from "react";
-import type { PetBrief } from "../../domain/hatching";
+import { useEffect, useMemo, useState } from "react";
+import type { KeyboardEvent } from "react";
+import type { PaletteSpec, PetBrief, PetIdPreview, ReferenceImage } from "../../domain/hatching";
+import { normalizeDisplayNameToPetId } from "../../domain/petIdNormalization";
+import { fileNameFromPath, referenceDescriptionLabel } from "../../domain/referenceImage";
+import { hatchingBridge } from "../../hatchingBridge";
+import { HATCHING_ARCHETYPES, type Archetype } from "./archetypes";
 
-const normalizePetId = (name: string): string => {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
-};
+const MAX_PERSONALITY_TRAITS = 10;
+const FALLBACK_PERSONALITY_TRAITS = [
+  "cozy",
+  "curious",
+  "sleepy",
+  "mischievous",
+  "earnest",
+  "grumpy",
+  "wise",
+  "stoic",
+  "playful",
+  "quiet",
+  "focused",
+  "observant",
+] as const;
 
 interface HatchingBriefProps {
   initialBrief?: PetBrief | null;
+  archetype?: Archetype | null;
+  referenceImage?: ReferenceImage | null;
+  onChooseReference?: () => void;
   onSubmit: (brief: PetBrief) => void;
   isLoading?: boolean;
 }
 
-interface ValidationErrors {
-  displayName?: string;
-  description?: string;
-  personality?: string;
+function initialPalette(initialBrief?: PetBrief | null, archetype?: Archetype | null): PaletteSpec {
+  return (
+    initialBrief?.palette ??
+    archetype?.palette ?? { primary: "#7B68EE", secondary: "#9B8BEE", accent: "#FFB6C1" }
+  );
 }
 
-export function HatchingBrief({ initialBrief, onSubmit, isLoading = false }: HatchingBriefProps) {
-  const [displayName, setDisplayName] = useState(initialBrief?.displayName || "");
-  const [description, setDescription] = useState(initialBrief?.description || "");
-  const [personality, setPersonality] = useState<string[]>(initialBrief?.personality || []);
-  const [backstory, setBackstory] = useState(initialBrief?.backstory || "");
-  const [speechStyle, setSpeechStyle] = useState(initialBrief?.speechStyle || "");
-  const [behavioralQuirks, setBehavioralQuirks] = useState(initialBrief?.behavioralQuirks || "");
-  const [visualNotes, setVisualNotes] = useState(initialBrief?.visualNotes || "");
-  const [errors, setErrors] = useState<ValidationErrors>({});
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
+function normalizeTraits(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const traits: string[] = [];
+  for (const value of values) {
+    const trait = value.trim();
+    const key = trait.toLowerCase();
+    if (!trait || seen.has(key)) continue;
+    seen.add(key);
+    traits.push(trait);
+  }
+  return traits;
+}
 
-  const petId = normalizePetId(displayName);
+function suggestedTraits(archetype?: Archetype | null, selectedTraits: readonly string[] = []) {
+  return normalizeTraits([
+    ...selectedTraits,
+    ...(archetype?.chips ?? []),
+    ...HATCHING_ARCHETYPES.flatMap((candidate) => candidate.chips),
+    ...FALLBACK_PERSONALITY_TRAITS,
+  ]);
+}
 
-  const validate = (): boolean => {
-    const newErrors: ValidationErrors = {};
+export function HatchingBrief({
+  initialBrief,
+  archetype = null,
+  referenceImage = null,
+  onChooseReference,
+  onSubmit,
+  isLoading = false,
+}: HatchingBriefProps) {
+  const [displayName, setDisplayName] = useState(initialBrief?.displayName ?? "");
+  const [petId, setPetId] = useState(
+    initialBrief?.petId ?? normalizeDisplayNameToPetId(initialBrief?.displayName ?? "") ?? "",
+  );
+  const [petIdEdited, setPetIdEdited] = useState(Boolean(initialBrief?.petId));
+  const [description, setDescription] = useState(
+    initialBrief?.description ?? archetype?.defaultBrief ?? "",
+  );
+  const [personality, setPersonality] = useState<string[]>(
+    normalizeTraits(initialBrief?.personality ?? archetype?.chips ?? []),
+  );
+  const [customTrait, setCustomTrait] = useState("");
+  const [palette, setPalette] = useState<PaletteSpec>(() =>
+    initialPalette(initialBrief, archetype),
+  );
+  const [backstory, setBackstory] = useState(initialBrief?.backstory ?? "");
+  const [speechStyle, setSpeechStyle] = useState(initialBrief?.speechStyle ?? "");
+  const [behavioralQuirks, setBehavioralQuirks] = useState(initialBrief?.behavioralQuirks ?? "");
+  const [visualNotes, setVisualNotes] = useState(initialBrief?.visualNotes ?? "");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [preview, setPreview] = useState<PetIdPreview | null>(null);
+  const referenceFileName = referenceImage ? fileNameFromPath(referenceImage.path) : null;
 
+  useEffect(() => {
+    if (petIdEdited) return;
+    setPetId(normalizeDisplayNameToPetId(displayName) ?? "");
+  }, [displayName, petIdEdited]);
+
+  useEffect(() => {
     if (!displayName.trim()) {
-      newErrors.displayName = "Display name is required";
-    } else if (displayName.length < 2) {
-      newErrors.displayName = "Display name must be at least 2 characters";
-    } else if (displayName.length > 50) {
-      newErrors.displayName = "Display name must be less than 50 characters";
+      setPreview(null);
+      return;
     }
+    const timer = window.setTimeout(() => {
+      hatchingBridge
+        .previewPetId(displayName)
+        .then(setPreview)
+        .catch(() => setPreview(null));
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [displayName]);
 
-    if (!description.trim()) {
-      newErrors.description = "Description is required";
-    } else if (description.length < 10) {
-      newErrors.description = "Description must be at least 10 characters";
-    } else if (description.length > 500) {
-      newErrors.description = "Description must be less than 500 characters";
+  const traitSuggestions = useMemo(
+    () => suggestedTraits(archetype, personality),
+    [archetype, personality],
+  );
+  const personalityLimitReached = personality.length >= MAX_PERSONALITY_TRAITS;
+
+  function validate(): boolean {
+    const nextErrors: string[] = [];
+    if (!displayName.trim()) nextErrors.push("Display name is required.");
+    if (!petId.trim()) nextErrors.push("Pet ID is required and cannot be reserved.");
+    if (!description.trim()) nextErrors.push("Description is required.");
+    if (personality.length === 0) nextErrors.push("Add at least one personality trait.");
+    if (preview && !preview.available && preview.petId === petId) {
+      nextErrors.push(`Pet ID ${preview.petId} is already taken.`);
     }
+    setErrors(nextErrors);
+    return nextErrors.length === 0;
+  }
 
-    if (personality.length === 0) {
-      newErrors.personality = "At least one personality trait is required";
-    }
+  function isTraitSelected(trait: string) {
+    return personality.some((selected) => selected.toLowerCase() === trait.toLowerCase());
+  }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleBlur = (field: string) => {
-    setTouched((prev) => ({ ...prev, [field]: true }));
-    if (touched[field] || field === "displayName" || field === "description") {
-      validate();
-    }
-  };
-
-  const handleSubmit = () => {
-    setTouched({
-      displayName: true,
-      description: true,
-      personality: true,
+  // `personality` is kept normalized at construction (initial state runs through
+  // `normalizeTraits`) and every input added below is pre-trimmed and case-checked,
+  // so the setters can trust the existing array without re-normalizing.
+  function toggleTrait(trait: string) {
+    setPersonality((traits) => {
+      const traitKey = trait.toLowerCase();
+      if (traits.some((selected) => selected.toLowerCase() === traitKey)) {
+        return traits.filter((selected) => selected.toLowerCase() !== traitKey);
+      }
+      if (traits.length >= MAX_PERSONALITY_TRAITS) return traits;
+      return [...traits, trait];
     });
+  }
 
-    if (validate()) {
-      const brief: PetBrief = {
-        displayName: displayName.trim(),
-        petId,
-        description: description.trim(),
-        personality: personality.map((p) => p.trim()).filter(Boolean),
-        palette: null, // Could be added in future
-        backstory: backstory.trim() || null,
-        speechStyle: speechStyle.trim() || null,
-        behavioralQuirks: behavioralQuirks.trim() || null,
-        visualNotes: visualNotes.trim() || null,
-      };
-      onSubmit(brief);
-    }
-  };
+  function addCustomTrait() {
+    const trait = customTrait.trim();
+    if (!trait) return;
+    setPersonality((traits) => {
+      if (traits.some((selected) => selected.toLowerCase() === trait.toLowerCase())) {
+        return traits;
+      }
+      if (traits.length >= MAX_PERSONALITY_TRAITS) return traits;
+      return [...traits, trait];
+    });
+    setCustomTrait("");
+  }
 
-  const addPersonalityTrait = () => {
-    setPersonality([...personality, ""]);
-  };
+  function handleCustomTraitKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    addCustomTrait();
+  }
 
-  const updatePersonalityTrait = (index: number, value: string) => {
-    const updated = [...personality];
-    updated[index] = value;
-    setPersonality(updated);
-  };
-
-  const removePersonalityTrait = (index: number) => {
-    setPersonality(personality.filter((_, i) => i !== index));
-  };
-
-  const isValid =
-    !errors.displayName &&
-    !errors.description &&
-    !errors.personality &&
-    displayName.trim() &&
-    description.trim() &&
-    personality.length > 0;
+  function submit() {
+    if (!validate()) return;
+    onSubmit({
+      displayName: displayName.trim(),
+      petId: petId.trim(),
+      description: description.trim(),
+      personality: personality,
+      palette,
+      backstory: backstory.trim() || null,
+      speechStyle: speechStyle.trim() || null,
+      behavioralQuirks: behavioralQuirks.trim() || null,
+      visualNotes: visualNotes.trim() || null,
+    });
+  }
 
   return (
     <div className="hatching-brief">
       <div className="hatching-brief__header">
-        <h3 className="hatching-brief__title">Tell Us About Your Pet</h3>
+        <h1 className="hatching-brief__title">
+          Tell us about <em>your pet.</em>
+        </h1>
         <p className="hatching-brief__description">
-          Provide details about your pet's personality, appearance, and behavior.
+          Description is the prose Codex should draw from. Personality is just a few quick vibe tags
+          that steer the pet's tone.
         </p>
       </div>
 
-      <div className="hatching-brief__form">
-        {/* Display Name */}
-        <div className="hatching-brief__field">
-          <label htmlFor="displayName" className="hatching-brief__label">
-            Display Name <span aria-hidden="true">*</span>
+      {errors.length ? (
+        <ul className="hatching-brief__error" role="alert">
+          {errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <label className="hatching-brief__label" htmlFor="displayName">
+        Display name
+      </label>
+      <input
+        id="displayName"
+        value={displayName}
+        onChange={(event) => setDisplayName(event.target.value)}
+        disabled={isLoading}
+        placeholder="e.g. Moss"
+      />
+
+      <details className="hatching-brief__pet-id">
+        <summary>Pet ID: {petId || "needs a valid name"}</summary>
+        <label className="hatching-brief__label" htmlFor="petId">
+          Package ID
+        </label>
+        <input
+          id="petId"
+          value={petId}
+          onChange={(event) => {
+            setPetIdEdited(true);
+            setPetId(normalizeDisplayNameToPetId(event.target.value) ?? event.target.value);
+          }}
+          disabled={isLoading}
+        />
+        {preview && !preview.available ? (
+          <p className="hatching-brief__hint">
+            {preview.petId} is taken. Try {preview.suggestion ?? "another name"}.
+          </p>
+        ) : null}
+      </details>
+
+      <div className="hatching-brief__field">
+        <div className="hatching-brief__label-row">
+          <label className="hatching-brief__label" htmlFor="description">
+            Description
           </label>
+          <span>what should Codex draw?</span>
+        </div>
+        <p id="descriptionHelp" className="hatching-brief__field-help">
+          Write the actual pet brief here: body shape, visual details, movement, mood, or any
+          must-have behavior. One sentence is enough; paragraphs are fine.
+        </p>
+        <textarea
+          id="description"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          disabled={isLoading}
+          rows={4}
+          aria-describedby="descriptionHelp"
+          placeholder="A small round desk creature with tiny legs, a sleepy eye, and a gentle wobble."
+        />
+      </div>
+
+      {onChooseReference || referenceImage ? (
+        <button
+          type="button"
+          className={
+            "hatching-reference-pill " + (referenceImage ? "hatching-reference-pill--attached" : "")
+          }
+          onClick={onChooseReference}
+          disabled={isLoading || !onChooseReference}
+          aria-label={
+            referenceImage ? "Replace visual reference image" : "Upload visual reference image"
+          }
+        >
+          <span className="hatching-reference-pill__art" aria-hidden="true" />
+          <span className="hatching-reference-pill__copy">
+            <strong>
+              {referenceImage ? "Visual reference attached" : "Optional visual reference"}
+            </strong>
+            <span>
+              {referenceFileName && referenceImage
+                ? `${referenceFileName} · ${referenceDescriptionLabel(referenceImage)}`
+                : "Upload a real photo or sketch if you want Codex to base the pet's look on it."}
+            </span>
+          </span>
+          <span className="hatching-reference-pill__action">
+            {referenceImage ? "Replace" : "Browse"}
+          </span>
+        </button>
+      ) : null}
+
+      <fieldset className="hatching-brief__traits">
+        <legend className="hatching-brief__legend-row">
+          <span>Personality</span>
+          <span aria-live="polite">
+            {personality.length} / {MAX_PERSONALITY_TRAITS} selected
+          </span>
+        </legend>
+        <p id="personalityHelp" className="hatching-brief__field-help">
+          Pick up to ten tags. These are prompt shorthand, not another description field. Click a
+          chip to toggle it, or type your own and press Enter.
+        </p>
+        <div
+          className="hatching-brief__chips"
+          role="group"
+          aria-describedby="personalityHelp"
+          aria-label="Personality traits"
+        >
+          {traitSuggestions.map((trait) => {
+            const selected = isTraitSelected(trait);
+            return (
+              <button
+                key={trait}
+                type="button"
+                className={
+                  "hatching-brief__chip " + (selected ? "hatching-brief__chip--selected" : "")
+                }
+                onClick={() => toggleTrait(trait)}
+                disabled={isLoading || (!selected && personalityLimitReached)}
+                aria-pressed={selected}
+              >
+                {selected ? "✓ " : ""}
+                {trait}
+              </button>
+            );
+          })}
+        </div>
+        <div className="hatching-brief__trait-add">
           <input
-            id="displayName"
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            onBlur={() => handleBlur("displayName")}
-            disabled={isLoading}
-            className={`hatching-brief__input ${
-              touched.displayName && errors.displayName ? "hatching-brief__input--error" : ""
-            }`}
-            placeholder="e.g., Luna, Max, Pepper"
-            maxLength={50}
-            aria-invalid={touched.displayName && !!errors.displayName}
-            aria-describedby={errors.displayName ? "displayName-error" : undefined}
+            id="customTrait"
+            value={customTrait}
+            onChange={(event) => setCustomTrait(event.target.value)}
+            onKeyDown={handleCustomTraitKeyDown}
+            disabled={isLoading || personalityLimitReached}
+            aria-label="Add a custom personality trait"
+            aria-describedby="personalityHelp customTraitHint"
+            placeholder={
+              personalityLimitReached ? "Remove a chip to add another" : "Add your own trait..."
+            }
           />
-          {touched.displayName && errors.displayName && (
-            <div id="displayName-error" className="hatching-brief__error" role="alert">
-              {errors.displayName}
-            </div>
-          )}
-          <div className="hatching-brief__hint">
-            Pet ID: <code>{petId || "..."}</code>
-          </div>
+          <button
+            type="button"
+            onClick={addCustomTrait}
+            disabled={isLoading || personalityLimitReached || !customTrait.trim()}
+          >
+            Add
+          </button>
         </div>
+        <p id="customTraitHint" className="hatching-brief__hint">
+          One short word or phrase works best. Press Enter after typing to add it as a chip.
+        </p>
+      </fieldset>
 
-        {/* Description */}
-        <div className="hatching-brief__field">
-          <label htmlFor="description" className="hatching-brief__label">
-            Description <span aria-hidden="true">*</span>
+      <fieldset className="hatching-brief__palette">
+        <legend>Palette</legend>
+        {(["primary", "secondary", "accent"] as const).map((key) => (
+          <label key={key}>
+            {key}
+            <input
+              type="color"
+              value={palette[key]}
+              onChange={(event) =>
+                setPalette((current) => ({ ...current, [key]: event.target.value }))
+              }
+              disabled={isLoading}
+            />
           </label>
-          <textarea
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={() => handleBlur("description")}
-            disabled={isLoading}
-            className={`hatching-brief__textarea ${
-              touched.description && errors.description ? "hatching-brief__textarea--error" : ""
-            }`}
-            placeholder="Describe your pet's personality, interests, and what makes them special..."
-            rows={4}
-            maxLength={500}
-            aria-invalid={touched.description && !!errors.description}
-            aria-describedby={errors.description ? "description-error" : undefined}
-          />
-          {touched.description && errors.description && (
-            <div id="description-error" className="hatching-brief__error" role="alert">
-              {errors.description}
-            </div>
-          )}
-          <div className="hatching-brief__hint">{description.length} / 500 characters</div>
-        </div>
+        ))}
+      </fieldset>
 
-        {/* Personality Traits */}
-        <div className="hatching-brief__field">
-          <label className="hatching-brief__label">
-            Personality Traits <span aria-hidden="true">*</span>
-          </label>
-          <div className="hatching-brief__traits">
-            {personality.map((trait, index) => (
-              <div key={index} className="hatching-brief__trait-row">
-                <input
-                  type="text"
-                  value={trait}
-                  onChange={(e) => updatePersonalityTrait(index, e.target.value)}
-                  disabled={isLoading}
-                  className="hatching-brief__input hatching-brief__input--small"
-                  placeholder="e.g., curious, playful, wise"
-                  aria-label={`Personality trait ${index + 1}`}
-                />
-                {personality.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removePersonalityTrait(index)}
-                    disabled={isLoading}
-                    className="hatching-brief__button hatching-brief__button--icon"
-                    aria-label={`Remove personality trait ${index + 1}`}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addPersonalityTrait}
-              disabled={isLoading || personality.length >= 10}
-              className="hatching-brief__button hatching-brief__button--add"
-            >
-              + Add Trait
-            </button>
-          </div>
-          {touched.personality && errors.personality && (
-            <div className="hatching-brief__error" role="alert">
-              {errors.personality}
-            </div>
-          )}
-          <div className="hatching-brief__hint">{personality.length} / 10 traits</div>
-        </div>
+      <button
+        type="button"
+        onClick={() => setAdvancedOpen((open) => !open)}
+        aria-expanded={advancedOpen}
+      >
+        Go deeper
+      </button>
 
-        {/* Backstory */}
-        <div className="hatching-brief__field">
-          <label htmlFor="backstory" className="hatching-brief__label">
-            Backstory (Optional)
-          </label>
+      {advancedOpen ? (
+        <div className="hatching-brief__advanced">
+          <label htmlFor="backstory">Backstory</label>
           <textarea
             id="backstory"
             value={backstory}
-            onChange={(e) => setBackstory(e.target.value)}
-            disabled={isLoading}
-            className="hatching-brief__textarea"
-            placeholder="What's your pet's story? Where did they come from?"
-            rows={3}
-            maxLength={1000}
+            onChange={(event) => setBackstory(event.target.value)}
           />
-          <div className="hatching-brief__hint">{backstory.length} / 1000 characters</div>
-        </div>
-
-        {/* Speech Style */}
-        <div className="hatching-brief__field">
-          <label htmlFor="speechStyle" className="hatching-brief__label">
-            Speech Style (Optional)
-          </label>
+          <label htmlFor="speechStyle">Speech style</label>
           <input
             id="speechStyle"
-            type="text"
             value={speechStyle}
-            onChange={(e) => setSpeechStyle(e.target.value)}
-            disabled={isLoading}
-            className="hatching-brief__input"
-            placeholder="e.g., formal, casual, quirky"
-            maxLength={100}
+            onChange={(event) => setSpeechStyle(event.target.value)}
           />
-          <div className="hatching-brief__hint">How your pet speaks and communicates</div>
-        </div>
-
-        {/* Behavioral Quirks */}
-        <div className="hatching-brief__field">
-          <label htmlFor="behavioralQuirks" className="hatching-brief__label">
-            Behavioral Quirks (Optional)
-          </label>
+          <label htmlFor="behavioralQuirks">Behavioral quirks</label>
           <textarea
             id="behavioralQuirks"
             value={behavioralQuirks}
-            onChange={(e) => setBehavioralQuirks(e.target.value)}
-            disabled={isLoading}
-            className="hatching-brief__textarea"
-            placeholder="Any unique behaviors or habits?"
-            rows={2}
-            maxLength={500}
+            onChange={(event) => setBehavioralQuirks(event.target.value)}
           />
-          <div className="hatching-brief__hint">{behavioralQuirks.length} / 500 characters</div>
-        </div>
-
-        {/* Visual Notes */}
-        <div className="hatching-brief__field">
-          <label htmlFor="visualNotes" className="hatching-brief__label">
-            Visual Notes (Optional)
-          </label>
+          <label htmlFor="visualNotes">Visual notes</label>
           <textarea
             id="visualNotes"
             value={visualNotes}
-            onChange={(e) => setVisualNotes(e.target.value)}
-            disabled={isLoading}
-            className="hatching-brief__textarea"
-            placeholder="Any specific visual characteristics or preferences?"
-            rows={2}
-            maxLength={500}
+            onChange={(event) => setVisualNotes(event.target.value)}
           />
-          <div className="hatching-brief__hint">{visualNotes.length} / 500 characters</div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="hatching-brief__actions">
-        <button
-          type="button"
-          className="hatching-brief__button hatching-brief__button--primary"
-          onClick={handleSubmit}
-          disabled={!isValid || isLoading}
-          aria-label="Continue to next step"
-        >
-          {isLoading ? "Saving..." : "Continue"}
-        </button>
-      </div>
+      <button type="button" onClick={submit} disabled={isLoading}>
+        Looks good →
+      </button>
     </div>
   );
 }

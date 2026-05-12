@@ -12,7 +12,7 @@ use crate::runtime::{
     AmbientTurnInput, ApprovalAction, PetUserInput, RuntimeEvent, RuntimeSession,
     StartPetSessionRequest,
 };
-use crate::skills::{hatching_prompt, personality_prompt, SkillPrompt};
+use crate::skills::{personality_prompt, SkillPrompt};
 use crate::state::library::archive_pet as archive_pet_library;
 use crate::state::{
     discover_library_pets, ensure_library, import_staged_pet, load_active_pet_config, load_config,
@@ -27,9 +27,10 @@ use tokio::time::{sleep, Duration};
 
 pub use hatching_commands::{
     accept_prototype, cancel_hatching_run, confirm_brief_change, describe_reference_image,
-    generate_prototype, get_hatching_state, import_hatched_pet, list_orphan_hatching_sessions,
-    preview_pet_id, regenerate_row, resume_hatching_run, revert_to_iteration, start_hatching_run,
-    submit_brief, upload_reference_image,
+    draft_prompt_review, generate_prototype, get_hatching_state, import_hatched_pet,
+    list_orphan_hatching_sessions, preview_pet_id, regenerate_row, resume_hatching_run,
+    revert_to_iteration, save_prompt_drafts, start_hatching_run, submit_brief,
+    upload_reference_image,
 };
 
 #[derive(Debug, Serialize)]
@@ -80,11 +81,6 @@ pub async fn import_pet(
     source_dir: String,
 ) -> CommandResult<PetLibrary> {
     import_staged_pet(&state.paths, &PathBuf::from(source_dir)).map_err(Into::into)
-}
-
-#[tauri::command]
-pub async fn start_hatching_flow() -> CommandResult<SkillPrompt> {
-    Ok(hatching_prompt())
 }
 
 #[tauri::command]

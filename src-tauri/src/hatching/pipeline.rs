@@ -6,7 +6,10 @@
 use crate::error::{AppError, AppResult};
 use crate::hatching::atlas::validate_atlas;
 use crate::hatching::provenance::validate_pet_completeness;
-use crate::hatching::session::{HatchingPhase, HatchingSession, RowKey, RowStatus};
+use crate::hatching::session::{
+    append_runtime_feed, AtlasReviewArtifact, AtlasReviewCheck, HatchingPhase, HatchingSession,
+    RowKey, RowStatus, RuntimeFeedTone,
+};
 use crate::state::library::import_staged_pet;
 use crate::state::paths::AppPaths;
 use tauri::AppHandle;
@@ -17,12 +20,10 @@ use tauri_plugin_shell::ShellExt;
 /// Invokes the bundled `pet-hatching` sidecar (declared under
 /// `bundle.externalBin` in `tauri.conf.json`) for compose / validate /
 /// package, then imports the staged result into the pet library.
-pub async fn import_hatched_pet_with_paths(
+pub async fn compose_and_validate_hatching_atlas(
     app: &AppHandle,
-    paths: &AppPaths,
     session: &mut HatchingSession,
-    activate: bool,
-) -> AppResult<String> {
+) -> AppResult<AtlasReviewArtifact> {
     validate_rows_for_composition(session)?;
     validate_pet_completeness(session)?;
 
@@ -39,6 +40,7 @@ pub async fn import_hatched_pet_with_paths(
 
     let atlas_path = workspace.join("atlas.png");
     let spritesheet_path = workspace.join("spritesheet.webp");
+    append_runtime_feed(session, RuntimeFeedTone::Work, "composing 8×9 atlas");
     run_pet_hatching_command(
         app,
         vec![
@@ -54,6 +56,8 @@ pub async fn import_hatched_pet_with_paths(
     )
     .await?;
 
+    let validation_path = workspace.join("atlas-validation.json");
+    append_runtime_feed(session, RuntimeFeedTone::Work, "validating atlas geometry");
     run_pet_hatching_command(
         app,
         vec![
@@ -61,24 +65,68 @@ pub async fn import_hatched_pet_with_paths(
             "validate".into(),
             atlas_path.display().to_string(),
             "--json-out".into(),
-            workspace
-                .join("atlas-validation.json")
-                .display()
-                .to_string(),
+            validation_path.display().to_string(),
         ],
     )
     .await?;
 
     let validation_result = validate_atlas(&atlas_path, 50, 0.95, false, false)?;
+    let checks = atlas_review_checks(&validation_result, session);
+    let artifact = AtlasReviewArtifact {
+        atlas_path: atlas_path.clone(),
+        validation_path: Some(validation_path),
+        checks,
+        composed_at: time::OffsetDateTime::now_utc(),
+    };
+    session.atlas_review = Some(artifact.clone());
     if !validation_result.ok {
-        for row in session.rows.values_mut() {
-            row.status = RowStatus::Failed;
-            row.last_error = Some(format!(
-                "Atlas validation failed: {:?}",
-                validation_result.errors
-            ));
-        }
         session.phase = HatchingPhase::Review;
+        append_runtime_feed(
+            session,
+            RuntimeFeedTone::Error,
+            format!("atlas validation failed: {:?}", validation_result.errors),
+        );
+        return Err(AppError::InvalidPetAsset {
+            path: atlas_path,
+            reason: format!("Atlas validation failed: {:?}", validation_result.errors),
+        });
+    }
+    append_runtime_feed(
+        session,
+        RuntimeFeedTone::Ok,
+        "atlas checks passed; review ready",
+    );
+    session.phase = HatchingPhase::Review;
+    Ok(artifact)
+}
+
+pub async fn package_and_import_hatched_pet(
+    app: &AppHandle,
+    paths: &AppPaths,
+    session: &mut HatchingSession,
+    activate: bool,
+) -> AppResult<String> {
+    validate_rows_for_composition(session)?;
+    validate_pet_completeness(session)?;
+
+    if session.atlas_review.is_none() {
+        compose_and_validate_hatching_atlas(app, session).await?;
+    }
+
+    let workspace = session.workspace.clone();
+    let atlas_path = session
+        .atlas_review
+        .as_ref()
+        .map(|artifact| artifact.atlas_path.clone())
+        .unwrap_or_else(|| workspace.join("atlas.png"));
+    let validation_result = validate_atlas(&atlas_path, 50, 0.95, false, false)?;
+    if !validation_result.ok {
+        session.phase = HatchingPhase::Review;
+        append_runtime_feed(
+            session,
+            RuntimeFeedTone::Error,
+            format!("atlas revalidation failed: {:?}", validation_result.errors),
+        );
         return Err(AppError::InvalidPetAsset {
             path: atlas_path,
             reason: format!("Atlas validation failed: {:?}", validation_result.errors),
@@ -87,7 +135,7 @@ pub async fn import_hatched_pet_with_paths(
 
     let brief = session
         .brief
-        .as_ref()
+        .clone()
         .ok_or_else(|| AppError::InvalidPetMetadata {
             path: workspace.join("brief"),
             reason: "pet brief is required before import".to_string(),
@@ -96,6 +144,13 @@ pub async fn import_hatched_pet_with_paths(
     if package_dir.exists() {
         tokio::fs::remove_dir_all(&package_dir).await?;
     }
+    let spritesheet_path = workspace.join("spritesheet.webp");
+    let package_spritesheet = if spritesheet_path.exists() {
+        spritesheet_path
+    } else {
+        atlas_path.clone()
+    };
+    append_runtime_feed(session, RuntimeFeedTone::Work, "writing pet package");
     run_pet_hatching_command(
         app,
         vec![
@@ -108,7 +163,7 @@ pub async fn import_hatched_pet_with_paths(
             "--description".into(),
             brief.description.clone(),
             "--spritesheet".into(),
-            atlas_path.display().to_string(),
+            package_spritesheet.display().to_string(),
             "--output-dir".into(),
             package_dir.display().to_string(),
             "--force".into(),
@@ -116,9 +171,19 @@ pub async fn import_hatched_pet_with_paths(
     )
     .await?;
 
+    append_runtime_feed(
+        session,
+        RuntimeFeedTone::Work,
+        "importing pet package into library",
+    );
     let mut library = import_staged_pet(paths, &package_dir)?;
     if activate {
         library = crate::state::library::set_active_pet(paths, &brief.pet_id)?;
+        append_runtime_feed(
+            session,
+            RuntimeFeedTone::Ok,
+            format!("{} activated", brief.display_name),
+        );
     }
     drop(library);
 
@@ -127,6 +192,80 @@ pub async fn import_hatched_pet_with_paths(
     };
 
     Ok(brief.pet_id.clone())
+}
+
+#[allow(dead_code)]
+pub async fn import_hatched_pet_with_paths(
+    app: &AppHandle,
+    paths: &AppPaths,
+    session: &mut HatchingSession,
+    activate: bool,
+) -> AppResult<String> {
+    compose_and_validate_hatching_atlas(app, session).await?;
+    package_and_import_hatched_pet(app, paths, session, activate).await
+}
+
+fn atlas_review_checks(
+    validation: &crate::hatching::atlas::AtlasValidationResult,
+    session: &HatchingSession,
+) -> Vec<AtlasReviewCheck> {
+    let all_rows_ready = [
+        RowKey::Idle,
+        RowKey::RunningRight,
+        RowKey::RunningLeft,
+        RowKey::Waving,
+        RowKey::Jumping,
+        RowKey::Failed,
+        RowKey::Waiting,
+        RowKey::Running,
+        RowKey::Review,
+    ]
+    .iter()
+    .all(|row_key| {
+        session
+            .rows
+            .get(row_key)
+            .is_some_and(|row| row.status == RowStatus::Ready && row.image.is_some())
+    });
+    vec![
+        AtlasReviewCheck {
+            label: "1536×1872 dimensions".to_string(),
+            ok: validation.width == crate::hatching::atlas::ATLAS_WIDTH
+                && validation.height == crate::hatching::atlas::ATLAS_HEIGHT,
+            detail: Some(format!("{}×{}", validation.width, validation.height)),
+        },
+        AtlasReviewCheck {
+            label: "192×208 cell geometry".to_string(),
+            ok: validation
+                .errors
+                .iter()
+                .all(|error| !error.contains("expected") && !error.contains("cell")),
+            detail: None,
+        },
+        AtlasReviewCheck {
+            label: "Transparency clean".to_string(),
+            ok: validation
+                .errors
+                .iter()
+                .all(|error| !error.contains("transparent") && !error.contains("opaque")),
+            detail: None,
+        },
+        AtlasReviewCheck {
+            label: "All 9 rows present".to_string(),
+            ok: all_rows_ready,
+            detail: None,
+        },
+        AtlasReviewCheck {
+            label: "WebP/PNG encoding valid".to_string(),
+            ok: matches!(validation.format.as_str(), "PNG" | "WEBP"),
+            detail: Some(validation.format.clone()),
+        },
+        AtlasReviewCheck {
+            label: "No validation errors".to_string(),
+            ok: validation.ok,
+            detail: (!validation.errors.is_empty()).then(|| validation.errors.join("; ")),
+        },
+    ]
 }
 
 /// Validate that all required rows are present and ready for atlas composition.
@@ -288,14 +427,15 @@ mod tests {
             reference_image: None,
             prototype: None,
             rows,
-            phase: HatchingPhase::Generating {
-                progress: crate::hatching::session::GenerationProgress {
-                    rows_completed: 0,
-                    rows_total: 8,
-                    estimated_remaining: std::time::Duration::from_secs(120),
-                    total_imagegen_calls: 0,
-                },
-            },
+            prompt_drafts: Vec::new(),
+            runtime_feed: Vec::new(),
+            atlas_review: None,
+            phase: HatchingPhase::Generating(crate::hatching::session::GenerationProgress {
+                rows_completed: 0,
+                rows_total: 8,
+                estimated_remaining: std::time::Duration::from_secs(120),
+                total_imagegen_calls: 0,
+            }),
             created_at: time::OffsetDateTime::now_utc(),
         }
     }

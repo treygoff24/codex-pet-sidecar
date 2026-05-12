@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import type { PetLibrary } from "../domain/petLibrary";
 import { RUNTIME_SAFETY_MODE, SESSION_PERSISTENCE, type PetConfig } from "../domain/petConfig";
+import type { InstalledPet } from "../domain/petConfig";
 import type { OfficialUpdateState } from "../hooks/useOfficialUpdater";
 import { runtimeBridge } from "../runtimeBridge";
+import { PetLibraryPanel } from "./PetLibraryPanel";
 
 type PickDirectory = typeof runtimeBridge.pickDirectory;
 
@@ -13,6 +16,12 @@ export function SettingsPanel({
   updateState,
   onCheckForUpdate,
   onInstallUpdate,
+  library,
+  pets,
+  onSwitchPet,
+  onHatchPet,
+  onImportPet,
+  onArchivePet,
 }: {
   config: PetConfig;
   onChange: (config: PetConfig) => void;
@@ -22,6 +31,12 @@ export function SettingsPanel({
   updateState?: OfficialUpdateState;
   onCheckForUpdate?: () => void;
   onInstallUpdate?: () => void;
+  library?: PetLibrary;
+  pets?: InstalledPet[];
+  onSwitchPet?: (petId: string) => void;
+  onHatchPet?: () => void;
+  onImportPet?: () => void;
+  onArchivePet?: (petId: string) => Promise<void> | void;
 }) {
   const [powerArmed, setPowerArmed] = useState(false);
   const [intervalDraft, setIntervalDraft] = useState(String(config.ambient.intervalMinutes));
@@ -55,6 +70,16 @@ export function SettingsPanel({
 
   return (
     <section className="settings-panel" aria-label="Pet settings">
+      {library && pets && onSwitchPet && onHatchPet && onImportPet ? (
+        <PetLibraryPanel
+          library={library}
+          pets={pets}
+          onSwitch={onSwitchPet}
+          onHatch={onHatchPet}
+          onImport={onImportPet}
+          onArchive={onArchivePet}
+        />
+      ) : null}
       <label>
         Personality
         <textarea

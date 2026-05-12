@@ -1,21 +1,24 @@
 use crate::app_state::AppState;
 use crate::command_result::{CommandError, CommandResult};
 use crate::error::AppError;
-use crate::hatching::pipeline::import_hatched_pet_with_paths;
+use crate::hatching::pipeline::{
+    compose_and_validate_hatching_atlas, package_and_import_hatched_pet,
+};
 use crate::hatching::reference_image::validate_and_copy_reference;
 use crate::hatching::rows::{derive_and_register_running_left, GENERATED_ROW_COUNT};
 use crate::hatching::runtime::HatchingRuntimeManager;
 use crate::hatching::session::{
-    BriefSubmitOutcome, GeneratedRowKey, GenerationProgress, HatchingPhase, HatchingSession,
-    ImageArtifact, ImageMetadata, OrphanSummary, PetBrief, PetIdPreview,
-    ReferenceDescriptionStatus, ReferenceImage, RowKey, RowState, RowStatus, SourceProvenance,
+    append_runtime_feed, BriefSubmitOutcome, GeneratedRowKey, GenerationProgress, HatchingPhase,
+    HatchingSession, ImageArtifact, ImageMetadata, OrphanSummary, PetBrief, PetIdPreview,
+    PromptDraft, ReferenceDescriptionStatus, ReferenceImage, RowKey, RowState, RowStatus,
+    RuntimeFeedTone, SourceProvenance,
 };
 use crate::runtime::json_rpc::JsonRpcClient;
 use crate::state::library::{normalize_display_name_to_pet_id, resolve_pet_id_collision};
 use crate::state::AppPaths;
-use image::{ImageBuffer, Rgba};
+use image::{imageops::FilterType, GenericImage, ImageBuffer, Rgba, RgbaImage};
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
@@ -25,6 +28,163 @@ type SharedHatchingRuntimeManager = Arc<Mutex<HatchingRuntimeManager>>;
 
 fn normalize_ws(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn ready_reference_description(session: &HatchingSession) -> Option<&str> {
+    session
+        .reference_image
+        .as_ref()
+        .filter(|reference| reference.description_status == ReferenceDescriptionStatus::Ready)
+        .and_then(|reference| reference.description.as_deref())
+}
+
+fn base_prompt_for_session(session: &HatchingSession, brief: &PetBrief) -> String {
+    session
+        .prompt_drafts
+        .iter()
+        .find(|draft| draft.row_key == RowKey::Idle)
+        .map(|draft| draft.prompt.clone())
+        .unwrap_or_else(|| {
+            crate::hatching::prototype::build_initial_prompt(
+                brief,
+                session.archetype.as_deref(),
+                ready_reference_description(session),
+            )
+        })
+}
+
+fn prompt_draft_row_order() -> [(RowKey, &'static str, bool, Option<RowKey>); 9] {
+    [
+        (RowKey::Idle, "base · idle", true, None),
+        (RowKey::RunningRight, "running-right", true, None),
+        (
+            RowKey::RunningLeft,
+            "running-left · derived",
+            false,
+            Some(RowKey::RunningRight),
+        ),
+        (RowKey::Waving, "waving", true, None),
+        (RowKey::Jumping, "jumping", true, None),
+        (RowKey::Failed, "failed", true, None),
+        (RowKey::Waiting, "waiting", true, None),
+        (RowKey::Running, "running · focused work loop", true, None),
+        (RowKey::Review, "review", true, None),
+    ]
+}
+
+fn generated_key_for_row(row_key: &RowKey) -> Option<GeneratedRowKey> {
+    match row_key {
+        RowKey::Idle => Some(GeneratedRowKey::Idle),
+        RowKey::RunningRight => Some(GeneratedRowKey::RunningRight),
+        RowKey::RunningLeft => None,
+        RowKey::Waving => Some(GeneratedRowKey::Waving),
+        RowKey::Jumping => Some(GeneratedRowKey::Jumping),
+        RowKey::Failed => Some(GeneratedRowKey::Failed),
+        RowKey::Waiting => Some(GeneratedRowKey::Waiting),
+        RowKey::Running => Some(GeneratedRowKey::Running),
+        RowKey::Review => Some(GeneratedRowKey::Review),
+    }
+}
+
+fn prompt_for_row(session: &HatchingSession, row_key: &RowKey, brief: &PetBrief) -> String {
+    if let Some(saved) = session
+        .prompt_drafts
+        .iter()
+        .find(|draft| &draft.row_key == row_key)
+        .map(|draft| draft.prompt.clone())
+    {
+        return saved;
+    }
+    let base_identity_prompt = base_prompt_for_session(session, brief);
+    generated_key_for_row(row_key)
+        .map(|generated_key| {
+            crate::hatching::rows::draft_row_prompt_from_brief(
+                brief,
+                &generated_key,
+                &base_identity_prompt,
+                session.archetype.as_deref(),
+                ready_reference_description(session),
+            )
+        })
+        .unwrap_or_else(|| "auto-mirrored from running-right · no separate generation".to_string())
+}
+
+fn build_prompt_drafts(session: &HatchingSession, brief: &PetBrief) -> Vec<PromptDraft> {
+    let base_identity_prompt = crate::hatching::prototype::build_initial_prompt(
+        brief,
+        session.archetype.as_deref(),
+        ready_reference_description(session),
+    );
+    prompt_draft_row_order()
+        .into_iter()
+        .map(|(row_key, label, editable, derived_from)| {
+            let prompt = if let Some(generated_key) = generated_key_for_row(&row_key) {
+                crate::hatching::rows::draft_row_prompt_from_brief(
+                    brief,
+                    &generated_key,
+                    &base_identity_prompt,
+                    session.archetype.as_deref(),
+                    ready_reference_description(session),
+                )
+            } else {
+                "auto-mirrored from running-right · no separate generation".to_string()
+            };
+            PromptDraft {
+                row_key,
+                label: label.to_string(),
+                prompt,
+                derived_from,
+                editable,
+            }
+        })
+        .collect()
+}
+
+fn validate_prompt_drafts(drafts: &[PromptDraft]) -> crate::error::AppResult<()> {
+    use std::collections::HashMap;
+    if drafts.len() != 9 {
+        return Err(AppError::InvalidPetMetadata {
+            path: PathBuf::from("<prompt-drafts>"),
+            reason: format!("expected 9 prompt drafts, got {}", drafts.len()),
+        });
+    }
+    let mut by_key = HashMap::<RowKey, &PromptDraft>::new();
+    for draft in drafts {
+        if by_key.insert(draft.row_key.clone(), draft).is_some() {
+            return Err(AppError::InvalidPetMetadata {
+                path: PathBuf::from("<prompt-drafts>"),
+                reason: format!("duplicate prompt draft for {:?}", draft.row_key),
+            });
+        }
+        if draft.editable && draft.prompt.trim().is_empty() {
+            return Err(AppError::InvalidPetMetadata {
+                path: PathBuf::from("<prompt-drafts>"),
+                reason: format!("prompt draft for {:?} cannot be empty", draft.row_key),
+            });
+        }
+    }
+    for (row_key, _label, _editable, _derived_from) in prompt_draft_row_order() {
+        if !by_key.contains_key(&row_key) {
+            return Err(AppError::InvalidPetMetadata {
+                path: PathBuf::from("<prompt-drafts>"),
+                reason: format!("missing prompt draft for {:?}", row_key),
+            });
+        }
+    }
+    let running_left =
+        by_key
+            .get(&RowKey::RunningLeft)
+            .ok_or_else(|| AppError::InvalidPetMetadata {
+                path: PathBuf::from("<prompt-drafts>"),
+                reason: "running-left prompt draft is required".to_string(),
+            })?;
+    if running_left.editable || running_left.derived_from != Some(RowKey::RunningRight) {
+        return Err(AppError::InvalidPetMetadata {
+            path: PathBuf::from("<prompt-drafts>"),
+            reason: "running-left must be non-editable and derived from running-right".to_string(),
+        });
+    }
+    Ok(())
 }
 
 async fn open_hatching_runtime_thread<E>(
@@ -93,6 +253,9 @@ pub async fn start_hatching_run(app: AppHandle, state: State<'_, AppState>) -> C
         reference_image: None,
         prototype: None,
         rows: std::collections::HashMap::new(),
+        prompt_drafts: Vec::new(),
+        runtime_feed: Vec::new(),
+        atlas_review: None,
         phase: HatchingPhase::Inspiration,
         created_at: time::OffsetDateTime::now_utc(),
     };
@@ -212,7 +375,9 @@ pub async fn submit_brief(
         })
         .unwrap_or(false);
 
-    let invalidates_iterations = brief_changed && session.prototype.is_some();
+    let archetype_changed = session.archetype != archetype_id;
+    let invalidates_iterations =
+        (brief_changed || archetype_changed) && session.prototype.is_some();
     if invalidates_iterations {
         return Ok(BriefSubmitOutcome {
             invalidates_iterations: true,
@@ -220,11 +385,13 @@ pub async fn submit_brief(
         });
     }
 
+    if brief_changed || archetype_changed {
+        session.prompt_drafts.clear();
+        session.atlas_review = None;
+    }
     session.brief = Some(brief);
     session.archetype = archetype_id;
-    if !brief_changed {
-        session.phase = HatchingPhase::Brief;
-    }
+    session.phase = HatchingPhase::Prompts;
 
     registry.update(session).await.map_err(CommandError::from)?;
 
@@ -246,14 +413,76 @@ pub async fn confirm_brief_change(
     let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
     session.prototype = None;
     session.rows.clear();
+    session.prompt_drafts.clear();
+    session.atlas_review = None;
     session.brief = Some(brief);
     session.archetype = archetype_id;
-    session.phase = HatchingPhase::Brief;
+    session.phase = HatchingPhase::Prompts;
     registry.update(session).await.map_err(CommandError::from)?;
     Ok(BriefSubmitOutcome {
         invalidates_iterations: true,
         requires_confirmation: false,
     })
+}
+
+#[allow(dead_code)]
+#[tauri::command]
+pub async fn draft_prompt_review(
+    state: State<'_, AppState>,
+    session_id: Uuid,
+) -> CommandResult<Vec<PromptDraft>> {
+    let registry = Arc::clone(&state.hatching_session_registry);
+    let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
+    let brief = session
+        .brief
+        .as_ref()
+        .ok_or_else(|| AppError::HatchingBriefMissing(session_id.to_string()))
+        .map_err(CommandError::from)?
+        .clone();
+    if !session.prompt_drafts.is_empty() {
+        return Ok(session.prompt_drafts.clone());
+    }
+    let drafts = build_prompt_drafts(&session, &brief);
+    session.prompt_drafts = drafts.clone();
+    session.phase = HatchingPhase::Prompts;
+    append_runtime_feed(
+        &mut session,
+        RuntimeFeedTone::Info,
+        "animation prompts drafted from brief",
+    );
+    registry.update(session).await.map_err(CommandError::from)?;
+    Ok(drafts)
+}
+
+#[allow(dead_code)]
+#[tauri::command]
+pub async fn save_prompt_drafts(
+    state: State<'_, AppState>,
+    session_id: Uuid,
+    drafts: Vec<PromptDraft>,
+) -> CommandResult<()> {
+    validate_prompt_drafts(&drafts).map_err(CommandError::from)?;
+    let registry = Arc::clone(&state.hatching_session_registry);
+    let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
+    if !matches!(
+        session.phase,
+        HatchingPhase::Prompts | HatchingPhase::Prototype
+    ) {
+        return Err(AppError::CommandFailed(
+            "save_prompt_drafts".to_string(),
+            "prompt drafts can only be saved during Prompts or Prototype".to_string(),
+        )
+        .into());
+    }
+    session.prompt_drafts = drafts;
+    session.phase = HatchingPhase::Prototype;
+    append_runtime_feed(
+        &mut session,
+        RuntimeFeedTone::Ok,
+        "animation prompts approved; prototype gate ready",
+    );
+    registry.update(session).await.map_err(CommandError::from)?;
+    Ok(())
 }
 
 /// Upload and validate a reference image for a hatching session.
@@ -367,10 +596,14 @@ pub async fn generate_prototype(
         .as_ref()
         .ok_or_else(|| AppError::HatchingBriefMissing(session_id.to_string()))
         .map_err(CommandError::from)?;
-    let prompt = format!(
-        "A pet named {} with personality: {:?}",
-        brief.display_name, brief.personality
-    );
+    let initial_prompt = base_prompt_for_session(&session, brief);
+    let prompt = session
+        .prototype
+        .as_ref()
+        .and_then(|prototype| prototype.iterations.get(prototype.current))
+        .map(|iteration| iteration.revised_prompt.clone())
+        .unwrap_or(initial_prompt);
+    let brief = brief.clone();
     let reference_image_path = session.reference_image.as_ref().map(|ri| ri.path.clone());
 
     let runtime_manager = Arc::clone(&state.hatching_runtime_registry)
@@ -388,13 +621,16 @@ pub async fn generate_prototype(
         .as_ref()
         .map(|p| p.iterations.len() as u32 + 1)
         .unwrap_or(1);
+    let runtime_guard = runtime_manager.lock().await;
     let iteration = crate::hatching::prototype::generate_prototype(
         crate::hatching::prototype::PrototypeGenerationRequest {
             client: &client,
+            runtime: &runtime_guard,
             thread_id: &thread_id,
             prompt: &prompt,
             reference_image_path: reference_image_path.as_ref(),
             feedback: feedback.as_deref(),
+            brief: &brief,
             iteration_n,
             runtime_home: &session.runtime_home,
             workspace: &session.workspace,
@@ -413,6 +649,7 @@ pub async fn generate_prototype(
         prototype.iterations.push(iteration.clone());
         prototype.current = prototype.iterations.len() - 1;
     }
+    session.phase = HatchingPhase::Prototype;
     Arc::clone(&state.hatching_session_registry)
         .update(session)
         .await
@@ -454,37 +691,44 @@ pub async fn accept_prototype(
 ) -> CommandResult<()> {
     let registry = Arc::clone(&state.hatching_session_registry);
     let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
-    let (current_image, prototype_iteration_count) = {
+    let (current_iteration, prototype_iteration_count) = {
         let prototype = session
             .prototype
             .as_ref()
             .ok_or_else(|| AppError::PrototypeMissing(session_id.to_string()))
             .map_err(CommandError::from)?;
-        let current_image = prototype
+        let current_iteration = prototype
             .iterations
             .get(prototype.current)
             .ok_or_else(|| AppError::PrototypeMissing(session_id.to_string()))
             .map_err(CommandError::from)?
-            .image
-            .output_path
             .clone();
-        (current_image, prototype.iterations.len() as u32)
+        (current_iteration, prototype.iterations.len() as u32)
     };
-    let decoded_dir = session.workspace.join("decoded");
-    tokio::fs::create_dir_all(&decoded_dir)
+    let idle_row = materialize_prototype_as_idle_row(&mut session, &current_iteration)
         .await
-        .map_err(AppError::from)?;
-    tokio::fs::copy(&current_image, decoded_dir.join("base.png"))
-        .await
-        .map_err(AppError::from)?;
-    session.phase = HatchingPhase::Generating {
-        progress: GenerationProgress {
-            rows_completed: 0,
-            rows_total: GENERATED_ROW_COUNT,
-            estimated_remaining: std::time::Duration::from_secs(0),
-            total_imagegen_calls: prototype_iteration_count,
-        },
-    };
+        .map_err(CommandError::from)?;
+    session.rows.insert(RowKey::Idle, idle_row);
+    append_runtime_feed(&mut session, RuntimeFeedTone::Ok, "prototype accepted");
+    append_runtime_feed(
+        &mut session,
+        RuntimeFeedTone::Info,
+        "canonical_identity_reference set to decoded/base.png",
+    );
+    append_runtime_feed(
+        &mut session,
+        RuntimeFeedTone::Ok,
+        format!(
+            "base / idle materialized from prototype try {}",
+            current_iteration.n
+        ),
+    );
+    session.phase = HatchingPhase::Generating(GenerationProgress {
+        rows_completed: 0,
+        rows_total: GENERATED_ROW_COUNT,
+        estimated_remaining: std::time::Duration::from_secs(0),
+        total_imagegen_calls: prototype_iteration_count,
+    });
     registry.update(session).await.map_err(CommandError::from)?;
     spawn_row_generation(
         app,
@@ -496,9 +740,81 @@ pub async fn accept_prototype(
     Ok(())
 }
 
+async fn materialize_prototype_as_idle_row(
+    session: &mut HatchingSession,
+    current_iteration: &crate::hatching::session::PrototypeIteration,
+) -> crate::error::AppResult<RowState> {
+    let brief = session
+        .brief
+        .as_ref()
+        .ok_or_else(|| AppError::HatchingBriefMissing(session.id.to_string()))?;
+    let decoded_dir = session.workspace.join("decoded");
+    let frames_dir = session.workspace.join("frames").join("idle");
+    tokio::fs::create_dir_all(&decoded_dir).await?;
+    tokio::fs::create_dir_all(&frames_dir).await?;
+
+    let base_path = decoded_dir.join("base.png");
+    tokio::fs::copy(&current_iteration.image.output_path, &base_path).await?;
+
+    let normalized_frame = normalize_prototype_frame(&current_iteration.image.output_path)?;
+    let idle_path = decoded_dir.join("idle.png");
+    normalized_frame.save(&idle_path)?;
+    for index in 0..crate::hatching::rows::frame_count(&RowKey::Idle) {
+        normalized_frame.save(frames_dir.join(format!("{index:02}.png")))?;
+    }
+
+    let output_sha256 = crate::hatching::atlas::file_sha256(&idle_path)?;
+    let source_sha256 =
+        current_iteration.image.source_sha256.clone().or_else(|| {
+            crate::hatching::atlas::file_sha256(&current_iteration.image.source_path).ok()
+        });
+    Ok(RowState {
+        prompt: prompt_for_row(session, &RowKey::Idle, brief),
+        image: Some(ImageArtifact {
+            source_path: current_iteration.image.source_path.clone(),
+            output_path: idle_path,
+            source_provenance: current_iteration.image.source_provenance.clone(),
+            source_sha256,
+            output_sha256,
+            metadata: ImageMetadata {
+                width: crate::hatching::atlas::CELL_WIDTH,
+                height: crate::hatching::atlas::CELL_HEIGHT,
+                mode: "RGBA".to_string(),
+                format: "PNG".to_string(),
+            },
+        }),
+        derived_from: None,
+        mirror_decision: None,
+        attempts: current_iteration.n,
+        last_error: None,
+        status: RowStatus::Ready,
+    })
+}
+
+fn normalize_prototype_frame(source_path: &Path) -> crate::error::AppResult<RgbaImage> {
+    let source = image::open(source_path)?.to_rgba8();
+    let width_scale = crate::hatching::atlas::CELL_WIDTH as f32 / source.width().max(1) as f32;
+    let height_scale = crate::hatching::atlas::CELL_HEIGHT as f32 / source.height().max(1) as f32;
+    let scale = width_scale.min(height_scale).min(1.0);
+    let target_width = ((source.width() as f32 * scale).round() as u32).max(1);
+    let target_height = ((source.height() as f32 * scale).round() as u32).max(1);
+    let resized =
+        image::imageops::resize(&source, target_width, target_height, FilterType::Nearest);
+    let mut canvas = ImageBuffer::from_pixel(
+        crate::hatching::atlas::CELL_WIDTH,
+        crate::hatching::atlas::CELL_HEIGHT,
+        Rgba([0, 0, 0, 0]),
+    );
+    let x = (crate::hatching::atlas::CELL_WIDTH - target_width) / 2;
+    let y = (crate::hatching::atlas::CELL_HEIGHT - target_height) / 2;
+    canvas.copy_from(&resized, x, y)?;
+    Ok(canvas)
+}
+
 #[allow(dead_code)]
 #[tauri::command]
 pub async fn regenerate_row(
+    app: AppHandle,
     state: State<'_, AppState>,
     session_id: Uuid,
     row_key: String,
@@ -510,6 +826,14 @@ pub async fn regenerate_row(
 
     let parsed_row_key =
         crate::hatching::rows::row_key_from_str(&row_key).map_err(CommandError::from)?;
+    if parsed_row_key == RowKey::Idle {
+        return Err(AppError::CommandFailed(
+            "regenerate_row".to_string(),
+            "base / idle is controlled by the prototype gate; return to Prototype to change it"
+                .to_string(),
+        )
+        .into());
+    }
     let target_row_key = if parsed_row_key == RowKey::RunningLeft {
         RowKey::RunningRight
     } else {
@@ -532,13 +856,10 @@ pub async fn regenerate_row(
 
     let brief = session
         .brief
-        .as_ref()
+        .clone()
         .ok_or_else(|| AppError::HatchingBriefMissing(session_id.to_string()))
         .map_err(CommandError::from)?;
-    let prompt = format!(
-        "A pet named {} with personality: {:?}",
-        brief.display_name, brief.personality
-    );
+    let prompt = prompt_for_row(&session, &target_row_key, &brief);
     let canonical_ref = session.workspace.join("decoded/base.png");
     let row_state = crate::hatching::rows::regenerate_row(
         Some(&client),
@@ -561,6 +882,33 @@ pub async fn regenerate_row(
         )
         .await
         .map_err(CommandError::from)?;
+        append_runtime_feed(
+            &mut session,
+            RuntimeFeedTone::Ok,
+            "running-left re-mirrored from regenerated running-right",
+        );
+    }
+    session.atlas_review = None;
+    append_runtime_feed(
+        &mut session,
+        RuntimeFeedTone::Ok,
+        format!(
+            "{} regenerated from atlas review",
+            crate::hatching::rows::row_slug(&target_row_key)
+        ),
+    );
+    if matches!(session.phase, HatchingPhase::Review) && row_state.status == RowStatus::Ready {
+        let failures = session
+            .rows
+            .values()
+            .filter(|row| row.status == RowStatus::Failed)
+            .count();
+        if failures == 0 {
+            compose_and_validate_hatching_atlas(&app, &mut session)
+                .await
+                .map_err(CommandError::from)?;
+            session.phase = HatchingPhase::Review;
+        }
     }
     Arc::clone(&state.hatching_session_registry)
         .update(session)
@@ -579,12 +927,29 @@ pub async fn import_hatched_pet(
 ) -> CommandResult<String> {
     let registry = Arc::clone(&state.hatching_session_registry);
     let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
+    if !matches!(session.phase, HatchingPhase::Review) {
+        return Err(AppError::CommandFailed(
+            "import_hatched_pet".to_string(),
+            "pet can only be imported after atlas review is ready".to_string(),
+        )
+        .into());
+    }
+    if session.atlas_review.is_none() {
+        compose_and_validate_hatching_atlas(&app, &mut session)
+            .await
+            .map_err(CommandError::from)?;
+    }
     session.phase = HatchingPhase::Importing;
+    append_runtime_feed(
+        &mut session,
+        RuntimeFeedTone::Work,
+        "packaging approved atlas for import",
+    );
     registry
         .update(session.clone())
         .await
         .map_err(CommandError::from)?;
-    let pet_id = import_hatched_pet_with_paths(&app, &state.paths, &mut session, activate)
+    let pet_id = package_and_import_hatched_pet(&app, &state.paths, &mut session, activate)
         .await
         .map_err(CommandError::from)?;
     registry
@@ -749,12 +1114,19 @@ async fn process_one_row(
     synthetic: bool,
 ) -> crate::error::AppResult<RowOutcome> {
     let row_key = crate::hatching::rows::generated_row_key(&generated_key);
-    let prompt = crate::hatching::rows::draft_row_prompt(
-        session_id,
-        generated_key.clone(),
-        session.runtime_home.clone(),
-    )
-    .await?;
+    let brief = session
+        .brief
+        .clone()
+        .ok_or_else(|| AppError::HatchingBriefMissing(session_id.to_string()))?;
+    let prompt = prompt_for_row(session, &row_key, &brief);
+    append_runtime_feed(
+        session,
+        RuntimeFeedTone::Work,
+        format!(
+            "$imagegen {} queued",
+            crate::hatching::rows::row_slug(&row_key)
+        ),
+    );
 
     // Insert a Generating placeholder so the UI can react immediately.
     session.rows.insert(
@@ -768,6 +1140,15 @@ async fn process_one_row(
             last_error: None,
             status: RowStatus::Generating,
         },
+    );
+
+    append_runtime_feed(
+        session,
+        RuntimeFeedTone::Work,
+        format!(
+            "$imagegen {} running",
+            crate::hatching::rows::row_slug(&row_key)
+        ),
     );
 
     let (row_state, imagegen_calls) = if synthetic {
@@ -789,6 +1170,26 @@ async fn process_one_row(
     };
 
     session.rows.insert(row_key.clone(), row_state.clone());
+    if row_state.status == RowStatus::Ready {
+        append_runtime_feed(
+            session,
+            RuntimeFeedTone::Ok,
+            format!("{} row ready", crate::hatching::rows::row_slug(&row_key)),
+        );
+    } else {
+        append_runtime_feed(
+            session,
+            RuntimeFeedTone::Error,
+            format!(
+                "{} row failed: {}",
+                crate::hatching::rows::row_slug(&row_key),
+                row_state
+                    .last_error
+                    .as_deref()
+                    .unwrap_or("unknown generation error")
+            ),
+        );
+    }
 
     // Mirror derivation lives here for RunningRight: the per-row helper owns the
     // side-effect so the orchestrator loop stays free of row-specific branching.
@@ -798,6 +1199,11 @@ async fn process_one_row(
             "Derived deterministically from running-right after row generation",
         )
         .await?;
+        append_runtime_feed(
+            session,
+            RuntimeFeedTone::Ok,
+            "running-left mirrored from running-right (no imagegen)",
+        );
     }
 
     Ok(RowOutcome {
@@ -810,7 +1216,7 @@ async fn run_row_generation(
     app: AppHandle,
     registry: Arc<crate::hatching::session::HatchingSessionRegistry>,
     runtime_registry: Arc<crate::hatching::runtime::HatchingRuntimeManagerRegistry>,
-    paths: AppPaths,
+    _paths: AppPaths,
     session_id: Uuid,
 ) -> crate::error::AppResult<()> {
     let synthetic = std::env::var("HATCHING_ALLOW_SYNTHETIC").as_deref() == Ok("1");
@@ -862,14 +1268,12 @@ async fn run_row_generation(
             .values()
             .filter(|row| row.status == RowStatus::Failed)
             .count();
-        session.phase = HatchingPhase::Generating {
-            progress: GenerationProgress {
-                rows_completed: completed,
-                rows_total: GENERATED_ROW_COUNT,
-                estimated_remaining: remaining_generation_time(completed),
-                total_imagegen_calls: total_calls,
-            },
-        };
+        session.phase = HatchingPhase::Generating(GenerationProgress {
+            rows_completed: completed,
+            rows_total: GENERATED_ROW_COUNT,
+            estimated_remaining: remaining_generation_time(completed),
+            total_imagegen_calls: total_calls,
+        });
         if failed >= 3 {
             session.phase = HatchingPhase::Review;
         }
@@ -883,12 +1287,21 @@ async fn run_row_generation(
         .filter(|row| row.status == RowStatus::Failed)
         .count();
     if failures == 0 {
-        session.phase = HatchingPhase::Importing;
-        registry.update(session.clone()).await?;
-        let _pet_id = import_hatched_pet_with_paths(&app, &paths, &mut session, false).await?;
+        append_runtime_feed(
+            &mut session,
+            RuntimeFeedTone::Work,
+            "all rows ready; composing atlas for review",
+        );
+        compose_and_validate_hatching_atlas(&app, &mut session).await?;
+        session.phase = HatchingPhase::Review;
         registry.update(session).await?;
     } else {
         session.phase = HatchingPhase::Review;
+        append_runtime_feed(
+            &mut session,
+            RuntimeFeedTone::Warn,
+            format!("{failures} row(s) need attention before atlas review can finish"),
+        );
         registry.update(session).await?;
     }
     Ok(())
@@ -973,6 +1386,45 @@ mod tests {
     use super::*;
     use crate::hatching::session::{HatchingPhase, PrototypeIteration, PrototypeState};
 
+    fn valid_prompt_drafts_for_test() -> Vec<PromptDraft> {
+        prompt_draft_row_order()
+            .into_iter()
+            .map(|(row_key, label, editable, derived_from)| PromptDraft {
+                row_key,
+                label: label.to_string(),
+                prompt: if editable {
+                    "draw this row".to_string()
+                } else {
+                    "auto-mirrored from running-right · no separate generation".to_string()
+                },
+                derived_from,
+                editable,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn prompt_drafts_require_running_left_to_be_derived() {
+        let drafts = valid_prompt_drafts_for_test();
+        let running_left = drafts
+            .iter()
+            .find(|draft| draft.row_key == RowKey::RunningLeft)
+            .expect("running-left draft");
+
+        assert!(!running_left.editable);
+        assert_eq!(running_left.derived_from, Some(RowKey::RunningRight));
+        validate_prompt_drafts(&drafts).expect("valid derived running-left");
+
+        let mut invalid = drafts;
+        let running_left = invalid
+            .iter_mut()
+            .find(|draft| draft.row_key == RowKey::RunningLeft)
+            .expect("running-left draft");
+        running_left.editable = true;
+
+        assert!(validate_prompt_drafts(&invalid).is_err());
+    }
+
     #[test]
     fn brief_change_invalidation_clears_prototype() {
         use std::collections::HashMap;
@@ -1021,6 +1473,9 @@ mod tests {
                 current: 0,
             }),
             rows: HashMap::new(),
+            prompt_drafts: Vec::new(),
+            runtime_feed: Vec::new(),
+            atlas_review: None,
             phase: HatchingPhase::Prototype,
             created_at: time::OffsetDateTime::now_utc(),
         };
@@ -1059,16 +1514,16 @@ mod tests {
             if matches!(
                 session.phase,
                 HatchingPhase::Prototype
-                    | HatchingPhase::Generating { .. }
+                    | HatchingPhase::Generating(_)
                     | HatchingPhase::Review
                     | HatchingPhase::Importing
             ) {
-                session.phase = HatchingPhase::Brief;
+                session.phase = HatchingPhase::Prompts;
             }
         }
 
         assert!(session.prototype.is_none());
-        assert!(matches!(session.phase, HatchingPhase::Brief));
+        assert!(matches!(session.phase, HatchingPhase::Prompts));
     }
 
     #[test]
@@ -1101,6 +1556,9 @@ mod tests {
                 current: 0,
             }),
             rows: HashMap::new(),
+            prompt_drafts: Vec::new(),
+            runtime_feed: Vec::new(),
+            atlas_review: None,
             phase: HatchingPhase::Prototype,
             created_at: time::OffsetDateTime::now_utc(),
         };
@@ -1124,5 +1582,87 @@ mod tests {
 
         assert!(session.prototype.is_some());
         assert!(matches!(session.phase, HatchingPhase::Prototype));
+    }
+
+    #[tokio::test]
+    async fn accept_prototype_materializes_idle_frames() {
+        use crate::hatching::session::{ImageArtifact, ImageMetadata, PetBrief, SourceProvenance};
+        use image::{ImageBuffer, Rgba};
+        use std::collections::HashMap;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_home = temp_dir.path().join("runtime");
+        let workspace = temp_dir.path().join("workspace");
+        std::fs::create_dir_all(&runtime_home).unwrap();
+        std::fs::create_dir_all(&workspace).unwrap();
+        let source_path = runtime_home.join("generated_images/thread/ig_source.png");
+        std::fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        let output_path = workspace.join("artifacts/ig_source.png");
+        std::fs::create_dir_all(output_path.parent().unwrap()).unwrap();
+        let image = ImageBuffer::from_pixel(384, 416, Rgba([80u8, 120u8, 160u8, 255u8]));
+        image.save(&source_path).unwrap();
+        image.save(&output_path).unwrap();
+
+        let mut session = crate::hatching::session::HatchingSession {
+            id: Uuid::new_v4(),
+            runtime_home,
+            workspace: workspace.clone(),
+            codex_thread_id: None,
+            brief: Some(PetBrief {
+                display_name: "Moose".to_string(),
+                pet_id: "moose".to_string(),
+                description: "A good dog".to_string(),
+                personality: vec!["loyal".to_string()],
+                palette: None,
+                backstory: None,
+                speech_style: None,
+                behavioral_quirks: None,
+                visual_notes: None,
+            }),
+            archetype: None,
+            reference_image: None,
+            prototype: None,
+            rows: HashMap::new(),
+            prompt_drafts: Vec::new(),
+            runtime_feed: Vec::new(),
+            atlas_review: None,
+            phase: HatchingPhase::Prototype,
+            created_at: time::OffsetDateTime::now_utc(),
+        };
+        let iteration = PrototypeIteration {
+            n: 2,
+            revised_prompt: "base prompt".to_string(),
+            summary_of_changes: "smaller ears".to_string(),
+            user_feedback: None,
+            image: ImageArtifact {
+                source_path: source_path.clone(),
+                output_path,
+                source_provenance: SourceProvenance::BuiltInImagegen,
+                source_sha256: Some("source".to_string()),
+                output_sha256: "output".to_string(),
+                metadata: ImageMetadata {
+                    width: 384,
+                    height: 416,
+                    mode: "RGBA".to_string(),
+                    format: "PNG".to_string(),
+                },
+            },
+            generated_at: time::OffsetDateTime::now_utc(),
+        };
+
+        let row = super::materialize_prototype_as_idle_row(&mut session, &iteration)
+            .await
+            .unwrap();
+
+        assert_eq!(row.status, RowStatus::Ready);
+        assert_eq!(row.attempts, 2);
+        assert!(workspace.join("decoded/base.png").exists());
+        assert!(workspace.join("decoded/idle.png").exists());
+        for index in 0..crate::hatching::rows::frame_count(&RowKey::Idle) {
+            assert!(workspace
+                .join("frames/idle")
+                .join(format!("{index:02}.png"))
+                .exists());
+        }
     }
 }

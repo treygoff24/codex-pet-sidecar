@@ -7,9 +7,6 @@
 
 import type { PetAnimationState } from "./petAnimation";
 
-/**
- * Hatching session — owned by Rust backend, mutable across wizard steps.
- */
 export interface HatchingSession {
   id: string;
   runtimeHome: string;
@@ -20,25 +17,23 @@ export interface HatchingSession {
   referenceImage: ReferenceImage | null;
   prototype: PrototypeState | null;
   rows: Record<RowKey, RowState>;
+  promptDrafts: PromptDraft[];
+  runtimeFeed: RuntimeFeedEvent[];
+  atlasReview: AtlasReviewArtifact | null;
   phase: HatchingPhase;
   createdAt: string; // ISO 8601 timestamp
 }
 
-/**
- * Current phase of the hatching wizard.
- */
 export type HatchingPhase =
   | "inspiration"
   | "brief"
+  | "prompts"
   | "prototype"
   | { generating: GenerationProgress }
   | "review"
   | "importing"
   | { done: { petId: string } };
 
-/**
- * Pet brief containing user-provided metadata.
- */
 export interface PetBrief {
   displayName: string;
   petId: string;
@@ -51,18 +46,12 @@ export interface PetBrief {
   visualNotes: string | null;
 }
 
-/**
- * Color palette specification for the pet.
- */
 export interface PaletteSpec {
   primary: string;
   secondary: string;
   accent: string;
 }
 
-/**
- * Reference image uploaded by the user.
- */
 export interface ReferenceImage {
   id: string;
   path: string;
@@ -72,22 +61,13 @@ export interface ReferenceImage {
   describedAt: string | null; // ISO 8601 timestamp
 }
 
-/**
- * Status of reference image description generation.
- */
 export type ReferenceDescriptionStatus = "pending" | "ready" | "failed";
 
-/**
- * Prototype state with iteration history.
- */
 export interface PrototypeState {
   iterations: PrototypeIteration[];
   current: number;
 }
 
-/**
- * Single prototype iteration.
- */
 export interface PrototypeIteration {
   n: number;
   revisedPrompt: string;
@@ -97,14 +77,8 @@ export interface PrototypeIteration {
   generatedAt: string; // ISO 8601 timestamp
 }
 
-/**
- * Animation row keys for the pet spritesheet.
- */
 export type RowKey = PetAnimationState;
 
-/**
- * State of a single animation row.
- */
 export interface RowState {
   prompt: string;
   image: ImageArtifact | null;
@@ -115,31 +89,19 @@ export interface RowState {
   status: RowStatus;
 }
 
-/**
- * Status of row generation.
- */
 export type RowStatus = "pending" | "generating" | "ready" | "failed";
 
-/**
- * Image artifact with provenance tracking.
- */
 export interface ImageArtifact {
   sourcePath: string;
   outputPath: string;
   sourceProvenance: SourceProvenance;
-  sourceSha256: string;
+  sourceSha256: string | null;
   outputSha256: string;
   metadata: ImageMetadata;
 }
 
-/**
- * Provenance of the image source.
- */
 export type SourceProvenance = "built-in-imagegen" | "deterministic-mirror" | "synthetic-test";
 
-/**
- * Image metadata.
- */
 export interface ImageMetadata {
   width: number;
   height: number;
@@ -147,18 +109,12 @@ export interface ImageMetadata {
   format: string;
 }
 
-/**
- * Mirror decision for running-left derivation.
- */
 export interface MirrorDecision {
   approved: boolean;
   reason: string;
   decidedAt: string; // ISO 8601 timestamp
 }
 
-/**
- * Progress of row generation.
- */
 export interface GenerationProgress {
   rowsCompleted: number;
   rowsTotal: number;
@@ -166,9 +122,34 @@ export interface GenerationProgress {
   totalImagegenCalls: number;
 }
 
-/**
- * Summary of an orphan (interrupted) hatching session.
- */
+export interface PromptDraft {
+  rowKey: RowKey;
+  label: string;
+  prompt: string;
+  derivedFrom: RowKey | null;
+  editable: boolean;
+}
+
+export interface RuntimeFeedEvent {
+  id: string;
+  at: string; // ISO 8601 timestamp
+  tone: "ok" | "work" | "info" | "warn" | "error";
+  message: string;
+}
+
+export interface AtlasReviewArtifact {
+  atlasPath: string;
+  validationPath: string | null;
+  checks: AtlasReviewCheck[];
+  composedAt: string; // ISO 8601 timestamp
+}
+
+export interface AtlasReviewCheck {
+  label: string;
+  ok: boolean;
+  detail: string | null;
+}
+
 export interface OrphanSummary {
   sessionId: string;
   displayName: string | null;
@@ -181,22 +162,27 @@ export interface BriefSubmitOutcome {
   requiresConfirmation: boolean;
 }
 
+export interface PetIdPreview {
+  petId: string;
+  available: boolean;
+  suggestion: string | null;
+}
+
 export type HatchingAtlasReviewRow = {
   key: RowKey;
   label: string;
-  description: string;
 };
 
 export const HATCHING_ROW_LABELS = {
-  idle: { label: "Idle", description: "Standing still" },
-  "running-right": { label: "Running Right", description: "Moving right" },
-  "running-left": { label: "Running Left", description: "Moving left (mirrored)" },
-  waving: { label: "Waving", description: "Greeting animation" },
-  jumping: { label: "Jumping", description: "Jumping animation" },
-  failed: { label: "Failed", description: "Error state" },
-  waiting: { label: "Waiting", description: "Waiting state" },
-  running: { label: "Running", description: "General running" },
-  review: { label: "Review", description: "Review state" },
+  idle: { label: "Idle" },
+  "running-right": { label: "Running Right" },
+  "running-left": { label: "Running Left" },
+  waving: { label: "Waving" },
+  jumping: { label: "Jumping" },
+  failed: { label: "Failed" },
+  waiting: { label: "Waiting" },
+  running: { label: "Running" },
+  review: { label: "Review" },
 } as const satisfies Record<RowKey, Omit<HatchingAtlasReviewRow, "key">>;
 
 export const HATCHING_ATLAS_REVIEW_ROW_KEYS = [
@@ -208,6 +194,7 @@ export const HATCHING_ATLAS_REVIEW_ROW_KEYS = [
   "failed",
   "waiting",
   "running",
+  "review",
 ] as const satisfies readonly RowKey[];
 
 export const HATCHING_ATLAS_REVIEW_ROWS = HATCHING_ATLAS_REVIEW_ROW_KEYS.map((key) => ({
@@ -215,22 +202,20 @@ export const HATCHING_ATLAS_REVIEW_ROWS = HATCHING_ATLAS_REVIEW_ROW_KEYS.map((ke
   ...HATCHING_ROW_LABELS[key],
 })) satisfies readonly HatchingAtlasReviewRow[];
 
-/**
- * Helper to check if a phase is a specific type.
- */
 export function isPhaseGenerating(
   phase: HatchingPhase,
 ): phase is { generating: GenerationProgress } {
   return typeof phase === "object" && "generating" in phase;
 }
 
+export function getGeneratingProgress(phase: HatchingPhase): GenerationProgress | null {
+  return isPhaseGenerating(phase) ? phase.generating : null;
+}
+
 export function isPhaseDone(phase: HatchingPhase): phase is { done: { petId: string } } {
   return typeof phase === "object" && "done" in phase;
 }
 
-/**
- * Helper to get a display-friendly phase name.
- */
 export function getPhaseDisplayName(phase: HatchingPhase): string {
   if (typeof phase === "string") {
     return phase;

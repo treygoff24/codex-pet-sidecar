@@ -27,10 +27,10 @@
       {
         "label": "hatching-wizard",
         "title": "Hatch a pet",
-        "width": 960,
-        "height": 720,
-        "minWidth": 800,
-        "minHeight": 600,
+        "width": 1160,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 760,
         "decorations": true,
         "resizable": true,
         "transparent": false,
@@ -46,7 +46,9 @@
         "scope": [
           "../assets/pets/**",
           "$APPDATA/Codex Pet Sidecar/pets/**",
-          "$HOME/Library/Application Support/Codex Pet Sidecar/pets/**"
+          "$HOME/Library/Application Support/Codex Pet Sidecar/pets/**",
+          "$APPDATA/Codex Pet Sidecar/hatching-workspace/**",
+          "$HOME/Library/Application Support/Codex Pet Sidecar/hatching-workspace/**"
         ]
       },
       "csp": null

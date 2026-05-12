@@ -1,263 +1,169 @@
 import { useState } from "react";
-
-interface Archetype {
-  id: string;
-  name: string;
-  description: string;
-  personality: string[];
-  colorScheme: {
-    primary: string;
-    secondary: string;
-    accent: string;
-  };
-}
+import type { OrphanSummary, ReferenceImage } from "../../domain/hatching";
+import { getPhaseDisplayName } from "../../domain/hatching";
+import { fileNameFromPath, referenceDescriptionLabel } from "../../domain/referenceImage";
+import { HATCHING_ARCHETYPES, type Archetype } from "./archetypes";
 
 interface HatchingInspirationProps {
   onSkip: () => void;
   onSelectArchetype: (archetypeId: string) => void;
+  onChooseReference?: () => void;
+  onResumeSession?: (sessionId: string) => void;
+  referenceImage?: ReferenceImage | null;
+  resumeSessions?: OrphanSummary[];
+  isLibraryFull?: boolean;
   isLoading?: boolean;
 }
 
-// Sample archetypes - in production these would come from the backend
-const SAMPLE_ARCHETYPES: Archetype[] = [
-  {
-    id: "curious-explorer",
-    name: "Curious Explorer",
-    description: "Always learning, asking questions, and discovering new things.",
-    personality: ["curious", "inquisitive", "adventurous"],
-    colorScheme: {
-      primary: "#4A90D9",
-      secondary: "#7FB3E8",
-      accent: "#F5A623",
-    },
-  },
-  {
-    id: "gentle-companion",
-    name: "Gentle Companion",
-    description: "Warm, supportive, and always there when you need comfort.",
-    personality: ["gentle", "supportive", "empathetic"],
-    colorScheme: {
-      primary: "#7B68EE",
-      secondary: "#9B8BEE",
-      accent: "#FFB6C1",
-    },
-  },
-  {
-    id: "playful-trickster",
-    name: "Playful Trickster",
-    description: "Mischievous, fun-loving, and full of surprises.",
-    personality: ["playful", "mischievous", "energetic"],
-    colorScheme: {
-      primary: "#FF6B6B",
-      secondary: "#FF8E8E",
-      accent: "#FFE66D",
-    },
-  },
-  {
-    id: "wise-mentor",
-    name: "Wise Mentor",
-    description: "Knowledgeable, patient, and full of sage advice.",
-    personality: ["wise", "patient", "thoughtful"],
-    colorScheme: {
-      primary: "#50C878",
-      secondary: "#7ED8A0",
-      accent: "#DDA0DD",
-    },
-  },
-  {
-    id: "creative-muse",
-    name: "Creative Muse",
-    description: "Inspiring, imaginative, and full of artistic ideas.",
-    personality: ["creative", "imaginative", "inspiring"],
-    colorScheme: {
-      primary: "#9B59B6",
-      secondary: "#B98BC7",
-      accent: "#F39C12",
-    },
-  },
-];
+function formatDate(isoString: string): string {
+  return new Date(isoString).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export function HatchingInspiration({
   onSkip,
   onSelectArchetype,
+  onChooseReference,
+  onResumeSession,
+  referenceImage = null,
+  resumeSessions = [],
+  isLibraryFull = false,
   isLoading = false,
 }: HatchingInspirationProps) {
   const [selectedArchetype, setSelectedArchetype] = useState<Archetype | null>(null);
-  const [filter, setFilter] = useState<"all" | "friendly" | "energetic" | "calm">("all");
-
-  const filteredArchetypes =
-    filter === "all"
-      ? SAMPLE_ARCHETYPES
-      : SAMPLE_ARCHETYPES.filter((archetype) => {
-          if (filter === "friendly") {
-            return (
-              archetype.personality.includes("gentle") ||
-              archetype.personality.includes("supportive")
-            );
-          }
-          if (filter === "energetic") {
-            return (
-              archetype.personality.includes("playful") ||
-              archetype.personality.includes("energetic")
-            );
-          }
-          if (filter === "calm") {
-            return (
-              archetype.personality.includes("wise") || archetype.personality.includes("patient")
-            );
-          }
-          return true;
-        });
-
-  const handleSelectArchetype = (archetype: Archetype) => {
-    setSelectedArchetype(archetype);
-  };
-
-  const handleConfirm = () => {
-    if (selectedArchetype) {
-      onSelectArchetype(selectedArchetype.id);
-    }
-  };
+  const referenceFileName = referenceImage ? fileNameFromPath(referenceImage.path) : null;
+  const referenceStatus = referenceImage ? referenceDescriptionLabel(referenceImage) : null;
 
   return (
     <div className="hatching-inspiration">
       <div className="hatching-inspiration__header">
-        <h3 className="hatching-inspiration__title">Choose Your Inspiration</h3>
+        <h1 className="hatching-inspiration__title">
+          Where should we <em>start?</em>
+        </h1>
         <p className="hatching-inspiration__description">
-          Browse archetypes to get started, or skip to create from scratch.
+          Pick a vibe to start from, add a visual reference, or start completely blank. These
+          pre-fill the brief; they do not lock you in.
         </p>
       </div>
 
-      {/* Filter Tabs */}
-      <div
-        className="hatching-inspiration__filters"
-        role="tablist"
-        aria-label="Filter archetypes by personality"
-      >
-        <button
-          type="button"
-          className={`hatching-inspiration__filter ${
-            filter === "all" ? "hatching-inspiration__filter--active" : ""
-          }`}
-          onClick={() => setFilter("all")}
-          disabled={isLoading}
-          role="tab"
-          aria-selected={filter === "all"}
-          aria-controls="archetype-grid"
-        >
-          All
-        </button>
-        <button
-          type="button"
-          className={`hatching-inspiration__filter ${
-            filter === "friendly" ? "hatching-inspiration__filter--active" : ""
-          }`}
-          onClick={() => setFilter("friendly")}
-          disabled={isLoading}
-          role="tab"
-          aria-selected={filter === "friendly"}
-          aria-controls="archetype-grid"
-        >
-          Friendly
-        </button>
-        <button
-          type="button"
-          className={`hatching-inspiration__filter ${
-            filter === "energetic" ? "hatching-inspiration__filter--active" : ""
-          }`}
-          onClick={() => setFilter("energetic")}
-          disabled={isLoading}
-          role="tab"
-          aria-selected={filter === "energetic"}
-          aria-controls="archetype-grid"
-        >
-          Energetic
-        </button>
-        <button
-          type="button"
-          className={`hatching-inspiration__filter ${
-            filter === "calm" ? "hatching-inspiration__filter--active" : ""
-          }`}
-          onClick={() => setFilter("calm")}
-          disabled={isLoading}
-          role="tab"
-          aria-selected={filter === "calm"}
-          aria-controls="archetype-grid"
-        >
-          Calm
-        </button>
-      </div>
+      {isLibraryFull ? (
+        <div className="hatching-inspiration__library-full" role="alert">
+          <strong>Pet Library is Full</strong>
+          <span>Archive an existing pet in settings before hatching another.</span>
+        </div>
+      ) : null}
 
-      {/* Archetype Grid */}
-      <div
-        id="archetype-grid"
-        className="hatching-inspiration__grid"
-        role="tabpanel"
-        aria-label={`Archetypes: ${filter} personalities`}
-      >
-        {filteredArchetypes.map((archetype) => (
+      {resumeSessions.length > 0 && onResumeSession ? (
+        <section className="hatching-inspiration__resume" aria-label="Interrupted hatches">
+          <strong>Resume an interrupted hatch</strong>
+          <div className="hatching-inspiration__resume-list">
+            {resumeSessions.map((session) => (
+              <button
+                key={session.sessionId}
+                type="button"
+                onClick={() => onResumeSession(session.sessionId)}
+                disabled={isLoading}
+              >
+                <span>{session.displayName ?? "Unnamed pet"}</span>
+                <small>
+                  {getPhaseDisplayName(session.phase)} · {formatDate(session.createdAt)}
+                </small>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="hatching-inspiration__grid" aria-label="Pet archetypes">
+        {HATCHING_ARCHETYPES.map((archetype) => (
           <button
             key={archetype.id}
             type="button"
             className={`hatching-inspiration__card ${
               selectedArchetype?.id === archetype.id ? "hatching-inspiration__card--selected" : ""
             }`}
-            onClick={() => handleSelectArchetype(archetype)}
-            disabled={isLoading}
+            onClick={() => setSelectedArchetype(archetype)}
+            disabled={isLoading || isLibraryFull}
             aria-pressed={selectedArchetype?.id === archetype.id}
             style={
               {
-                "--archetype-primary": archetype.colorScheme.primary,
-                "--archetype-secondary": archetype.colorScheme.secondary,
+                "--archetype-primary": archetype.palette.primary,
+                "--archetype-secondary": archetype.palette.secondary,
               } as React.CSSProperties
             }
           >
-            <div
-              className="hatching-inspiration__card-preview"
-              style={{
-                background: `linear-gradient(135deg, ${archetype.colorScheme.primary} 0%, ${archetype.colorScheme.secondary} 100%)`,
-              }}
-            >
-              <div className="hatching-inspiration__card-icon">{archetype.name.charAt(0)}</div>
-            </div>
-            <div className="hatching-inspiration__card-content">
-              <div className="hatching-inspiration__card-name">{archetype.name}</div>
-              <div className="hatching-inspiration__card-description">{archetype.description}</div>
-              <div className="hatching-inspiration__card-tags">
-                {archetype.personality.map((trait) => (
-                  <span key={trait} className="hatching-inspiration__card-tag">
-                    {trait}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <img
+              className="hatching-inspiration__thumbnail"
+              src={archetype.thumbnail}
+              alt=""
+              width={96}
+              height={104}
+              aria-hidden="true"
+            />
+            <span className="hatching-inspiration__card-name">{archetype.name}</span>
+            <span className="hatching-inspiration__card-description">{archetype.descriptor}</span>
+            <span className="hatching-inspiration__card-tags" aria-hidden="true">
+              {archetype.chips.map((chip) => (
+                <span key={chip} className="hatching-inspiration__card-tag">
+                  {chip}
+                </span>
+              ))}
+            </span>
           </button>
         ))}
       </div>
 
-      {/* Actions */}
+      <div className="hatching-inspiration__divider">and / or</div>
+
+      <button
+        type="button"
+        className={`hatching-reference-pill ${
+          referenceImage ? "hatching-reference-pill--attached" : ""
+        }`}
+        onClick={onChooseReference}
+        disabled={isLoading || isLibraryFull || !onChooseReference}
+        aria-label="Choose a visual reference image"
+      >
+        <span className="hatching-reference-pill__art" aria-hidden="true" />
+        <span className="hatching-reference-pill__copy">
+          <strong>Visual reference</strong>
+          <span>
+            {referenceFileName && referenceStatus
+              ? `${referenceFileName} · ${referenceStatus}`
+              : "Drop an image or click to browse. Used as inspiration for the base sprite."}
+          </span>
+        </span>
+        <span className="hatching-reference-pill__action">
+          {referenceImage ? "Replace" : "Browse"}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        className="hatching-inspiration__blank-link"
+        onClick={onSkip}
+        disabled={isLoading || isLibraryFull}
+        aria-label="Start from a blank brief"
+      >
+        <span className="hatching-inspiration__blank-kicker">No preset needed</span>
+        <span className="hatching-inspiration__blank-title">Start from a blank brief</span>
+        <span className="hatching-inspiration__blank-copy">
+          Skip the vibe cards and write the pet yourself.
+        </span>
+      </button>
+
       <div className="hatching-inspiration__actions">
         <button
           type="button"
-          className="hatching-inspiration__button hatching-inspiration__button--secondary"
-          onClick={onSkip}
-          disabled={isLoading}
-          aria-label="Skip archetype selection"
-        >
-          Skip & Create from Scratch
-        </button>
-        <button
-          type="button"
           className="hatching-inspiration__button hatching-inspiration__button--primary"
-          onClick={handleConfirm}
-          disabled={!selectedArchetype || isLoading}
-          aria-label={
-            selectedArchetype
-              ? `Use ${selectedArchetype.name} archetype`
-              : "Select an archetype to continue"
-          }
+          onClick={() => selectedArchetype && onSelectArchetype(selectedArchetype.id)}
+          disabled={!selectedArchetype || isLoading || isLibraryFull}
         >
-          {isLoading ? "Loading..." : "Continue with Archetype"}
+          {selectedArchetype ? "Continue with this →" : "Choose a starting point"}
         </button>
       </div>
     </div>

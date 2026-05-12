@@ -5,6 +5,8 @@ import type {
   HatchingSession,
   OrphanSummary,
   PetBrief,
+  PetIdPreview,
+  PromptDraft,
   ReferenceImage,
   PrototypeIteration,
   RowKey,
@@ -52,6 +54,22 @@ export const hatchingBridge = {
   ): Promise<BriefSubmitOutcome> =>
     invoke<BriefSubmitOutcome>("submit_brief", { sessionId, brief, archetypeId, referenceImageId }),
 
+  /** Confirm a brief change that invalidates existing prototype iterations. */
+  confirmBriefChange: (
+    sessionId: string,
+    brief: PetBrief,
+    archetypeId: string | null,
+  ): Promise<BriefSubmitOutcome> =>
+    invoke<BriefSubmitOutcome>("confirm_brief_change", { sessionId, brief, archetypeId }),
+
+  /** Draft/editable animation prompts before the prototype gate. */
+  draftPromptReview: (sessionId: string): Promise<PromptDraft[]> =>
+    invoke<PromptDraft[]>("draft_prompt_review", { sessionId }),
+
+  /** Persist reviewed animation prompts and move to prototype generation. */
+  savePromptDrafts: (sessionId: string, drafts: PromptDraft[]): Promise<void> =>
+    invoke<void>("save_prompt_drafts", { sessionId, drafts }),
+
   /** Upload and validate a reference image for a hatching session. */
   uploadReferenceImage: (sessionId: string, localPath: string): Promise<ReferenceImage> =>
     invoke<ReferenceImage>("upload_reference_image", { sessionId, localPath }),
@@ -59,6 +77,10 @@ export const hatchingBridge = {
   /** Returns interrupted sessions eligible for the resume banner. */
   listOrphanHatchingSessions: (): Promise<OrphanSummary[]> =>
     invoke<OrphanSummary[]>("list_orphan_hatching_sessions"),
+
+  /** Reattach to an interrupted hatching session and show the wizard window. */
+  resumeHatchingRun: (sessionId: string): Promise<HatchingSession> =>
+    invoke<HatchingSession>("resume_hatching_run", { sessionId }),
 
   /** Describe a reference image using vision AI. */
   describeReferenceImage: (sessionId: string, referenceImageId: string): Promise<string> =>
@@ -84,8 +106,12 @@ export const hatchingBridge = {
   importHatchedPet: (sessionId: string, activate: boolean): Promise<string> =>
     invoke<string>("import_hatched_pet", { sessionId, activate }),
 
-  /** Archive a hatching session. */
-  archivePet: (sessionId: string): Promise<void> => invoke<void>("archive_pet", { sessionId }),
+  /** Preview normalized pet ID availability for a display name. */
+  previewPetId: (displayName: string): Promise<PetIdPreview> =>
+    invoke<PetIdPreview>("preview_pet_id", { displayName }),
+
+  /** Archive an installed pet package. */
+  archivePet: (petId: string): Promise<void> => invoke<void>("archive_pet", { petId }),
 
   /** Pick a reference image file from disk. */
   pickReferenceImage: (opts?: { defaultPath?: string }): Promise<string | null> =>

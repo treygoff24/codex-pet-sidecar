@@ -1,35 +1,18 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { PetLibrary } from "./domain/petLibrary";
 import { isTuckActive, type InstalledPet, type PetConfig } from "./domain/petConfig";
+import { formatError } from "./domain/errors";
 import type { ApprovalAction } from "./domain/runtimeEvents";
 import { INITIAL_RUNTIME_STATE, reduceRuntime } from "./domain/runtimeState";
+import { hatchingBridge } from "./hatchingBridge";
 import { useOfficialUpdater } from "./hooks/useOfficialUpdater";
 import { useRuntimeRestart } from "./hooks/useRuntimeRestart";
-import { runtimeBridge, type SkillPrompt } from "./runtimeBridge";
+import { runtimeBridge } from "./runtimeBridge";
 import { OnboardingFlow } from "./ui/OnboardingFlow";
 import { PetPicker } from "./ui/PetPicker";
 import { PetWindow } from "./ui/PetWindow";
+import { ResumeBanner } from "./ui/hatching/ResumeBanner";
 import "./styles.css";
-
-function hasStringMessage(value: unknown): value is { message: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "message" in value &&
-    typeof value.message === "string"
-  );
-}
-
-function formatError(caught: unknown): string {
-  if (caught instanceof Error) return caught.message;
-  if (typeof caught === "string") return caught;
-  if (hasStringMessage(caught)) return caught.message;
-  try {
-    return JSON.stringify(caught);
-  } catch {
-    return "Unknown error";
-  }
-}
 
 function App() {
   const [library, setLibrary] = useState<PetLibrary>();
@@ -165,11 +148,6 @@ function App() {
     }
   }
 
-  async function showSkillPrompt(loader: () => Promise<SkillPrompt>) {
-    const prompt = await loader();
-    dispatch({ type: "SKILL_PROMPT_SHOWN", skill: prompt.skill, prompt: prompt.prompt });
-  }
-
   async function respond(action: ApprovalAction) {
     if (!runtime.approval) return;
     await runtimeBridge.respondToApproval(runtime.approval.requestId, action);
@@ -200,12 +178,39 @@ function App() {
     }
   }
 
+  async function handleStartHatching() {
+    dispatch({ type: "ERROR_CLEARED" });
+    try {
+      if (config && !isTuckActive(config.tuck)) {
+        await runtimeBridge.tuckPet(null);
+        dispatch({ type: "RESET" });
+        const nextConfig = { ...config, tuck: { tucked: true } };
+        setConfig(nextConfig);
+        setAppliedConfig(nextConfig);
+        await runtimeBridge.tuckWindowToTab();
+      }
+      await runtimeBridge.showHatchingWizardWindow();
+    } catch (caught) {
+      dispatch({ type: "EXTERNAL_ERROR", message: formatError(caught) });
+    }
+  }
+
+  async function handleArchivePet(petId: string) {
+    dispatch({ type: "ERROR_CLEARED" });
+    try {
+      await hatchingBridge.archivePet(petId);
+      await refreshState();
+    } catch (caught) {
+      dispatch({ type: "EXTERNAL_ERROR", message: formatError(caught) });
+    }
+  }
+
   if (!library || !config) {
     if (pets.length > 0) return <PetPicker pets={pets} onPick={(pet) => void switchPet(pet.id)} />;
     return (
       <OnboardingFlow
         onUseOlive={() => void refreshState()}
-        onHatch={() => void showSkillPrompt(runtimeBridge.startHatchingFlow)}
+        onHatch={() => void handleStartHatching()}
         onImport={() => void handleImportPet()}
         skillPrompt={runtime.lastReply || undefined}
       />
@@ -213,29 +218,38 @@ function App() {
   }
 
   return (
-    <PetWindow
-      config={config}
-      tucked={isTuckActive(config.tuck)}
-      pet={selectedPet}
-      streamingText={runtime.streamingText}
-      lastReply={runtime.lastReply}
-      awaitingReply={runtime.awaitingReply}
-      transcript={runtime.transcript}
-      completedOutputCount={runtime.completedOutputCount}
-      approval={runtime.approval}
-      error={runtime.error}
-      onSend={sendMessage}
-      onSendStart={() => dispatch({ type: "SEND_START" })}
-      onMute={mute}
-      onTuck={() => void tuck()}
-      onWake={() => void wake()}
-      onConfigChange={updateConfig}
-      onApproval={respond}
-      onStartDrag={runtimeBridge.startWindowDrag}
-      updateState={updater.state}
-      onCheckForUpdate={() => void updater.checkForUpdates()}
-      onInstallUpdate={() => void updater.installUpdate()}
-    />
+    <>
+      <ResumeBanner />
+      <PetWindow
+        config={config}
+        tucked={isTuckActive(config.tuck)}
+        pet={selectedPet}
+        streamingText={runtime.streamingText}
+        lastReply={runtime.lastReply}
+        awaitingReply={runtime.awaitingReply}
+        transcript={runtime.transcript}
+        completedOutputCount={runtime.completedOutputCount}
+        approval={runtime.approval}
+        error={runtime.error}
+        onSend={sendMessage}
+        onSendStart={() => dispatch({ type: "SEND_START" })}
+        library={library}
+        pets={pets}
+        onSwitchPet={(petId) => void switchPet(petId)}
+        onHatchPet={() => void handleStartHatching()}
+        onImportPet={() => void handleImportPet()}
+        onArchivePet={(petId) => void handleArchivePet(petId)}
+        onMute={mute}
+        onTuck={() => void tuck()}
+        onWake={() => void wake()}
+        onConfigChange={updateConfig}
+        onApproval={respond}
+        onStartDrag={runtimeBridge.startWindowDrag}
+        updateState={updater.state}
+        onCheckForUpdate={() => void updater.checkForUpdates()}
+        onInstallUpdate={() => void updater.installUpdate()}
+      />
+    </>
   );
 }
 

@@ -1,123 +1,246 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { PrototypeState, ReferenceImage } from "../../domain/hatching";
+import { runtimeBridge } from "../../runtimeBridge";
+
+// Nudge user to settle (pick closest version) on iter 4, 7, 10, ...
+const FATIGUE_NUDGE_FIRST_ITERATION = 4;
+const FATIGUE_NUDGE_CADENCE = 3;
+
+function shouldShowFatigueNudge(iterationN: number): boolean {
+  if (iterationN < FATIGUE_NUDGE_FIRST_ITERATION) return false;
+  return (iterationN - FATIGUE_NUDGE_FIRST_ITERATION) % FATIGUE_NUDGE_CADENCE === 0;
+}
+
+function generateButtonLabel({
+  isLoading,
+  hasIteration,
+  hasPendingFeedback,
+}: {
+  isLoading: boolean;
+  hasIteration: boolean;
+  hasPendingFeedback: boolean;
+}): string {
+  if (isLoading) return hasIteration ? "Generating revision..." : "Generating...";
+  if (!hasIteration) return "Generate prototype";
+  if (hasPendingFeedback) return "Generate revised prototype →";
+  return "Try another version";
+}
 
 interface HatchingPrototypeProps {
-  onGeneratePrototype: (feedback?: string) => void;
+  prototype?: PrototypeState | null;
+  referenceImage?: ReferenceImage | null;
+  onGeneratePrototype: (feedback: string | null) => void;
   onAcceptPrototype: () => void;
+  onRevertToIteration?: (n: number) => void;
   isLoading?: boolean;
   error?: string | null;
 }
 
+function rewriteErrorCopy(error: string): string {
+  return error.includes("RewriteFailed") || error.includes("prototype prompt rewrite failed")
+    ? "The model could not return a valid prompt rewrite. Try shorter, more concrete feedback."
+    : error;
+}
+
 export function HatchingPrototype({
+  prototype = null,
+  referenceImage = null,
   onGeneratePrototype,
   onAcceptPrototype,
+  onRevertToIteration,
   isLoading = false,
   error = null,
 }: HatchingPrototypeProps) {
   const [feedback, setFeedback] = useState("");
-  const [showFeedback, setShowFeedback] = useState(false);
+  const current = prototype?.iterations[prototype.current] ?? null;
+  const [promptDraft, setPromptDraft] = useState(current?.revisedPrompt ?? "");
+  const [pendingRevisionFor, setPendingRevisionFor] = useState<number | null>(null);
+  const referencePending = referenceImage?.descriptionStatus === "pending";
 
-  const handleGenerate = () => {
-    onGeneratePrototype(showFeedback ? feedback : undefined);
+  useEffect(() => {
+    setPromptDraft(current?.revisedPrompt ?? "");
+  }, [current?.revisedPrompt]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (pendingRevisionFor === null) return;
+    if (!current || current.n >= pendingRevisionFor || error) {
+      setPendingRevisionFor(null);
+    }
+  }, [current, error, isLoading, pendingRevisionFor]);
+
+  const previewUrl = useMemo(
+    () => (current ? runtimeBridge.petAssetUrl(current.image.outputPath) : null),
+    [current],
+  );
+
+  function generate() {
+    const editedPrompt =
+      promptDraft.trim() && promptDraft !== current?.revisedPrompt ? promptDraft : null;
+    setPendingRevisionFor((current?.n ?? 0) + 1);
+    onGeneratePrototype(editedPrompt ?? (feedback.trim() || null));
     setFeedback("");
-    setShowFeedback(false);
-  };
+  }
 
-  const handleAccept = () => {
-    onAcceptPrototype();
-  };
+  function clearFeedback() {
+    setFeedback("");
+    setPromptDraft(current?.revisedPrompt ?? "");
+  }
+
+  const showFatigueNudge = current ? shouldShowFatigueNudge(current.n) : false;
+  const hasPendingFeedback =
+    Boolean(feedback.trim()) || (current ? promptDraft !== current.revisedPrompt : false);
+  const generateLabel = generateButtonLabel({
+    isLoading,
+    hasIteration: Boolean(current),
+    hasPendingFeedback,
+  });
+  const isRevisionLoading = Boolean(current && isLoading && pendingRevisionFor !== null);
 
   return (
     <div className="hatching-prototype">
       <div className="hatching-prototype__header">
         <h3 className="hatching-prototype__title">Prototype Your Pet</h3>
         <p className="hatching-prototype__description">
-          Generate and refine your pet's appearance. Iteration history is preserved.
+          Generate a base identity sprite, then iterate with plain-language feedback.
         </p>
       </div>
 
-      {/* Placeholder for prototype image */}
-      <div className="hatching-prototype__preview">
-        <div className="hatching-prototype__placeholder">
-          <div className="hatching-prototype__placeholder-icon">🎨</div>
-          <div className="hatching-prototype__placeholder-text">
-            Prototype generation will be available in the next update
-          </div>
-          <div className="hatching-prototype__placeholder-hint">
-            This feature requires Codex imagegen integration
+      {showFatigueNudge ? (
+        <div className="hatching-prototype__nudge" role="status">
+          If this is getting fiddly, pick the closest version and refine the full atlas later.
+        </div>
+      ) : null}
+
+      {isRevisionLoading ? (
+        <div className="hatching-prototype__revision-status" role="status" aria-live="polite">
+          <div className="hatching-prototype__revision-orb" aria-hidden="true" />
+          <div>
+            <strong>Generating revised prototype #{pendingRevisionFor}...</strong>
+            <span>
+              Keeping you on this screen until the new image is ready. Imagegen can take a few
+              minutes.
+            </span>
           </div>
         </div>
-      </div>
+      ) : null}
 
-      {/* Feedback Section */}
-      <div className="hatching-prototype__feedback">
-        <button
-          type="button"
-          className="hatching-prototype__toggle"
-          onClick={() => setShowFeedback(!showFeedback)}
-          disabled={isLoading}
-          aria-expanded={showFeedback}
-          aria-controls="feedback-section"
-        >
-          {showFeedback ? "Hide" : "Show"} Feedback Options
-        </button>
-
-        {showFeedback && (
-          <div id="feedback-section" className="hatching-prototype__feedback-content">
-            <label htmlFor="feedback" className="hatching-prototype__label">
-              What would you like to change?
-            </label>
-            <textarea
-              id="feedback"
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              disabled={isLoading}
-              className="hatching-prototype__textarea"
-              placeholder="Describe changes to the pet's appearance, style, or any specific features..."
-              rows={3}
-            />
+      <div className="hatching-prototype__preview" style={{ imageRendering: "pixelated" }}>
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt="Current prototype"
+            width={192}
+            height={208}
+            onError={() =>
+              console.error("[hatching][prototype] preview load failed", current?.image.outputPath)
+            }
+          />
+        ) : isLoading ? (
+          <div className="hatching-prototype__placeholder" role="status">
+            Generating the first prototype...
           </div>
+        ) : (
+          <div className="hatching-prototype__placeholder">No prototype generated yet.</div>
         )}
       </div>
 
-      {/* Error State */}
-      {error && (
-        <div className="hatching-prototype__error" role="alert" aria-live="assertive">
-          {error}
+      {prototype?.iterations.length ? (
+        <div className="hatching-prototype__history" aria-label="Prototype history">
+          {prototype.iterations.map((iteration) => (
+            <button
+              key={iteration.n}
+              type="button"
+              className={
+                iteration.n === current?.n ? "hatching-prototype__history-item--current" : ""
+              }
+              onClick={() => {
+                if (iteration.n !== current?.n) onRevertToIteration?.(iteration.n);
+              }}
+              disabled={isLoading}
+              aria-current={iteration.n === current?.n ? "true" : undefined}
+              aria-label={
+                iteration.n === current?.n
+                  ? `Current prototype iteration ${iteration.n}`
+                  : `Revert to iteration ${iteration.n}`
+              }
+            >
+              <img
+                src={runtimeBridge.petAssetUrl(iteration.image.outputPath)}
+                alt=""
+                width={48}
+                height={52}
+                aria-hidden="true"
+                onError={() =>
+                  console.error(
+                    "[hatching][prototype] history thumb load failed",
+                    iteration.image.outputPath,
+                  )
+                }
+              />
+              <span>#{iteration.n}</span>
+              {iteration.n === current?.n ? <strong>Current</strong> : null}
+            </button>
+          ))}
         </div>
-      )}
+      ) : null}
 
-      {/* Actions */}
+      <label htmlFor="prototype-feedback">Feedback for the next try</label>
+      <textarea
+        id="prototype-feedback"
+        value={feedback}
+        onChange={(event) => setFeedback(event.target.value)}
+        placeholder="Make the silhouette rounder, add amber eyes, reduce accessories..."
+        rows={3}
+        disabled={isLoading}
+      />
+
+      {hasPendingFeedback ? (
+        <div className="hatching-prototype__pending-feedback" role="status">
+          <span>
+            You have revision notes pending. Generate the revised prototype before moving on, or
+            clear the notes to accept the current image.
+          </span>
+          <button type="button" onClick={clearFeedback} disabled={isLoading}>
+            Clear notes
+          </button>
+        </div>
+      ) : null}
+
+      {current ? (
+        <details className="hatching-prototype__prompt">
+          <summary>See revised prompt</summary>
+          <p>Your edits guide the next revision; the model may further refine.</p>
+          <textarea
+            aria-label="Revised prompt"
+            value={promptDraft}
+            onChange={(event) => setPromptDraft(event.target.value)}
+            rows={6}
+            disabled={isLoading}
+          />
+          {current.summaryOfChanges ? <p>{current.summaryOfChanges}</p> : null}
+        </details>
+      ) : null}
+
+      {referencePending ? <p role="status">Waiting for reference description...</p> : null}
+
+      {error ? (
+        <div className="hatching-prototype__error" role="alert" aria-live="assertive">
+          {rewriteErrorCopy(error)}
+        </div>
+      ) : null}
+
       <div className="hatching-prototype__actions">
+        <button type="button" onClick={generate} disabled={isLoading || referencePending}>
+          {generateLabel}
+        </button>
         <button
           type="button"
-          className="hatching-prototype__button hatching-prototype__button--secondary"
-          onClick={handleGenerate}
-          disabled={isLoading}
-          aria-label="Generate new prototype"
+          onClick={onAcceptPrototype}
+          disabled={isLoading || !current || hasPendingFeedback}
         >
-          {isLoading ? "Generating..." : "Generate Prototype"}
+          Accept · generate the rest →
         </button>
-
-        <button
-          type="button"
-          className="hatching-prototype__button hatching-prototype__button--primary"
-          onClick={handleAccept}
-          disabled={isLoading}
-          aria-label="Accept current prototype and continue"
-        >
-          {isLoading ? "Saving..." : "Accept & Continue"}
-        </button>
-      </div>
-
-      {/* Info Section */}
-      <div className="hatching-prototype__info">
-        <p className="hatching-prototype__info-text">
-          <strong>Note:</strong> Prototype generation uses the Codex imagegen integration. This
-          feature will be available once the Codex client integration is complete.
-        </p>
-        <p className="hatching-prototype__info-text">
-          For now, you can accept the placeholder and proceed to the next step.
-        </p>
       </div>
     </div>
   );

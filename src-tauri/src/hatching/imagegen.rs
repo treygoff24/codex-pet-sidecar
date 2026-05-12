@@ -10,6 +10,8 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 
+const IMAGEGEN_ARTIFACT_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
 /// Imagegen artifact ingester using file watching.
 ///
 /// Watches `<runtime_home>/generated_images/` for new `ig_*.png` files,
@@ -229,7 +231,7 @@ pub async fn ingest_next_imagegen_artifact(
                 "timed out waiting for ig_*.png under generated_images".to_string(),
             ));
         }
-        sleep(Duration::from_millis(250)).await;
+        sleep(IMAGEGEN_ARTIFACT_POLL_INTERVAL).await;
     }
 }
 

@@ -1,0 +1,16 @@
+[
+  { "input": "My Pet", "expected": "my-pet" },
+  { "input": "Hello World", "expected": "hello-world" },
+  { "input": "Test123", "expected": "test123" },
+  { "input": "My@Pet#Name!", "expected": "my-pet-name" },
+  { "input": "Test---With---Dashes", "expected": "test-with-dashes" },
+  { "input": "  Leading and Trailing  ", "expected": "leading-and-trailing" },
+  { "input": "Olive", "expected": null },
+  { "input": "Codex", "expected": null },
+  { "input": "Default", "expected": null },
+  { "input": "Assets", "expected": null },
+  { "input": "Tmp", "expected": null },
+  { "input": "Hatching", "expected": null },
+  { "input": "---", "expected": null },
+  { "input": "!!!", "expected": null }
+]

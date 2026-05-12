@@ -1,4 +1,20 @@
-import type { GenerationProgress } from "../../domain/hatching";
+import {
+  type GenerationProgress,
+  type HatchingSession,
+  type RowKey,
+  type RowState,
+} from "../../domain/hatching";
+import { runtimeBridge } from "../../runtimeBridge";
+
+const GENERATED_ORDER: RowKey[] = [
+  "running-right",
+  "waving",
+  "jumping",
+  "failed",
+  "waiting",
+  "running",
+  "review",
+];
 
 const formatTime = (milliseconds: number): string => {
   const seconds = Math.ceil(milliseconds / 1000);
@@ -8,98 +24,169 @@ const formatTime = (milliseconds: number): string => {
   return `${minutes}m ${remainingSeconds}s`;
 };
 
+const timeOf = (iso: string): string =>
+  new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
 interface HatchingProgressProps {
+  session: HatchingSession | null;
   progress: GenerationProgress | null;
-  currentRow?: string;
   error?: string | null;
+  onCancel: () => void;
+}
+
+function rowClass(row: RowState | undefined, isDerived = false): string {
+  if (isDerived) return "derived";
+  if (row?.status === "ready") return "done";
+  if (row?.status === "generating") return "live";
+  if (row?.status === "failed") return "failed";
+  return "queued";
+}
+
+function rowMeta(row: RowState | undefined, rowKey: RowKey): string {
+  if (rowKey === "idle") return `accepted from prototype gate (try ${row?.attempts || 1})`;
+  if (row?.status === "ready") return "candidate accepted · grounded on base";
+  if (row?.status === "generating") {
+    return `attempt ${Math.max(1, row.attempts || 1)} · expecting ig_*.png in runtime workspace`;
+  }
+  if (row?.status === "failed") return row.lastError ?? "failed · needs regeneration";
+  return "queued · grounded on base";
+}
+
+function imageUrl(row: RowState | undefined): string | null {
+  return row?.image?.outputPath ? runtimeBridge.petAssetUrl(row.image.outputPath) : null;
+}
+
+function fallbackFeed(session: HatchingSession | null, progress: GenerationProgress | null) {
+  const now = new Date().toISOString();
+  const current = Object.entries(session?.rows ?? {}).find(
+    ([, row]) => row.status === "generating",
+  );
+  return [
+    { id: "fallback-1", at: now, tone: "ok" as const, message: "prototype accepted" },
+    {
+      id: "fallback-2",
+      at: now,
+      tone: "info" as const,
+      message: "canonical_identity_reference set",
+    },
+    current
+      ? {
+          id: "fallback-3",
+          at: now,
+          tone: "work" as const,
+          message: `$imagegen ${current[0]}`,
+        }
+      : {
+          id: "fallback-3",
+          at: now,
+          tone: "work" as const,
+          message: progress ? "awaiting next imagegen result…" : "preparing row pipeline…",
+        },
+  ];
 }
 
 export function HatchingGenerationProgress({
+  session,
   progress,
-  currentRow,
   error = null,
+  onCancel,
 }: HatchingProgressProps) {
-  const percentage = progress ? (progress.rowsCompleted / progress.rowsTotal) * 100 : 0;
+  const displayName = session?.brief?.displayName ?? "your pet";
+  const rows: Partial<Record<RowKey, RowState>> = session?.rows ?? {};
+  const feed = session?.runtimeFeed.length ? session.runtimeFeed : fallbackFeed(session, progress);
+  const rowsCompleted =
+    progress?.rowsCompleted ??
+    GENERATED_ORDER.filter((key) => rows[key]?.status === "ready").length;
+  const rowsTotal = progress?.rowsTotal ?? 7;
+  const calls = progress?.totalImagegenCalls ?? session?.prototype?.iterations.length ?? 0;
 
   return (
-    <div className="hatching-progress">
+    <section className="hatching-progress" aria-label="Pet generation progress">
       <div className="hatching-progress__header">
-        <h3 className="hatching-progress__title">Generating Your Pet</h3>
-        <p className="hatching-progress__description">
-          Creating animation row strips and composing the atlas...
+        <h2>
+          Building <em>{displayName}.</em>
+        </h2>
+        <p>
+          Base accepted. Generating the remaining 7 rows, each grounded on the canonical identity
+          reference. This can take a few minutes.
         </p>
       </div>
 
-      {/* Progress Bar */}
-      <div className="hatching-progress__bar-container">
-        <div
-          className="hatching-progress__bar"
-          role="progressbar"
-          aria-valuenow={progress?.rowsCompleted || 0}
-          aria-valuemin={0}
-          aria-valuemax={progress?.rowsTotal || 8}
-          aria-label="Row generation progress"
-          style={{ width: `${percentage}%` }}
-        >
-          <span className="hatching-progress__bar-text">
-            {progress ? `${progress.rowsCompleted} / ${progress.rowsTotal} rows` : "0 / 8 rows"}
-          </span>
+      <div className="hatching-progress__pipeline-grid">
+        <ol className="hatching-progress__pipeline">
+          <li className={rowClass(rows.idle)}>
+            <span className="node" />
+            <div className="row-name">
+              01 · base / idle <span>canonical identity ✓</span>
+            </div>
+            <div className="row-meta">{rowMeta(rows.idle, "idle")}</div>
+            {imageUrl(rows.idle) ? (
+              <img className="thumb" src={imageUrl(rows.idle) ?? ""} alt="" />
+            ) : null}
+          </li>
+          {GENERATED_ORDER.map((rowKey, index) => {
+            const row = rows[rowKey];
+            const rowNumber = String(index + 2).padStart(2, "0");
+            return (
+              <li key={rowKey} className={rowClass(row)}>
+                <span className="node" />
+                <div className="row-name">
+                  {rowNumber} · {rowKey}
+                  {row?.status === "generating" ? <span>generating…</span> : null}
+                </div>
+                <div className="row-meta">{rowMeta(row, rowKey)}</div>
+                {imageUrl(row) ? <img className="thumb" src={imageUrl(row) ?? ""} alt="" /> : null}
+              </li>
+            );
+          })}
+          <li className={rowClass(rows["running-left"], true)}>
+            <span className="node" />
+            <div className="row-name">— · running-left</div>
+            <div className="row-meta">auto-mirror from running-right (no generation)</div>
+          </li>
+        </ol>
+
+        <div className="hatching-progress__feed">
+          <h3>Runtime feed</h3>
+          {feed.map((event) => (
+            <div key={event.id} className={`line line--${event.tone}`}>
+              <span className="ts">{timeOf(event.at)}</span>
+              <span>{event.message}</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Progress Details */}
-      {progress && (
-        <div className="hatching-progress__details">
-          <div className="hatching-progress__detail">
-            <span className="hatching-progress__detail-label">Completed:</span>
-            <span className="hatching-progress__detail-value">
-              {progress.rowsCompleted} of {progress.rowsTotal} rows
-            </span>
-          </div>
+      <div className="hatching-progress__footer">
+        <span>
+          <strong>{rowsCompleted}</strong> / {rowsTotal} rows · <strong>{calls}</strong> total
+          imagegen calls so far
+        </span>
+        {progress?.estimatedRemaining ? (
+          <span>~ {formatTime(progress.estimatedRemaining)} remaining</span>
+        ) : (
+          <span>waiting for the next artifact…</span>
+        )}
+      </div>
 
-          {progress.estimatedRemaining > 0 && (
-            <div className="hatching-progress__detail">
-              <span className="hatching-progress__detail-label">Estimated time remaining:</span>
-              <span className="hatching-progress__detail-value">
-                {formatTime(progress.estimatedRemaining)}
-              </span>
-            </div>
-          )}
-
-          {progress.totalImagegenCalls > 0 && (
-            <div className="hatching-progress__detail">
-              <span className="hatching-progress__detail-label">Image generation calls:</span>
-              <span className="hatching-progress__detail-value">{progress.totalImagegenCalls}</span>
-            </div>
-          )}
-
-          {currentRow && (
-            <div className="hatching-progress__current">
-              <span className="hatching-progress__current-label">Currently generating:</span>
-              <span className="hatching-progress__current-value">{currentRow}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && (
+      {error ? (
         <div className="hatching-progress__error" role="alert" aria-live="assertive">
           {error}
         </div>
-      )}
+      ) : null}
 
-      {/* Info Section */}
-      <div className="hatching-progress__info">
-        <p className="hatching-progress__info-text">
-          This process generates all 8 animation row strips and composes them into a single atlas
-          file for your pet.
-        </p>
-        <p className="hatching-progress__info-text">
-          <strong>Note:</strong> Row generation uses the Codex imagegen integration. This feature
-          will be fully available once the Codex client integration is complete.
-        </p>
+      <div className="hatching-progress__actions">
+        <button
+          type="button"
+          className="wizard-shell__button wizard-shell__button--danger"
+          onClick={onCancel}
+        >
+          Cancel run
+        </button>
+        <button type="button" className="wizard-shell__button wizard-shell__button--ghost" disabled>
+          Continue ({Math.max(0, rowsTotal - rowsCompleted)} left) →
+        </button>
       </div>
-    </div>
+    </section>
   );
 }

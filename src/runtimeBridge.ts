@@ -1,6 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { currentMonitor, getCurrentWindow, primaryMonitor } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type { PetLibrary } from "./domain/petLibrary";
@@ -106,7 +107,6 @@ export const runtimeBridge = {
   savePetConfig: (config: PetConfig) => invoke<void>("save_pet_config", { config }),
   setActivePet: (petId: string) => invoke<PetLibrary>("set_active_pet", { petId }),
   importPet: (sourceDir: string) => invoke<PetLibrary>("import_pet", { sourceDir }),
-  startHatchingFlow: () => invoke<SkillPrompt>("start_hatching_flow"),
   startPersonalityFlow: () => invoke<SkillPrompt>("start_personality_flow"),
   startPetRuntime: () => invoke<RuntimeSession>("start_pet_runtime"),
   sendUserMessage: (text: string) => invoke<void>("send_user_message", { text }),
@@ -116,6 +116,13 @@ export const runtimeBridge = {
   wakePet: () => invoke<PetVisibilityState>("wake_pet"),
   tuckWindowToTab,
   restorePetWindowFromTab,
+  showHatchingWizardWindow: async () => {
+    const window = await WebviewWindow.getByLabel("hatching-wizard");
+    if (!window) throw new Error("Hatching wizard window is unavailable");
+    await window.show();
+    await window.setFocus();
+  },
+  hideHatchingWizardWindow: () => getCurrentWindow().hide(),
   getPetVisibilityState: () => invoke<PetVisibilityState | null>("get_pet_visibility_state"),
   respondToApproval: (requestId: string, action: ApprovalAction) =>
     invoke<void>("respond_to_approval", { requestId, action }),

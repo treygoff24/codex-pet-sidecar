@@ -15,11 +15,11 @@ mod tray;
 use app_state::AppState;
 use commands::{
     accept_prototype, archive_pet, cancel_hatching_run, confirm_brief_change,
-    describe_reference_image, generate_prototype, get_hatching_state, get_pet_visibility_state,
-    import_hatched_pet, import_pet, interrupt_turn, list_installed_pets,
+    describe_reference_image, draft_prompt_review, generate_prototype, get_hatching_state,
+    get_pet_visibility_state, import_hatched_pet, import_pet, interrupt_turn, list_installed_pets,
     list_orphan_hatching_sessions, load_pet_config, load_pet_library, preview_pet_id,
     regenerate_row, respond_to_approval, resume_hatching_run, revert_to_iteration, save_pet_config,
-    send_user_message, set_active_pet, set_mute_until, start_hatching_flow, start_hatching_run,
+    save_prompt_drafts, send_user_message, set_active_pet, set_mute_until, start_hatching_run,
     start_personality_flow, start_pet_runtime, submit_brief, tuck_pet, upload_reference_image,
     wake_pet,
 };
@@ -55,7 +55,6 @@ pub fn run() {
             set_active_pet,
             archive_pet,
             import_pet,
-            start_hatching_flow,
             start_personality_flow,
             start_pet_runtime,
             send_user_message,
@@ -70,6 +69,8 @@ pub fn run() {
             get_hatching_state,
             submit_brief,
             confirm_brief_change,
+            draft_prompt_review,
+            save_prompt_drafts,
             upload_reference_image,
             list_orphan_hatching_sessions,
             resume_hatching_run,

@@ -20,6 +20,12 @@ pub struct HatchingSession {
     pub reference_image: Option<ReferenceImage>,
     pub prototype: Option<PrototypeState>,
     pub rows: HashMap<RowKey, RowState>,
+    #[serde(default)]
+    pub prompt_drafts: Vec<PromptDraft>,
+    #[serde(default)]
+    pub runtime_feed: Vec<RuntimeFeedEvent>,
+    #[serde(default)]
+    pub atlas_review: Option<AtlasReviewArtifact>,
     pub phase: HatchingPhase,
     #[serde(with = "time::serde::iso8601")]
     pub created_at: time::OffsetDateTime,
@@ -30,8 +36,9 @@ pub struct HatchingSession {
 pub enum HatchingPhase {
     Inspiration,
     Brief,
+    Prompts,
     Prototype,
-    Generating { progress: GenerationProgress },
+    Generating(GenerationProgress),
     Review,
     Importing,
     Done { pet_id: String },
@@ -188,8 +195,94 @@ pub struct MirrorDecision {
 pub struct GenerationProgress {
     pub rows_completed: u32,
     pub rows_total: u32,
+    #[serde(with = "duration_millis")]
     pub estimated_remaining: Duration,
     pub total_imagegen_calls: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptDraft {
+    pub row_key: RowKey,
+    pub label: String,
+    pub prompt: String,
+    pub derived_from: Option<RowKey>,
+    pub editable: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeFeedEvent {
+    pub id: Uuid,
+    #[serde(with = "time::serde::iso8601")]
+    pub at: time::OffsetDateTime,
+    pub tone: RuntimeFeedTone,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeFeedTone {
+    Ok,
+    Work,
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AtlasReviewArtifact {
+    pub atlas_path: PathBuf,
+    pub validation_path: Option<PathBuf>,
+    pub checks: Vec<AtlasReviewCheck>,
+    #[serde(with = "time::serde::iso8601")]
+    pub composed_at: time::OffsetDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AtlasReviewCheck {
+    pub label: String,
+    pub ok: bool,
+    pub detail: Option<String>,
+}
+
+pub fn append_runtime_feed(
+    session: &mut HatchingSession,
+    tone: RuntimeFeedTone,
+    message: impl Into<String>,
+) {
+    session.runtime_feed.push(RuntimeFeedEvent {
+        id: Uuid::new_v4(),
+        at: time::OffsetDateTime::now_utc(),
+        tone,
+        message: message.into(),
+    });
+    const MAX_RUNTIME_FEED_EVENTS: usize = 80;
+    if session.runtime_feed.len() > MAX_RUNTIME_FEED_EVENTS {
+        let remove_count = session.runtime_feed.len() - MAX_RUNTIME_FEED_EVENTS;
+        session.runtime_feed.drain(0..remove_count);
+    }
+}
+
+mod duration_millis {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(duration.as_millis() as u64)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Duration::from_millis(u64::deserialize(deserializer)?))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -348,6 +441,9 @@ mod tests {
             reference_image: None,
             prototype: None,
             rows: HashMap::new(),
+            prompt_drafts: Vec::new(),
+            runtime_feed: Vec::new(),
+            atlas_review: None,
             phase: HatchingPhase::Inspiration,
             created_at: time::OffsetDateTime::now_utc(),
         }
@@ -358,15 +454,14 @@ mod tests {
         let phases = vec![
             HatchingPhase::Inspiration,
             HatchingPhase::Brief,
+            HatchingPhase::Prompts,
             HatchingPhase::Prototype,
-            HatchingPhase::Generating {
-                progress: GenerationProgress {
-                    rows_completed: 4,
-                    rows_total: 8,
-                    estimated_remaining: Duration::from_secs(120),
-                    total_imagegen_calls: 5,
-                },
-            },
+            HatchingPhase::Generating(GenerationProgress {
+                rows_completed: 4,
+                rows_total: 8,
+                estimated_remaining: Duration::from_secs(120),
+                total_imagegen_calls: 5,
+            }),
             HatchingPhase::Review,
             HatchingPhase::Importing,
             HatchingPhase::Done {
@@ -424,6 +519,32 @@ mod tests {
         registry.insert(session.clone()).await.unwrap();
         let loaded = registry.get(id).await.unwrap();
         assert_eq!(session, loaded);
+    }
+
+    #[test]
+    fn old_session_json_defaults_new_review_fields() {
+        let id = Uuid::new_v4();
+        let json = format!(
+            r#"{{
+              "id":"{id}",
+              "runtimeHome":"/tmp/runtime",
+              "workspace":"/tmp/workspace",
+              "codexThreadId":null,
+              "brief":null,
+              "archetype":null,
+              "referenceImage":null,
+              "prototype":null,
+              "rows":{{}},
+              "phase":"brief",
+              "createdAt":"2026-05-10T00:00:00Z"
+            }}"#
+        );
+
+        let session: HatchingSession = serde_json::from_str(&json).unwrap();
+
+        assert!(session.prompt_drafts.is_empty());
+        assert!(session.runtime_feed.is_empty());
+        assert!(session.atlas_review.is_none());
     }
 
     #[tokio::test]

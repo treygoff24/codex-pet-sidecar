@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import { resolvePetWindowAnimation } from "../domain/petAnimation";
+import type { PetLibrary } from "../domain/petLibrary";
 import type { InstalledPet, PetConfig } from "../domain/petConfig";
 import type { ApprovalAction, ApprovalRequest } from "../domain/runtimeEvents";
 import type { OfficialUpdateState } from "../hooks/useOfficialUpdater";
@@ -21,6 +22,13 @@ import { ThinkingBubble } from "./ThinkingBubble";
 // Visual thesis: Olive lives at the edge of the desktop. Her sprite + a chat
 // input are the only permanent surfaces. Everything else (settings, snooze,
 // transcript) lives behind hover-revealed icons or sheets.
+
+function shouldStartSurfaceDrag(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return true;
+  return !target.closest(
+    'button, input, textarea, select, option, label, details, summary, a, [role="button"], [role="textbox"], [contenteditable="true"]',
+  );
+}
 
 export function PetWindow({
   config,
@@ -44,10 +52,18 @@ export function PetWindow({
   updateState,
   onCheckForUpdate,
   onInstallUpdate,
+  library,
+  pets,
+  onSwitchPet,
+  onHatchPet,
+  onImportPet,
+  onArchivePet,
 }: {
   config: PetConfig;
   tucked: boolean;
   pet?: InstalledPet;
+  library?: PetLibrary;
+  pets?: InstalledPet[];
   streamingText: string;
   lastReply: string;
   awaitingReply: boolean;
@@ -66,6 +82,10 @@ export function PetWindow({
   updateState?: OfficialUpdateState;
   onCheckForUpdate?: () => void;
   onInstallUpdate?: () => void;
+  onSwitchPet?: (petId: string) => void;
+  onHatchPet?: () => void;
+  onImportPet?: () => void;
+  onArchivePet?: (petId: string) => Promise<void> | void;
 }) {
   // While streaming, the bubble shows live typed-out text. After streaming
   // ends, it lingers on the last completed reply so the user can actually read it.
@@ -159,6 +179,11 @@ export function PetWindow({
     await onSend(text);
   }
 
+  function startSurfaceDrag(event: ReactMouseEvent<HTMLElement>) {
+    if (event.button !== 0 || !shouldStartSurfaceDrag(event.target)) return;
+    void onStartDrag();
+  }
+
   if (tucked) {
     return (
       <main className="pet-window pet-window--tucked">
@@ -171,7 +196,7 @@ export function PetWindow({
   }
 
   return (
-    <main className="pet-window">
+    <main className="pet-window pet-window--draggable" onMouseDown={startSurfaceDrag}>
       <PetToolbar
         muteOpen={muteOpen}
         settingsOpen={settingsOpen}
@@ -276,6 +301,12 @@ export function PetWindow({
             <SettingsPanel
               config={config}
               onChange={onConfigChange}
+              library={library}
+              pets={pets}
+              onSwitchPet={onSwitchPet}
+              onHatchPet={onHatchPet}
+              onImportPet={onImportPet}
+              onArchivePet={onArchivePet}
               updateState={updateState}
               onCheckForUpdate={onCheckForUpdate}
               onInstallUpdate={onInstallUpdate}

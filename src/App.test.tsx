@@ -17,7 +17,7 @@ const runtimeBridgeMock = vi.hoisted(() => ({
   sendUserMessage: vi.fn(),
   setActivePet: vi.fn(),
   setMuteUntil: vi.fn(),
-  startHatchingFlow: vi.fn(),
+  showHatchingWizardWindow: vi.fn(),
   startPersonalityFlow: vi.fn(),
   startPetRuntime: vi.fn(),
   startWindowDrag: vi.fn(),
@@ -27,8 +27,17 @@ const runtimeBridgeMock = vi.hoisted(() => ({
   wakePet: vi.fn(),
 }));
 
+const hatchingBridgeMock = vi.hoisted(() => ({
+  archivePet: vi.fn(),
+  listOrphanHatchingSessions: vi.fn(),
+  startHatchingRun: vi.fn(),
+}));
+
 vi.mock("./runtimeBridge", () => ({
   runtimeBridge: runtimeBridgeMock,
+}));
+vi.mock("./hatchingBridge", () => ({
+  hatchingBridge: hatchingBridgeMock,
 }));
 vi.mock("./hooks/useOfficialUpdater", () => ({
   useOfficialUpdater: () => ({
@@ -122,10 +131,10 @@ describe("App pet animation state wiring", () => {
     runtimeBridgeMock.sendUserMessage.mockResolvedValue(undefined);
     runtimeBridgeMock.setActivePet.mockResolvedValue(library);
     runtimeBridgeMock.setMuteUntil.mockResolvedValue(undefined);
-    runtimeBridgeMock.startHatchingFlow.mockResolvedValue({
-      skill: "pet-hatching",
-      prompt: "hatch",
-    });
+    runtimeBridgeMock.showHatchingWizardWindow.mockResolvedValue(undefined);
+    hatchingBridgeMock.archivePet.mockResolvedValue(undefined);
+    hatchingBridgeMock.listOrphanHatchingSessions.mockResolvedValue([]);
+    hatchingBridgeMock.startHatchingRun.mockResolvedValue("session-1");
     runtimeBridgeMock.startPersonalityFlow.mockResolvedValue({
       skill: "pet-personality",
       prompt: "personality",
@@ -351,7 +360,7 @@ describe("App pet animation state wiring", () => {
     await screen.findByLabelText("Olive pet sprite");
   });
 
-  it("shows the hatching skill prompt from the onboarding journey", async () => {
+  it("starts the hatching wizard from the onboarding journey", async () => {
     runtimeBridgeMock.loadPetConfig.mockResolvedValue(null);
     runtimeBridgeMock.listInstalledPets.mockResolvedValue([]);
 
@@ -359,8 +368,44 @@ describe("App pet animation state wiring", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Hatch my own pet with Codex" }));
 
-    await screen.findByText("hatch");
-    expect(runtimeBridgeMock.startHatchingFlow).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(runtimeBridgeMock.showHatchingWizardWindow).toHaveBeenCalledTimes(1),
+    );
+    expect(hatchingBridgeMock.startHatchingRun).not.toHaveBeenCalled();
+  });
+
+  it("exposes the pet library hatching entry point from settings", async () => {
+    render(<App />);
+
+    await screen.findByLabelText("Olive pet sprite");
+    fireEvent.click(screen.getByRole("button", { name: "Pet settings" }));
+    await screen.findByRole("region", { name: "Pet library" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Hatch pet" }));
+
+    await waitFor(() =>
+      expect(runtimeBridgeMock.showHatchingWizardWindow).toHaveBeenCalledTimes(1),
+    );
+    expect(hatchingBridgeMock.startHatchingRun).not.toHaveBeenCalled();
+  });
+
+  it("tucks the pet window before opening the hatching wizard from settings", async () => {
+    render(<App />);
+
+    await screen.findByLabelText("Olive pet sprite");
+    fireEvent.click(screen.getByRole("button", { name: "Pet settings" }));
+    await screen.findByRole("region", { name: "Pet library" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Hatch pet" }));
+
+    await waitFor(() =>
+      expect(runtimeBridgeMock.showHatchingWizardWindow).toHaveBeenCalledTimes(1),
+    );
+    expect(runtimeBridgeMock.tuckPet).toHaveBeenCalledWith(null);
+    expect(runtimeBridgeMock.tuckWindowToTab).toHaveBeenCalled();
+    expect(runtimeBridgeMock.tuckWindowToTab.mock.invocationCallOrder[0]).toBeLessThan(
+      runtimeBridgeMock.showHatchingWizardWindow.mock.invocationCallOrder[0],
+    );
   });
 
   it("imports a staged pet from onboarding and refreshes into the pet window", async () => {

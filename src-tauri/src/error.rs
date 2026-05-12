@@ -61,6 +61,8 @@ pub enum AppError {
     PrototypeMissing(String),
     #[error("brief for hatching session {0} is missing")]
     HatchingBriefMissing(String),
+    #[error("prototype prompt rewrite failed after {attempts} attempt(s): {last_error}")]
+    RewriteFailed { attempts: u32, last_error: String },
 }
 
 pub type AppResult<T> = Result<T, AppError>;

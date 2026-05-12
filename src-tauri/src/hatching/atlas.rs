@@ -206,6 +206,8 @@ pub fn validate_atlas(
             );
         }
     }
+    let near_opaque_limit =
+        ((CELL_WIDTH * CELL_HEIGHT) as f32 * near_opaque_threshold).round() as u32;
     for (state, row_index, frame_count) in ROW_SPECS {
         for column_index in 0..COLUMNS {
             let left = column_index * CELL_WIDTH;
@@ -228,7 +230,7 @@ pub fn validate_atlas(
                     state, row_index, column_index, nontransparent
                 ));
             }
-            if used && nontransparent > (CELL_WIDTH * CELL_HEIGHT) * near_opaque_threshold as u32 {
+            if used && nontransparent > near_opaque_limit {
                 near_opaque_used_cells
                     .entry(format!("{} row {}", state, row_index))
                     .or_default()
@@ -563,6 +565,73 @@ mod tests {
 
         let result = validate_atlas(&atlas_path, 50, 0.95, false, false).unwrap();
         assert!(!result.ok);
+    }
+
+    fn write_validation_atlas(path: &Path, opaque_first_cell: bool) {
+        let mut atlas = RgbaImage::new(ATLAS_WIDTH, ATLAS_HEIGHT);
+        for (_state, row_index, frame_count) in ROW_SPECS {
+            for column_index in 0..frame_count {
+                let left = column_index * CELL_WIDTH;
+                let top = row_index * CELL_HEIGHT;
+                if opaque_first_cell && row_index == 0 && column_index == 0 {
+                    for y in top..top + CELL_HEIGHT {
+                        for x in left..left + CELL_WIDTH {
+                            atlas.put_pixel(x, y, Rgba([40, 80, 120, 255]));
+                        }
+                    }
+                } else {
+                    for i in 0..80 {
+                        atlas.put_pixel(
+                            left + 8 + (i % 10),
+                            top + 8 + (i / 10),
+                            Rgba([40, 80, 120, 255]),
+                        );
+                    }
+                }
+            }
+        }
+        atlas.save(path).unwrap();
+    }
+
+    #[test]
+    fn atlas_near_opaque_sparse_used_cells_pass() {
+        let temp_dir = tempdir().unwrap();
+        let atlas_path = temp_dir.path().join("atlas.png");
+        write_validation_atlas(&atlas_path, false);
+
+        let result = validate_atlas(&atlas_path, 50, 0.95, false, false).unwrap();
+
+        assert!(result.ok, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn atlas_near_opaque_full_used_cell_fails_without_allowance() {
+        let temp_dir = tempdir().unwrap();
+        let atlas_path = temp_dir.path().join("atlas.png");
+        write_validation_atlas(&atlas_path, true);
+
+        let result = validate_atlas(&atlas_path, 50, 0.95, false, false).unwrap();
+
+        assert!(!result.ok);
+        assert!(result
+            .errors
+            .iter()
+            .any(|error| error.contains("nearly opaque")));
+    }
+
+    #[test]
+    fn atlas_near_opaque_full_used_cell_warns_when_allowed() {
+        let temp_dir = tempdir().unwrap();
+        let atlas_path = temp_dir.path().join("atlas.png");
+        write_validation_atlas(&atlas_path, true);
+
+        let result = validate_atlas(&atlas_path, 50, 0.95, false, true).unwrap();
+
+        assert!(result.ok, "{:?}", result.errors);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("nearly opaque")));
     }
 
     #[test]

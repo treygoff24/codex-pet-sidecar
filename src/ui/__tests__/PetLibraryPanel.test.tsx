@@ -58,4 +58,31 @@ describe("PetLibraryPanel", () => {
     expect(screen.getByRole("button", { name: "Hatch pet" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Import pet" })).toBeDisabled();
   });
+
+  it("archives non-active pets after confirmation and blocks the active pet", async () => {
+    const onArchive = vi.fn();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <PetLibraryPanel
+        library={library(2)}
+        pets={pets(2)}
+        onSwitch={vi.fn()}
+        onHatch={vi.fn()}
+        onImport={vi.fn()}
+        onArchive={onArchive}
+      />,
+    );
+
+    const archiveButtons = screen.getAllByRole("button", { name: "Archive" });
+    expect(archiveButtons[0]).toBeDisabled();
+    expect(screen.getByText("Switch pets first — Olive is currently active.")).toBeInTheDocument();
+
+    await userEvent.click(archiveButtons[1]);
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      "Archive Pet 1? This moves the package out of the library. You can hatch again.",
+    );
+    expect(onArchive).toHaveBeenCalledWith("pet-1");
+    vi.mocked(window.confirm).mockRestore();
+  });
 });

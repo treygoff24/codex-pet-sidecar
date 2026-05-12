@@ -81,6 +81,9 @@ describe("hatching domain types", () => {
         referenceImage: null,
         prototype: null,
         rows: {} as Record<string, RowState>,
+        promptDrafts: [],
+        runtimeFeed: [],
+        atlasReview: null,
         phase: "inspiration",
         createdAt: "2024-01-01T00:00:00Z",
       };
@@ -113,6 +116,9 @@ describe("hatching domain types", () => {
         referenceImage: null,
         prototype: null,
         rows: {} as Record<string, RowState>,
+        promptDrafts: [],
+        runtimeFeed: [],
+        atlasReview: null,
         phase: "brief",
         createdAt: "2024-01-01T00:00:00Z",
       };

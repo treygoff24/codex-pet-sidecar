@@ -14,6 +14,7 @@ pub enum ApprovalKind {
 #[serde(rename_all = "camelCase")]
 struct FileChangeApprovalParams {
     grant_root: Option<String>,
+    reason: Option<String>,
 }
 
 pub fn approval_request(id: u64, method: &str, params: &Value) -> ApprovalRequest {
@@ -79,8 +80,17 @@ fn approval_detail(method: &str, params: &Value) -> String {
     if kind_for_method(method) == ApprovalKind::FileChange {
         if let Ok(file_params) = serde_json::from_value::<FileChangeApprovalParams>(params.clone())
         {
-            if let Some(grant_root) = file_params.grant_root.filter(|value| !value.is_empty()) {
-                return format!("Requesting write access under {grant_root}");
+            let grant_root = file_params.grant_root.filter(|value| !value.is_empty());
+            let reason = file_params.reason.filter(|value| !value.is_empty());
+            match (grant_root, reason) {
+                (Some(root), Some(reason)) => {
+                    return format!("Requesting write access under {root}: {reason}");
+                }
+                (Some(root), None) => {
+                    return format!("Requesting write access under {root}");
+                }
+                (None, Some(reason)) => return reason,
+                (None, None) => {}
             }
         }
     }
@@ -116,5 +126,49 @@ mod tests {
             "acceptForSession"
         );
         assert_eq!(kind_for_method("applyPatchApproval"), ApprovalKind::Unknown);
+    }
+
+    #[test]
+    fn file_change_detail_combines_grant_root_and_reason() {
+        let params = json!({
+            "itemId": "i",
+            "threadId": "t",
+            "turnId": "u",
+            "grantRoot": "/Users/x/proj",
+            "reason": "Add tests for the new approval helper",
+        });
+        let detail = approval_detail("item/fileChange/requestApproval", &params);
+        assert_eq!(
+            detail,
+            "Requesting write access under /Users/x/proj: Add tests for the new approval helper"
+        );
+    }
+
+    #[test]
+    fn file_change_detail_grant_root_only() {
+        let params = json!({
+            "itemId": "i",
+            "threadId": "t",
+            "turnId": "u",
+            "grantRoot": "/Users/x/proj",
+        });
+        assert_eq!(
+            approval_detail("item/fileChange/requestApproval", &params),
+            "Requesting write access under /Users/x/proj"
+        );
+    }
+
+    #[test]
+    fn file_change_detail_reason_only() {
+        let params = json!({
+            "itemId": "i",
+            "threadId": "t",
+            "turnId": "u",
+            "reason": "Edit foo.rs to fix bug",
+        });
+        assert_eq!(
+            approval_detail("item/fileChange/requestApproval", &params),
+            "Edit foo.rs to fix bug"
+        );
     }
 }

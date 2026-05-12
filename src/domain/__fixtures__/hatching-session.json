@@ -1,0 +1,180 @@
+{
+  "session": {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "runtimeHome": "/tmp/runtime",
+    "workspace": "/tmp/workspace",
+    "codexThreadId": "thread-1",
+    "brief": {
+      "displayName": "Moss",
+      "petId": "moss",
+      "description": "A small mossy watcher",
+      "personality": ["quiet", "observant"],
+      "palette": { "primary": "#395b38", "secondary": "#8aa868", "accent": "#f4d06f" },
+      "backstory": null,
+      "speechStyle": null,
+      "behavioralQuirks": null,
+      "visualNotes": null
+    },
+    "archetype": "stoic-watcher",
+    "referenceImage": null,
+    "prototype": null,
+    "rows": {
+      "idle": {
+        "prompt": "idle",
+        "image": null,
+        "derivedFrom": null,
+        "mirrorDecision": null,
+        "attempts": 0,
+        "lastError": null,
+        "status": "pending"
+      },
+      "running-right": {
+        "prompt": "running right",
+        "image": null,
+        "derivedFrom": null,
+        "mirrorDecision": null,
+        "attempts": 1,
+        "lastError": null,
+        "status": "generating"
+      },
+      "running-left": {
+        "prompt": "running left",
+        "image": null,
+        "derivedFrom": "running-right",
+        "mirrorDecision": {
+          "approved": true,
+          "reason": "mirrored",
+          "decidedAt": "2026-05-10T00:00:00.000Z"
+        },
+        "attempts": 1,
+        "lastError": null,
+        "status": "ready"
+      },
+      "waving": {
+        "prompt": "waving",
+        "image": null,
+        "derivedFrom": null,
+        "mirrorDecision": null,
+        "attempts": 2,
+        "lastError": "bad geometry",
+        "status": "failed"
+      },
+      "jumping": {
+        "prompt": "jumping",
+        "image": null,
+        "derivedFrom": null,
+        "mirrorDecision": null,
+        "attempts": 0,
+        "lastError": null,
+        "status": "pending"
+      },
+      "failed": {
+        "prompt": "failed",
+        "image": null,
+        "derivedFrom": null,
+        "mirrorDecision": null,
+        "attempts": 0,
+        "lastError": null,
+        "status": "pending"
+      },
+      "waiting": {
+        "prompt": "waiting",
+        "image": null,
+        "derivedFrom": null,
+        "mirrorDecision": null,
+        "attempts": 0,
+        "lastError": null,
+        "status": "pending"
+      },
+      "running": {
+        "prompt": "running",
+        "image": null,
+        "derivedFrom": null,
+        "mirrorDecision": null,
+        "attempts": 0,
+        "lastError": null,
+        "status": "pending"
+      },
+      "review": {
+        "prompt": "review",
+        "image": null,
+        "derivedFrom": null,
+        "mirrorDecision": null,
+        "attempts": 0,
+        "lastError": null,
+        "status": "pending"
+      }
+    },
+    "promptDrafts": [
+      {
+        "rowKey": "idle",
+        "label": "base · idle",
+        "prompt": "Create Moss as the canonical base identity.",
+        "derivedFrom": null,
+        "editable": true
+      },
+      {
+        "rowKey": "running-left",
+        "label": "running-left · derived",
+        "prompt": "auto-mirrored from running-right · no separate generation",
+        "derivedFrom": "running-right",
+        "editable": false
+      }
+    ],
+    "runtimeFeed": [
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174001",
+        "at": "2026-05-10T00:00:30.000Z",
+        "tone": "ok",
+        "message": "prototype accepted"
+      }
+    ],
+    "atlasReview": {
+      "atlasPath": "/tmp/workspace/atlas.png",
+      "validationPath": "/tmp/workspace/atlas-validation.json",
+      "checks": [
+        { "label": "1536×1872 dimensions", "ok": true, "detail": "1536×1872" },
+        { "label": "All 9 rows present", "ok": false, "detail": null }
+      ],
+      "composedAt": "2026-05-10T00:01:00.000Z"
+    },
+    "phase": {
+      "generating": {
+        "rowsCompleted": 2,
+        "rowsTotal": 7,
+        "estimatedRemaining": 180000,
+        "totalImagegenCalls": 3
+      }
+    },
+    "createdAt": "2026-05-10T00:00:00.000Z"
+  },
+  "phases": [
+    "inspiration",
+    "brief",
+    "prompts",
+    "prototype",
+    {
+      "generating": {
+        "rowsCompleted": 2,
+        "rowsTotal": 7,
+        "estimatedRemaining": 180000,
+        "totalImagegenCalls": 3
+      }
+    },
+    "review",
+    "importing",
+    { "done": { "petId": "moss" } }
+  ],
+  "rowKeys": [
+    "idle",
+    "running-right",
+    "running-left",
+    "waving",
+    "jumping",
+    "failed",
+    "waiting",
+    "running",
+    "review"
+  ],
+  "rowStatuses": ["pending", "generating", "ready", "failed"]
+}
