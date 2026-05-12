@@ -14,6 +14,9 @@ if [ ! -f "$PYINSTALLER" ]; then
 fi
 
 # Build the bundle
+if [ -n "${PYINSTALLER_TARGET_ARCH:-}" ]; then
+    echo "Building pet-hatching for macOS architecture: ${PYINSTALLER_TARGET_ARCH}"
+fi
 "$PYINSTALLER" "tools/pet-hatching/build/pyinstaller.spec"
 
 echo "Bundle built at dist/pet-hatching"

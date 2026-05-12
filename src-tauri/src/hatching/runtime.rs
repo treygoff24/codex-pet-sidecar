@@ -171,8 +171,8 @@ impl HatchingRuntimeManager {
 
     /// Cancel the hatching runtime.
     pub async fn cancel(&mut self) -> AppResult<()> {
-        if let Some(process) = self.process.take() {
-            drop(process);
+        if let Some(mut process) = self.process.take() {
+            process.shutdown().await?;
         }
 
         self.client = None;
@@ -376,11 +376,20 @@ impl HatchingRuntimeManagerRegistry {
 
     /// Teardown and remove a runtime manager.
     pub async fn teardown_and_remove(&self, session_id: Uuid) -> AppResult<()> {
-        let manager = self.get(session_id).await?;
-        let manager_guard = manager.lock().await;
-        manager_guard.teardown().await?;
-        drop(manager_guard);
-        self.remove(session_id).await
+        let manager = {
+            let mut managers = self.managers.write().await;
+            managers.remove(&session_id)
+        };
+
+        if let Some(manager) = manager {
+            let mut manager_guard = manager.lock().await;
+            manager_guard.shutdown().await?;
+            manager_guard.teardown().await
+        } else {
+            HatchingRuntimeManager::new(session_id, &self.paths)
+                .teardown()
+                .await
+        }
     }
 }
 
@@ -448,6 +457,51 @@ mod tests {
         assert!(hatching_manager.client().is_none());
         hatching_manager.cancel().await.expect("cancel hatching");
         assert_eq!(pet_manager.shutdown_count, 0);
+    }
+
+    #[tokio::test]
+    async fn registry_teardown_removes_registered_manager_and_runtime_home() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+        let registry = HatchingRuntimeManagerRegistry::new(paths);
+        let session_id = Uuid::new_v4();
+        let manager = registry.get_or_create(session_id).await;
+        let runtime_home = manager.lock().await.runtime_home().clone();
+        tokio::fs::create_dir_all(&runtime_home)
+            .await
+            .expect("runtime home");
+
+        registry
+            .teardown_and_remove(session_id)
+            .await
+            .expect("teardown registered runtime");
+
+        assert!(!runtime_home.exists());
+        assert!(matches!(
+            registry.get(session_id).await,
+            Err(AppError::HatchingSessionNotFound(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn registry_teardown_removes_orphan_runtime_home_without_manager() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+        let registry = HatchingRuntimeManagerRegistry::new(paths.clone());
+        let session_id = Uuid::new_v4();
+        let runtime_home = HatchingRuntimeManager::new(session_id, &paths)
+            .runtime_home()
+            .clone();
+        tokio::fs::create_dir_all(&runtime_home)
+            .await
+            .expect("runtime home");
+
+        registry
+            .teardown_and_remove(session_id)
+            .await
+            .expect("teardown orphan runtime");
+
+        assert!(!runtime_home.exists());
     }
 
     #[tokio::test]

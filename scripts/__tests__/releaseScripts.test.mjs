@@ -34,7 +34,10 @@ function expectScriptFailure(script, args) {
 function prepareReleaseBundle(root) {
   const macosDir = join(root, "macos");
   const dmgDir = join(root, "dmg");
-  mkdirSync(join(macosDir, "Codex Pet Sidecar.app"), { recursive: true });
+  const appDir = join(macosDir, "Codex Pet Sidecar.app");
+  const appMacosDir = join(appDir, "Contents", "MacOS");
+  mkdirSync(appMacosDir, { recursive: true });
+  writeFileSync(join(appMacosDir, "pet-hatching"), "packaged-sidecar", { mode: 0o755 });
   mkdirSync(dmgDir, { recursive: true });
   const archive = "Codex Pet Sidecar.app.tar.gz";
   writeFileSync(join(macosDir, archive), "archive");

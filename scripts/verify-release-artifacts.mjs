@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 function arg(name, fallback) {
@@ -15,6 +15,20 @@ function fail(message) {
 
 function run(command, args) {
   execFileSync(command, args, { stdio: "inherit" });
+}
+
+function findFiles(dir, predicate) {
+  if (!existsSync(dir)) return [];
+  const found = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      found.push(...findFiles(path, predicate));
+    } else if (entry.isFile() && predicate(path, entry.name)) {
+      found.push(path);
+    }
+  }
+  return found;
 }
 
 function firstFile(dir, predicate, label) {
@@ -36,6 +50,20 @@ const updateArchive = firstFile(
 const signature = `${updateArchive}.sig`;
 if (!existsSync(signature)) fail(`Missing updater signature: ${signature}`);
 const dmg = firstFile(dmgDir, (file) => file.endsWith(".dmg"), "DMG");
+const sidecars = findFiles(app, (_path, name) => name === "pet-hatching");
+if (sidecars.length !== 1) {
+  fail(
+    "Expected exactly one bundled pet-hatching sidecar in " + app + ", found " + sidecars.length,
+  );
+}
+const sidecar = sidecars[0];
+const sidecarHeader = readFileSync(sidecar).subarray(0, 2);
+if (sidecarHeader[0] === 0x23 && sidecarHeader[1] === 0x21) {
+  fail("Bundled pet-hatching sidecar is a script, not the packaged binary: " + sidecar);
+}
+if ((statSync(sidecar).mode & 0o111) === 0) {
+  fail("Bundled pet-hatching sidecar is not executable: " + sidecar);
+}
 
 if (process.platform !== "darwin") {
   console.log("Release artifacts exist; skipping macOS signing checks on non-macOS.");

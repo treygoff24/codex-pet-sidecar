@@ -34,6 +34,10 @@ jobs:
           node-version: 22
           cache: npm
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
@@ -43,6 +47,8 @@ jobs:
       - run: npm run check
       - run: npm run audit:public
       - run: npm run audit:artifacts
+      - run: npm run setup:python
+      - run: PYINSTALLER_TARGET_ARCH=universal2 npm run smoke:pyinstaller
 
       - name: Import Apple Developer ID certificate
         env:
@@ -66,6 +72,10 @@ jobs:
 
       - name: Build signed and notarized universal macOS app
         run: npm run tauri:build -- --target universal-apple-darwin --bundles app,dmg --ci
+        env:
+          CODEX_PET_SIDECAR_SKIP_BUILD: "1"
+          CODEX_PET_SIDECAR_TARGET_TRIPLES: aarch64-apple-darwin,x86_64-apple-darwin
+          PYINSTALLER_TARGET_ARCH: universal2
 
       - name: Create update manifest and checksums
         run: |

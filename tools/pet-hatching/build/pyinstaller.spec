@@ -4,7 +4,10 @@ PyInstaller spec for pet-hatching sidecar.
 Bundles four hatching scripts into a single binary with command dispatch.
 """
 
+import os
+
 block_cipher = None
+target_arch = os.environ.get("PYINSTALLER_TARGET_ARCH") or None
 
 a = Analysis(
     ["dispatch.py"],
@@ -51,7 +54,7 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch=target_arch,
     codesign_identity=None,
     entitlements_file=None,
 )

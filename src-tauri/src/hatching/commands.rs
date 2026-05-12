@@ -286,11 +286,12 @@ pub async fn cancel_hatching_run(
 ) -> CommandResult<()> {
     let session_id_str = session_id.to_string();
     let workspace = state.paths.hatching_workspace_dir(&session_id_str);
-    let _runtime_home = state.paths.hatching_runtime_home_dir(&session_id_str);
     let registry = Arc::clone(&state.hatching_session_registry);
     let _ = registry.remove(session_id).await; // Ignore errors if session doesn't exist
-    let runtime_manager = HatchingRuntimeManager::new(session_id, &state.paths);
-    let _ = runtime_manager.teardown().await; // Ignore errors if runtime doesn't exist
+    let _ = state
+        .hatching_runtime_registry
+        .teardown_and_remove(session_id)
+        .await; // Ignore errors if runtime doesn't exist
     if workspace.exists() {
         tokio::fs::remove_dir_all(&workspace)
             .await
@@ -346,11 +347,7 @@ pub async fn submit_brief(
         .into());
     }
 
-    let available_pet_id =
-        resolve_pet_id_collision(&state.paths, &brief.pet_id).map_err(CommandError::from)?;
-    if available_pet_id != brief.pet_id {
-        return Err(AppError::PetAlreadyExists(brief.pet_id).into());
-    }
+    ensure_brief_pet_id_available(&state.paths, &brief.pet_id).map_err(CommandError::from)?;
 
     let registry = Arc::clone(&state.hatching_session_registry);
     let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
@@ -409,6 +406,7 @@ pub async fn confirm_brief_change(
     brief: PetBrief,
     archetype_id: Option<String>,
 ) -> CommandResult<BriefSubmitOutcome> {
+    ensure_brief_pet_id_available(&state.paths, &brief.pet_id).map_err(CommandError::from)?;
     let registry = Arc::clone(&state.hatching_session_registry);
     let mut session = registry.get(session_id).await.map_err(CommandError::from)?;
     session.prototype = None;
@@ -423,6 +421,14 @@ pub async fn confirm_brief_change(
         invalidates_iterations: true,
         requires_confirmation: false,
     })
+}
+
+fn ensure_brief_pet_id_available(paths: &AppPaths, pet_id: &str) -> crate::error::AppResult<()> {
+    let available_pet_id = resolve_pet_id_collision(paths, pet_id)?;
+    if available_pet_id != pet_id {
+        return Err(AppError::PetAlreadyExists(pet_id.to_string()));
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -956,8 +962,9 @@ pub async fn import_hatched_pet(
         .update(session.clone())
         .await
         .map_err(CommandError::from)?;
-    let _ = HatchingRuntimeManager::new(session_id, &state.paths)
-        .teardown()
+    let _ = state
+        .hatching_runtime_registry
+        .teardown_and_remove(session_id)
         .await;
     if session.workspace.exists() {
         let _ = tokio::fs::remove_dir_all(&session.workspace).await;
@@ -1423,6 +1430,28 @@ mod tests {
         running_left.editable = true;
 
         assert!(validate_prompt_drafts(&invalid).is_err());
+    }
+
+    #[test]
+    fn brief_pet_id_validation_rejects_invalid_custom_id() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+
+        assert!(matches!(
+            ensure_brief_pet_id_available(&paths, "Bad.Pet"),
+            Err(AppError::InvalidPetMetadata { .. })
+        ));
+    }
+
+    #[test]
+    fn brief_pet_id_validation_rejects_reserved_custom_id() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+
+        assert!(matches!(
+            ensure_brief_pet_id_available(&paths, "hatching"),
+            Err(AppError::InvalidPetMetadata { .. })
+        ));
     }
 
     #[test]

@@ -6,7 +6,9 @@ dist/
 *.log
 *.tmp
 .claude/
+.codex/
 src-tauri/target/
+src-tauri/binaries/pet-hatching-*
 build/
 
 # Local pet generation and QA artifacts

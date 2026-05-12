@@ -14,6 +14,7 @@ import { dirname } from "path";
 const filename = fileURLToPath(import.meta.url);
 const dirName = dirname(filename);
 const repoRoot = join(dirName, "..");
+const python = join(repoRoot, ".venv", "bin", "python");
 
 function run(cmd, options = {}) {
   console.log(`Running: ${cmd}`);
@@ -83,7 +84,7 @@ try {
     const pythonPackage = join(tmp, "python-package");
     const bundledPackage = join(tmp, "bundled-package");
 
-    runFile("python3", [
+    runFile(python, [
       "tools/pet-hatching/scripts/compose_atlas.py",
       "--source-atlas",
       sourceAtlas,
@@ -102,7 +103,7 @@ try {
 
     runFile(binaryPath, ["--cmd", "validate", bundledAtlas]);
 
-    runFile("python3", [
+    runFile(python, [
       "tools/pet-hatching/scripts/package_custom_pet.py",
       "--pet-name",
       "pyinstaller-smoke",

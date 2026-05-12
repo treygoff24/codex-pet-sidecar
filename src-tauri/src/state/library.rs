@@ -493,6 +493,14 @@ pub fn normalize_display_name_to_pet_id(display_name: &str) -> AppResult<String>
 /// Returns the first available pet_id, either the original or a numbered variant (e.g., "my-pet-2").
 #[allow(dead_code)]
 pub fn resolve_pet_id_collision(paths: &AppPaths, base_pet_id: &str) -> AppResult<String> {
+    validate_pet_id(base_pet_id)?;
+    if RESERVED_PET_IDS.contains(&base_pet_id) {
+        return Err(AppError::InvalidPetMetadata {
+            path: PathBuf::from(base_pet_id),
+            reason: format!("pet_id '{}' is reserved", base_pet_id),
+        });
+    }
+
     let library = match load_library(paths)? {
         Some(lib) => lib,
         None => PetLibrary {
@@ -892,6 +900,28 @@ mod tests {
             resolve_pet_id_collision(&paths, "my-pet").unwrap(),
             "my-pet"
         );
+    }
+
+    #[test]
+    fn resolve_pet_id_collision_rejects_invalid_base_id() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+
+        assert!(matches!(
+            resolve_pet_id_collision(&paths, "Bad.Pet"),
+            Err(AppError::InvalidPetMetadata { .. })
+        ));
+    }
+
+    #[test]
+    fn resolve_pet_id_collision_rejects_reserved_base_id() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::with_roots(root.path().join("support"));
+
+        assert!(matches!(
+            resolve_pet_id_collision(&paths, "hatching"),
+            Err(AppError::InvalidPetMetadata { .. })
+        ));
     }
 
     #[test]
