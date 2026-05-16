@@ -11,6 +11,15 @@ import {
   type RowStatus,
 } from "../hatching";
 
+type HatchingFixture = {
+  session: HatchingSession;
+  phases: HatchingPhase[];
+  rowKeys: RowKey[];
+  rowStatuses: RowStatus[];
+};
+
+const typedFixture = fixture as HatchingFixture;
+
 const expectedPhaseLabels = [
   "inspiration",
   "brief",
@@ -43,7 +52,7 @@ const expectedRowStatuses = [
 
 describe("hatching Rust contract parity", () => {
   it("loads the fixture as a HatchingSession with direct generating progress", () => {
-    const hatchingSession = fixture.session satisfies HatchingSession;
+    const hatchingSession = typedFixture.session;
 
     expect(hatchingSession.id).toBe("123e4567-e89b-12d3-a456-426614174000");
     expect(isPhaseGenerating(hatchingSession.phase)).toBe(true);
@@ -51,7 +60,7 @@ describe("hatching Rust contract parity", () => {
   });
 
   it("covers every HatchingPhase variant", () => {
-    const phases = fixture.phases satisfies HatchingPhase[];
+    const phases = typedFixture.phases;
     const labels = phases.map(getPhaseDisplayName);
 
     expect(labels).toEqual(expectedPhaseLabels);
@@ -59,11 +68,11 @@ describe("hatching Rust contract parity", () => {
   });
 
   it("covers every RowKey and RowStatus discriminator", () => {
-    const rowKeys = fixture.rowKeys satisfies RowKey[];
-    const rowStatuses = fixture.rowStatuses satisfies RowStatus[];
+    const rowKeys = typedFixture.rowKeys;
+    const rowStatuses = typedFixture.rowStatuses;
 
     expect(rowKeys).toEqual(expectedRowKeys);
     expect(rowStatuses).toEqual(expectedRowStatuses);
-    expect(Object.keys(HATCHING_ROW_LABELS).toSorted()).toEqual([...expectedRowKeys].toSorted());
+    expect(Object.keys(HATCHING_ROW_LABELS)).toEqual([...expectedRowKeys]);
   });
 });
