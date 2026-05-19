@@ -16,6 +16,4 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: npm run check
-      - run: npm run audit:public
-      - run: npm run audit:artifacts
+      - run: npm run check:ci

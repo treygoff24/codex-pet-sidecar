@@ -21,11 +21,28 @@ fn ensure_hatching_sidecar() {
         return;
     }
 
+    // Real packaged binary already in place — leave it alone.
     if fs::read(&sidecar_path).is_ok_and(|bytes| !bytes.starts_with(b"#!")) {
         return;
     }
 
-    write_dev_sidecar(&manifest_dir, &sidecar_path);
+    // Dev wrapper case: only rewrite when content would actually change. An
+    // unconditional rewrite bumps mtime every cargo invocation, which traps
+    // `tauri dev`'s file watcher in an infinite rebuild loop.
+    let desired = dev_sidecar_script(&manifest_dir);
+    if fs::read_to_string(&sidecar_path).is_ok_and(|existing| existing == desired) {
+        return;
+    }
+
+    write_dev_sidecar(&sidecar_path, &desired);
+}
+
+fn dev_sidecar_script(manifest_dir: &Path) -> String {
+    let repo_root = manifest_dir
+        .parent()
+        .expect("src-tauri has repository parent");
+    let dispatch_path = repo_root.join("tools/pet-hatching/build/dispatch.py");
+    format!("#!/usr/bin/env sh\nset -eu\nexec python3 {dispatch_path:?} \"$@\"\n")
 }
 
 fn assert_release_sidecar(sidecar_path: &Path) {
@@ -43,16 +60,7 @@ fn assert_release_sidecar(sidecar_path: &Path) {
     }
 }
 
-fn write_dev_sidecar(manifest_dir: &Path, sidecar_path: &Path) {
-    let repo_root = manifest_dir
-        .parent()
-        .expect("src-tauri has repository parent")
-        .to_path_buf();
-    let dispatch_path = repo_root.join("tools/pet-hatching/build/dispatch.py");
-    let script = format!(
-        "#!/usr/bin/env sh\nset -eu\nexec python3 {:?} \"$@\"\n",
-        dispatch_path
-    );
+fn write_dev_sidecar(sidecar_path: &Path, script: &str) {
     fs::create_dir_all(sidecar_path.parent().expect("sidecar has parent"))
         .expect("create sidecar directory");
     fs::write(sidecar_path, script).expect("write development hatching sidecar");

@@ -1,16 +1,27 @@
 # Contributing
 
-## Repo gate
+## Gate tiers
 
-Before opening a PR, run:
+Use the lightest gate that matches the risk while you are developing:
 
 ```bash
-npm run check
-npm run audit:public
-npm run audit:artifacts
+npm run check:fast     # inner loop: oxlint, TypeScript no-emit, cargo check
+npm run check:local    # before task/milestone handoff: fast + format + gentle Vitest + clippy + Rust lib tests
+npm run check:full     # final deterministic validation: build + full Vitest + clippy + all Rust tests
+npm run check:ci       # pre-merge/CI: full validation + public/artifact audits
 ```
 
-`npm run check` runs the full pipeline: oxlint, oxfmt, the TypeScript build, Vitest, clippy, and cargo test. The two `audit:*` scripts catch private paths, leaked identity terms, and stray local artifacts (generated images, screenshot caches, IDE settings). Both must be green for a PR to merge.
+`npm run check` remains an alias for `npm run check:full` for older docs and muscle memory.
+
+During normal implementation, prefer targeted tests and `check:fast`. Before opening a PR or marking a branch ready for review/merge, run:
+
+```bash
+npm run check:ci
+```
+
+`check:full` runs the full deterministic pipeline: oxlint, oxfmt, the TypeScript/Vite build, Vitest, clippy, and cargo test. The two `audit:*` scripts in `check:ci` catch private paths, leaked identity terms, and stray local artifacts (generated images, screenshot caches, IDE settings). `check:ci` must be green for a PR to merge, unless the remaining validation is explicitly left to CI and called out in the PR.
+
+If a check fails, fix the issue and rerun the narrow failing gate first. Do not rerun `check:full` or `check:ci` after every small edit; save those for final confidence, CI/pre-merge, and changes that directly require full validation.
 
 If you want to iterate on just the frontend, `npm run dev` runs Vite alone on port 1420.
 The public dev channel is the source tree on `main`: update it with `git pull &&

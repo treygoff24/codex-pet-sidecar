@@ -37,8 +37,7 @@ key.
 
    ```bash
    node scripts/assert-release-version.mjs vX.Y.Z
-   npm run check
-   npm run audit:public
+   npm run check:ci
    ```
 
 3. After the local gate passes, push the release commit to `main`.

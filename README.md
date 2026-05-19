@@ -98,7 +98,7 @@ Hatching a brand-new pet is more involved than installing an existing one. The `
 
 ## Contributing
 
-Run `npm run check` before opening a PR. The full repo gate (TypeScript build, Vitest, clippy, cargo test, plus audit scripts) lives in [CONTRIBUTING.md](CONTRIBUTING.md).
+Use `npm run check:fast` and targeted tests while iterating, `npm run check:local` before handoff, and `npm run check:ci` before opening a PR. The full tiered gate policy lives in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 For security issues, please use [private vulnerability reporting](https://github.com/treygoff24/codex-pet-sidecar/security/advisories/new) rather than a public issue.
 

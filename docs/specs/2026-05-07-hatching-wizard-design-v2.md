@@ -521,6 +521,8 @@ Explicitly deferred to keep v1 shippable:
 
 These are not open questions and not optional research. They are the first implementation wave. No user-facing wizard code starts until both Wave 0 artifacts exist.
 
+**Gate policy for all implementation waves:** run targeted checks and `npm run check:fast` during normal implementation. Do not run full gates after every small task. Before marking a wave complete, run `npm run check:local` plus the wave-specific targeted gates below. Reserve `npm run check:full`, `npm run check:ci`, no-sign Tauri builds, smoke drivers, and real-imagegen/manual QA for final validation, CI/pre-merge, or waves that directly change those surfaces. If a check fails, fix it and rerun the narrow failing command first.
+
 ### Python bundling and macOS code-signing
 
 Decision: v1 targets a bundled PyInstaller executable for the existing Python toolchain, called from Rust via `Command::new`. Wave 0 proves this decision before broader implementation. The fallback is a Rust port of only the deterministic packaging/composition path, not an embedded CPython framework.
@@ -567,6 +569,7 @@ Required gates:
 - PyInstaller proof command on synthetic fixtures
 - `npm run tauri:build -- --no-sign` or the repo's equivalent no-sign Tauri build command
 - Rust fixture test for imagegen path/result semantics
+- `npm run check:local` before closing the wave
 
 Exit criterion: Python packaging and imagegen output semantics are pinned. If either fails, stop; do not proceed to wizard UI.
 
@@ -594,6 +597,7 @@ Required gates:
 
 - Rust tests for path isolation, session persistence, crash recovery, pet ID normalization/collisions, reference upload validation boundaries, and "starting hatching does not shut down pet runtime" via mocked managers.
 - `cargo test --manifest-path src-tauri/Cargo.toml hatching`
+- `npm run check:local` before closing the wave
 
 ### Wave 2 — imagegen orchestration and atlas pipeline
 
@@ -618,6 +622,7 @@ Required gates:
 
 - Rust tests for watcher behavior, provenance validators, mirror provenance, row-count contract, and no half-import after failure.
 - `npm run smoke:hatching-runtime` with synthetic imagegen results.
+- `npm run check:local` before closing the wave
 
 ### Wave 3 — frontend wizard
 
@@ -643,15 +648,14 @@ Required gates:
 - Vitest coverage for each wizard step, validation, archetype pre-fill, reference attach/swap/status, prototype history, aggregate progress, atlas review, and library-full behavior.
 - Rust archive test covering active-pet rejection, `library.json` update through the library module, and package-directory move to `archived-pets`.
 - `npm test -- hatching` or the closest narrowed Vitest pattern.
+- `npm run check:local` before closing the wave
 
 ### Wave 4 — full verification and release impact
 
 Required gates:
 
 - `npm run smoke:hatching-runtime`
-- `npm run check`
-- `npm run audit:public`
-- `npm run audit:artifacts`
+- `npm run check:ci`
 - no-sign Tauri build
 - manual QA with real Codex auth + real imagegen for vibe-haver, lore-rich, and reference-image personas
 
